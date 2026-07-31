@@ -368,15 +368,17 @@ payload = { "uid": ..., "sv": session_version, "exp": <unix timestamp> }
 
 **React, ReactDOM ו-Babel כבר מוגנים.** ה-runtime טוען אותם עם `integrity` ו-`crossOrigin` (`assets/support.js:1144-1148`), כך שקובץ שהשתנה פשוט לא ירוץ. זה כבר קיים ולא צריך לגעת בו.
 
-**Prism ו-mermaid לא מוגנים.** הם נטענים ישירות מה-helmet ב-`index.html`, בלי `integrity`. זו משימה אמיתית לשלב 1: להוסיף `integrity` ו-`crossorigin="anonymous"` לשלושת התגיות. הגרסאות כבר מקובעות (`prismjs@1.29.0`, `mermaid@10.9.1`), אז ה-hash יציב.
+**Prism ו-mermaid ירדו לריפו.** בוצע. הם יושבים ב-`assets/vendor/`, ו-`scripts/vendor.sh` מוריד אותם מחדש בשדרוג גרסה.
 
-**מגבלה שלא ניתן לפתור עם SRI:** ה-autoloader של Prism מוריד קובצי דקדוק בזמן ריצה, לפי השפה שנתקל בה. הכתובות נבנות דינמית, ולכן אין להן `integrity`. כלומר ה-`integrity` שהוספנו לשלוש תגיות ה-`<script>` מגן על טעינת הספריות, ולא על מסלול טעינת השפות — וזה המסלול שרץ בפועל בכל פעם שמישהו פותח מסמך עם בלוק קוד.
+**מה שהניע את זה:** ה-autoloader של Prism הוריד קובצי דקדוק בזמן ריצה, לפי השפה שנתקל בה. הכתובות נבנו דינמית, ולכן לא היה להן `integrity`. כלומר ה-`integrity` שהוספנו לשלוש תגיות ה-`<script>` הגן על טעינת הספריות — ולא על מסלול טעינת השפות, שהוא זה שרץ בפועל בכל פעם שנפתח מסמך עם בלוק קוד.
 
-**ההכרעה: מורידים את הספריות ל-`assets/` ומפסיקים לטעון מ-CDN.** Prism ו-mermaid עוברים לריפו, ה-autoloader יורד לטובת חבילת שפות ארוזה מראש עם אלה שבשימוש בפועל (`js`, `ts`, `python`, `bash`, `sql`, `json`, `yaml`, `markdown`), ו-`prism-core` נטען מקומית.
+**מה שנעשה:** Prism נארז מראש עם השפות שבשימוש (`markup`, `clike`, `javascript`, `typescript`, `jsx`, `tsx`, `css`, `python`, `bash`, `sql`, `json`, `yaml`, `markdown`), ה-autoloader הוסר, ו-mermaid, React ו-ReactDOM ירדו גם הם. React נטען מקומית דרך `window.__resources`, שהיא נקודת ההרחבה שה-runtime מספק לכך.
 
-בחרתי בזה ולא ב"לארוז מראש אבל להישאר על CDN", כי הוא סוגר גם את מסלול השפות וגם מייתר את רוב ה-CSP בבת אחת. המחיר הוא כמה מאות קילובייטים בריפו וצורך לעדכן ידנית בשדרוג גרסה — שניהם זולים בפרויקט בקצב הזה.
+שפה שאינה בחבילה לא שוברת כלום — `codeHtml` מחזיר `null` והרינדור נופל בחזרה על מדגיש הסינטקס הפשוט שכבר קיים בקוד.
 
-**זהו תוצר של שלב 1, לצד ה-SRI.** ה-`integrity` על התגיות כבר נעשה; הורדת הספריות היא החלק שנשאר פתוח בשלב, ובלעדיו העבודה על ה-CDN חצי גמורה.
+**מה שזה קנה ב-CSP:** `script-src` כבר לא מכיל שום מקור חיצוני, ו-`connect-src` הוא `'self'` בלבד. ה-`unsafe-inline` וה-`unsafe-eval` עדיין שם ועדיין לא יעצרו הזרקה — אבל קוד שכן הצליח לרוץ לא יכול למשוך קוד נוסף מבחוץ ולא יכול להבריח מידע החוצה.
+
+**מה שנשאר חיצוני:** גופני Google בלבד. הם לא מריצים קוד, ולכן הם לא ווקטור הזרקה — הם עניין של פרטיות וזמינות. `scripts/check-offline.js` חוסם כל בקשה חיצונית ומוודא שהדף עדיין עולה, שהצביעה רצה, שהתרשים מצויר ושהאינטראקטיביות עובדת.
 
 ה-CSP שכבר קיים ב-`render.yaml` מגביל את המקורות שמהם מותר לטעון קוד, אבל הוא מכיל `'unsafe-inline'` ו-`'unsafe-eval'` — שניהם נדרשים בפועל, כי ה-runtime מריץ `new Function` וכל העיצוב הוא inline styles. **המשמעות: ה-CSP הזה לא יעצור XSS.** הוא מגביל לאן אפשר להבריח מידע ומאיפה אפשר למשוך קוד, וזה שווה משהו — אבל אין להתייחס אליו כאל שכבת הגנה מפני הזרקה.
 
@@ -415,8 +417,8 @@ payload = { "uid": ..., "sv": session_version, "exp": <unix timestamp> }
 שבעה שלבים. כל אחד מסתיים במשהו שאפשר להשתמש בו — לא בחצי תשתית.
 
 ### 1. תשתית
-Postgres ב-Render עם `Asia/Jerusalem` ו-UTF8, שרת FastAPI, SQLAlchemy async, מיגרציות Alembic, בדיקת בריאות. `render.yaml` עובר מ-`runtime: static` ל-`runtime: python`, והפרונט מוגש מאותו שירות כקבצים סטטיים — כך אין CORS ואין דומיין שני. בנוסף: `integrity` ו-`crossorigin` לשלוש תגיות ה-CDN, ואחריהם הורדת Prism ו-mermaid ל-`assets/` עם חבילת שפות ארוזה מראש במקום ה-autoloader.
-**המדד:** `/api/health` מחזיר 200 מ-Render, המיגרציות רצות בדיפלוי, ושינוי תו אחד ב-hash מונע את טעינת הספרייה.
+Postgres ב-Render עם `Asia/Jerusalem` ו-UTF8, שרת FastAPI, SQLAlchemy async, מיגרציות Alembic, בדיקת בריאות. `render.yaml` עובר מ-`runtime: static` ל-`runtime: python`, והפרונט מוגש מאותו שירות כקבצים סטטיים — כך אין CORS ואין דומיין שני. בנוסף: כל ספריות הצד-שלישי ירדו ל-`assets/vendor/` — Prism עם חבילת שפות ארוזה מראש במקום ה-autoloader, וכן mermaid ו-React.
+**המדד:** `/api/health` מחזיר 200 מ-Render, המיגרציות רצות בדיפלוי, ו-`scripts/check-offline.js` עובר — הדף מתפקד במלואו כשכל בקשה חיצונית חסומה.
 
 ### 2. כניסה
 seed idempotent למשתמש היחיד מ-`ADMIN_EMAIL`/`ADMIN_PASSWORD`, bcrypt, cookie חתום עם `HttpOnly`+`Secure`+`SameSite=Lax` הנושא `session_version` ו-`exp`, rate limiting על `login`, בדיקת `Origin` על בקשות משנות, ומגבלת גודל גוף לפני הפרסור.

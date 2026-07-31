@@ -45,17 +45,21 @@ INDEX_FILE = "index.html"
 # פשוט נעלמות בלי שאף אחד ישים לב.
 #
 # 'unsafe-inline' ו-'unsafe-eval' נדרשים בפועל: ה-dc-runtime מריץ את
-# לוגיקת הרכיב דרך new Function, וכל העיצוב הוא inline styles. המשמעות
-# היא שה-CSP הזה מגביל מאיפה נטען קוד ולאן אפשר לפנות — הוא לא שכבת
-# הגנה מפני XSS.
+# לוגיקת הרכיב דרך new Function, וכל העיצוב הוא inline styles. לכן ה-CSP
+# הזה לא יעצור הזרקת קוד.
+#
+# מה שהוא כן עושה, ומאז שהספריות ירדו ל-assets/vendor הרבה יותר חזק:
+# script-src כבר לא מכיל שום מקור חיצוני, ו-connect-src הוא 'self' בלבד.
+# כלומר גם קוד שהצליח לרוץ בדף לא יכול למשוך קוד נוסף מבחוץ ולא יכול
+# להבריח מידע החוצה. נשארו רק הגופנים, ואלה לא מריצים כלום.
 CSP = "; ".join(
     [
         "default-src 'self'",
-        "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://unpkg.com https://cdn.jsdelivr.net",
+        "script-src 'self' 'unsafe-inline' 'unsafe-eval'",
         "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
         "font-src 'self' https://fonts.gstatic.com",
         "img-src 'self' data:",
-        "connect-src 'self' https://cdn.jsdelivr.net https://unpkg.com",
+        "connect-src 'self'",
         "base-uri 'self'",
         "form-action 'none'",
         "frame-ancestors 'none'",

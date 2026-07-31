@@ -4,6 +4,15 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>ספריית התיעוד</title>
+<script>
+/* ה-runtime טוען React מ-unpkg כברירת מחדל. window.__resources הוא נקודת
+   ההרחבה שהוא מספק כדי להצביע על עותק מקומי — ראו cdnScriptFor
+   ב-assets/support.js. חייב להיות מוגדר לפני ש-support.js רץ. */
+window.__resources = {
+  "https://unpkg.com/react@18.3.1/umd/react.production.min.js": "./assets/vendor/react.js",
+  "https://unpkg.com/react-dom@18.3.1/umd/react-dom.production.min.js": "./assets/vendor/react-dom.js"
+};
+</script>
 <script src="./assets/support.js"></script>
 </head>
 <body>
@@ -12,9 +21,8 @@
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="crossorigin" />
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Heebo:wght@300;400;500;600;700;800&family=Assistant:wght@300;400;500;600;700&family=Frank+Ruhl+Libre:wght@400;500;700;800&family=JetBrains+Mono:wght@400;500;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" />
-<script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-core.min.js" integrity="sha384-MXybTpajaBV0AkcBaCPT4KIvo0FzoCiWXgcihYsw4FUkEz0Pv3JGV6tk2G8vJtDc" crossorigin="anonymous"></script>
-<script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/plugins/autoloader/prism-autoloader.min.js" integrity="sha384-Uq05+JLko69eOiPr39ta9bh7kld5PKZoU+fF7g0EXTAriEollhZ+DrN8Q/Oi8J2Q" crossorigin="anonymous"></script>
-<script src="https://cdn.jsdelivr.net/npm/mermaid@10.9.1/dist/mermaid.min.js" integrity="sha384-WmdflGW9aGfoBdHc4rRyWzYuAjEmDwMdGdiPNacbwfGKxBW/SO6guzuQ76qjnSlr" crossorigin="anonymous"></script>
+<script src="./assets/vendor/prism.js"></script>
+<script src="./assets/vendor/mermaid.js"></script>
 <style>
 /* כל המשתנים נכתבים בזמן ריצה מתוך אובייקט THEMES ב-JS (applyTheme).
    ערכי ה-fallback כאן הם פלטת הכהה בלבד — כדי שהצביעה הראשונה לפני
@@ -1230,7 +1238,6 @@ class Component extends DCLogic {
     this.onScheme = () => { if (!this.storedTheme()) this.applyTheme(this.mqDark.matches ? "dark" : "light"); };
     this.mqDark.addEventListener("change", this.onScheme);
 
-    this.pending = {};
     this.libTick = setInterval(() => {
       if (window.Prism && !this.prismReady) { this.prismReady = true; this.forceUpdate(); }
       if (window.mermaid) this.drawDiagrams();
@@ -1385,17 +1392,19 @@ class Component extends DCLogic {
   }
 
   codeHtml(code, lang) {
+    /* השפות ארוזות מראש ב-assets/vendor/prism.js. ה-autoloader הוסר
+       בכוונה: הוא הוריד קובצי דקדוק מ-CDN בזמן ריצה, בכתובות שנבנו
+       דינמית ולכן לא ניתן היה לחתום אותן ב-integrity.
+       שפה שאינה בחבילה מחזירה null, והרינדור נופל בחזרה על highlight()
+       הפשוט שלמטה — בדיוק כפי שקרה קודם עד שה-autoloader סיים. */
     const P = window.Prism;
     const l = this.langOf(lang);
-    if (!P || !l) return null;
-    if (P.languages[l]) {
-      try { return P.highlight(code, P.languages[l], l); } catch (e) { return null; }
+    if (!P || !l || !P.languages[l]) return null;
+    try {
+      return P.highlight(code, P.languages[l], l);
+    } catch (e) {
+      return null;
     }
-    if (P.plugins && P.plugins.autoloader && !this.pending[l]) {
-      this.pending[l] = true;
-      P.plugins.autoloader.loadLanguages(l, () => this.forceUpdate(), () => this.forceUpdate());
-    }
-    return null;
   }
 
   save(docs) {

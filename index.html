@@ -1172,6 +1172,19 @@ const REF_SECTIONS = [
 
 const KEYWORDS = /\b(import|from|export|const|let|var|function|return|await|async|new|class|if|else|for|while|try|catch|def|print|None|True|False|null|undefined|true|false)\b/g;
 
+/* סכמות מותרות בקישורים שמגיעים מ-Markdown.
+   `javascript:`, `data:` ו-`vbscript:` הם href חוקיים לגמרי מבחינת HTML,
+   ולכן חוסמים ברשימה לבנה ולא ברשימה שחורה — רשימה שחורה תמיד מפספסת
+   סכמה. תווי בקרה מוסרים קודם, כי דפדפנים מתעלמים מהם בזמן פענוח
+   הסכמה ו-"java\tscript:" היה עוקף בדיקה נאיבית. */
+function safeHref(raw) {
+  const url = String(raw == null ? "" : raw).replace(/[\u0000-\u001F\u007F]/g, "").trim();
+  if (!url) return "#";
+  if (/^(#|\/|\.\/|\.\.\/)/.test(url)) return url;   // עוגן או נתיב יחסי — אין סכמה
+  if (/^(https?|mailto):/i.test(url)) return url;
+  return "#";
+}
+
 class Component extends DCLogic {
   state = {
     theme: "dark", screen: "library",
@@ -1576,7 +1589,7 @@ class Component extends DCLogic {
         out.push(React.createElement("mark", { key: k, style: { background: "var(--amber-soft)", color: "var(--ink)", borderRadius: "var(--r-sm)", padding: "1px 4px" } }, this.kids(s.slice(2, -2))));
       } else {
         const mm = s.match(/^\[([^\]]+)\]\(([^)]+)\)$/);
-        out.push(React.createElement("a", { key: k, href: mm[2], style: { color: "var(--accent-text)", borderBottom: "1px solid var(--accent-ring)" } }, mm[1]));
+        out.push(React.createElement("a", { key: k, href: safeHref(mm[2]), rel: "noopener noreferrer", style: { color: "var(--accent-text)", borderBottom: "1px solid var(--accent-ring)" } }, mm[1]));
       }
       last = m.index + s.length;
     }

@@ -1,55 +1,41 @@
-# Render Blueprint — אתר סטטי.
-# האתר הוא HTML + JS בלבד, בלי שלב build ובלי שרת, ולכן runtime: static.
+# Render Blueprint.
+# האתר כבר לא סטטי: FastAPI מגיש גם את ה-API תחת /api וגם את הפרונט
+# מהשורש, מאותו origin. זה מה שמייתר CORS ומאפשר cookie עם SameSite=Lax.
 # פריסה: New → Blueprint ב-Render, ולכוון לריפו הזה.
+
+databases:
+  - name: markdown-docs-db
+    databaseName: markdown_docs
+    user: markdown_docs
+    plan: basic-256mb
 
 services:
   - type: web
     name: markdown-docs
-    runtime: static
-    # אין תלויות להתקין ואין מה לקמפל — הקבצים מוגשים כמו שהם.
-    buildCommand: echo "static site — no build step"
-    staticPublishPath: .
-    pullRequestPreviewsEnabled: true
+    runtime: python
+    plan: starter
+    buildCommand: pip install -r requirements.txt
+    # המיגרציות רצות לפני שהשרת עולה. אם הן נכשלות, הדיפלוי נכשל —
+    # וזה עדיף על שרת שעולה מול סכימה ישנה ונשבר בבקשה הראשונה.
+    startCommand: alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port $PORT
 
-    headers:
-      # ————— אבטחה —————
-      - path: /*
-        name: X-Content-Type-Options
-        value: nosniff
-      - path: /*
-        name: Referrer-Policy
-        value: strict-origin-when-cross-origin
-      - path: /*
-        name: X-Frame-Options
-        value: DENY
-      - path: /*
-        name: Permissions-Policy
-        value: camera=(), microphone=(), geolocation=(), interest-cohort=()
+    # הבדיקה הרדודה בכוונה. /api/health/db נוגע ב-DB, ואם Render היה
+    # מנטר אותו, תקלת DB חולפת הייתה מפעילה את השירות מחדש בלולאה
+    # ומחמירה את התקלה במקום לפתור אותה.
+    healthCheckPath: /api/health
 
-      # מדיניות התוכן מגבילה את המקורות שמהם מותר לטעון קוד וגופנים.
-      # 'unsafe-eval' נדרש כי runtime ה-dc ב-assets/support.js מריץ את
-      # לוגיקת הרכיב דרך new Function — בלעדיו העמוד לא עולה.
-      # 'unsafe-inline' נדרש כי כל העיצוב הוא style attributes inline.
-      - path: /*
-        name: Content-Security-Policy
-        value: >-
-          default-src 'self';
-          script-src 'self' 'unsafe-inline' 'unsafe-eval' https://unpkg.com https://cdn.jsdelivr.net;
-          style-src 'self' 'unsafe-inline' https://fonts.googleapis.com;
-          font-src 'self' https://fonts.gstatic.com;
-          img-src 'self' data:;
-          connect-src 'self' https://cdn.jsdelivr.net https://unpkg.com;
-          base-uri 'self';
-          form-action 'none';
-          frame-ancestors 'none';
-          object-src 'none'
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: markdown-docs-db
+          property: connectionString
+      - key: SESSION_SECRET
+        generateValue: true
+      - key: ENVIRONMENT
+        value: production
+      - key: PYTHON_VERSION
+        value: "3.11.11"
 
-      # ————— קאשינג —————
-      # ה-HTML מתעדכן בכל דיפלוי, ולכן נבדק מול השרת בכל בקשה.
-      - path: /index.html
-        name: Cache-Control
-        value: no-cache
-      # ה-runtime מוחלף רק בעדכון גרסה — נשמר שעה עם revalidate ברקע.
-      - path: /assets/*
-        name: Cache-Control
-        value: public, max-age=3600, stale-while-revalidate=86400
+# כותרות האבטחה עברו לאפליקציה (app/main.py, SECURITY_HEADERS).
+# בלוק headers ב-render.yaml חל על אתרים סטטיים בלבד — אילו היה נשאר
+# כאן, הוא היה מתעלם בשקט וה-CSP היה נעלם בלי שאף אחד ישים לב.

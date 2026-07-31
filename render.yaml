@@ -1,0 +1,55 @@
+# Render Blueprint — אתר סטטי.
+# האתר הוא HTML + JS בלבד, בלי שלב build ובלי שרת, ולכן runtime: static.
+# פריסה: New → Blueprint ב-Render, ולכוון לריפו הזה.
+
+services:
+  - type: web
+    name: markdown-docs
+    runtime: static
+    # אין תלויות להתקין ואין מה לקמפל — הקבצים מוגשים כמו שהם.
+    buildCommand: echo "static site — no build step"
+    staticPublishPath: .
+    pullRequestPreviewsEnabled: true
+
+    headers:
+      # ————— אבטחה —————
+      - path: /*
+        name: X-Content-Type-Options
+        value: nosniff
+      - path: /*
+        name: Referrer-Policy
+        value: strict-origin-when-cross-origin
+      - path: /*
+        name: X-Frame-Options
+        value: DENY
+      - path: /*
+        name: Permissions-Policy
+        value: camera=(), microphone=(), geolocation=(), interest-cohort=()
+
+      # מדיניות התוכן מגבילה את המקורות שמהם מותר לטעון קוד וגופנים.
+      # 'unsafe-eval' נדרש כי runtime ה-dc ב-assets/support.js מריץ את
+      # לוגיקת הרכיב דרך new Function — בלעדיו העמוד לא עולה.
+      # 'unsafe-inline' נדרש כי כל העיצוב הוא style attributes inline.
+      - path: /*
+        name: Content-Security-Policy
+        value: >-
+          default-src 'self';
+          script-src 'self' 'unsafe-inline' 'unsafe-eval' https://unpkg.com https://cdn.jsdelivr.net;
+          style-src 'self' 'unsafe-inline' https://fonts.googleapis.com;
+          font-src 'self' https://fonts.gstatic.com;
+          img-src 'self' data:;
+          connect-src 'self' https://cdn.jsdelivr.net https://unpkg.com;
+          base-uri 'self';
+          form-action 'none';
+          frame-ancestors 'none';
+          object-src 'none'
+
+      # ————— קאשינג —————
+      # ה-HTML מתעדכן בכל דיפלוי, ולכן נבדק מול השרת בכל בקשה.
+      - path: /index.html
+        name: Cache-Control
+        value: no-cache
+      # ה-runtime מוחלף רק בעדכון גרסה — נשמר שעה עם revalidate ברקע.
+      - path: /assets/*
+        name: Cache-Control
+        value: public, max-age=3600, stale-while-revalidate=86400

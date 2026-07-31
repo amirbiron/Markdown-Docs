@@ -1,0 +1,1999 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ספריית התיעוד</title>
+<script src="./assets/support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="crossorigin" />
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Heebo:wght@300;400;500;600;700;800&family=Assistant:wght@300;400;500;600;700&family=Frank+Ruhl+Libre:wght@400;500;700;800&family=JetBrains+Mono:wght@400;500;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" />
+<script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-core.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/plugins/autoloader/prism-autoloader.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/mermaid@10.9.1/dist/mermaid.min.js"></script>
+<style>
+/* כל המשתנים נכתבים בזמן ריצה מתוך אובייקט THEMES ב-JS (applyTheme).
+   ערכי ה-fallback כאן הם פלטת הכהה בלבד — כדי שהצביעה הראשונה לפני
+   שה-JS עלה לא תהבהב. אין כאן מקור אמת שני, רק ברירת מחדל לפני-צבע. */
+html { direction: rtl; scroll-behavior: smooth; }
+body {
+  margin: 0;
+  background: var(--bg, #0e1022);
+  color: var(--head, #e9edf7);
+  font-family: var(--sans, 'Heebo', 'Assistant', sans-serif);
+  line-height: 1.8;
+  -webkit-font-smoothing: antialiased;
+}
+a { color: var(--accent-text, #45b6ec); text-decoration: none; }
+a:hover { color: var(--accent-hover, #8ad3f7); }
+::selection { background: var(--sel, rgba(0,136,204,0.35)); }
+* { scrollbar-width: thin; scrollbar-color: var(--scroll, #2a3860) transparent; }
+input, textarea { font-family: inherit; }
+
+/* מעבר רך בין המצבים. רק על צבעים — לא על פריסה, כדי שלא תהיה קפיצה. */
+body, aside, header, section, main { transition: background-color 0.2s ease, border-color 0.2s ease, color 0.2s ease; }
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+
+.token.comment, .token.prolog, .token.doctype, .token.cdata { color: var(--tok-comment, #6a9955); font-style: italic; }
+.token.punctuation, .token.operator { color: var(--tok-punct, #a8b4d2); }
+.token.keyword, .token.atrule, .token.rule, .token.important, .token.builtin { color: var(--tok-kw, #c586c0); font-weight: var(--tok-kw-weight, 400); }
+.token.string, .token.char, .token.attr-value, .token.regex, .token.url { color: var(--tok-str, #ce9178); }
+.token.function, .token.class-name, .token.title { color: var(--tok-fn, #dcdcaa); }
+.token.number, .token.boolean, .token.constant, .token.symbol, .token.unit { color: var(--tok-num, #b5cea8); }
+.token.variable, .token.property, .token.attr-name, .token.parameter { color: var(--tok-var, #9cdcfe); }
+.token.tag, .token.selector { color: var(--tok-tag, #569cd6); }
+.token.inserted { color: var(--tok-ins, #2ecc71); }
+.token.deleted { color: var(--tok-del, #e74c3c); }
+.token.namespace { opacity: 0.7; }
+.token.bold { font-weight: 700; }
+.token.italic { font-style: italic; }
+</style>
+</helmet>
+<div dir="rtl" style="min-height:100vh;background:var(--bg)">
+
+<input type="file" id="md-file" accept=".md,.markdown,.txt" multiple="{{ true }}" onChange="{{ onFiles }}" style="display:none" />
+
+<div style="position:sticky;top:0;z-index:30;display:flex;align-items:center;justify-content:space-between;gap:20px;height:var(--bar-h);padding:0 var(--bar-pad);background:var(--bar);backdrop-filter:blur(12px);border-bottom:1px solid var(--hair)">
+
+  <div style="display:flex;align-items:center;gap:12px;min-width:0">
+    <sc-if value="{{ chrome.mark }}" hint-placeholder-val="{{ true }}">
+    <span style="flex:none;display:grid;place-items:center;width:26px;height:26px;border-radius:var(--r-sm);background:var(--accent);color:var(--accent-on);font-family:var(--mono);font-weight:700;font-size:14px">M</span>
+    </sc-if>
+    <sc-if value="{{ chrome.wordmark }}" hint-placeholder-val="{{ false }}">
+    <span style="font-family:var(--display);font-size:19px;font-weight:700;color:var(--ink);white-space:nowrap">התיעוד</span>
+    </sc-if>
+    <span style="font-family:var(--crumb-font);font-size:var(--crumb-size);letter-spacing:var(--crumb-track);color:var(--faint);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ crumb }}</span>
+  </div>
+
+  <div style="display:flex;align-items:center;gap:var(--bar-gap)">
+    <div style="display:flex;align-items:center;gap:2px;padding:3px;border-radius:var(--r-sm);background:var(--tint);border:1px solid var(--line)">
+      <button onClick="{{ goLibrary }}" style="{{ screenTab.library }}">ספרייה</button>
+      <button onClick="{{ goReference }}" style="{{ screenTab.reference }}">רפרנס</button>
+    </div>
+
+    <button onClick="{{ toggleTheme }}" title="{{ themeTitle }}" aria-label="{{ themeTitle }}" style="display:grid;place-items:center;width:32px;height:32px;border:1px solid var(--rule);border-radius:var(--r-sm);background:none;color:var(--muted);font-size:14px;line-height:1;cursor:pointer" style-hover="color:var(--head);border-color:var(--accent)">{{ themeGlyph }}</button>
+
+    <sc-if value="{{ onLibrary }}" hint-placeholder-val="{{ true }}">
+    <button onClick="{{ toggleSource }}" style="{{ chrome.srcBtn }}">{{ srcLabel }}</button>
+    </sc-if>
+    <label for="md-file" style="{{ chrome.uploadBtn }}">העלאת מסמך</label>
+  </div>
+</div>
+
+<div style="display:grid;grid-template-columns:auto minmax(0,1fr) auto;align-items:start;max-width:var(--shell-w);margin:0 auto">
+
+  <sc-if value="{{ sidebarVisible }}" hint-placeholder-val="{{ true }}">
+  <aside style="position:sticky;top:var(--bar-h);width:var(--rail-w);box-sizing:border-box;height:calc(100vh - var(--bar-h));overflow-y:auto;padding:var(--rail-pad);border-inline-end:1px solid var(--hair);background:var(--rail)">
+
+    <sc-if value="{{ onLibrary }}" hint-placeholder-val="{{ true }}">
+    <div>
+      <div style="display:flex;align-items:center;gap:11px;margin:0 0 var(--rail-head-gap)">
+        <sc-if value="{{ chrome.mark }}" hint-placeholder-val="{{ true }}">
+        <span style="flex:none;display:grid;place-items:center;width:34px;height:34px;border-radius:var(--r-sm);background:var(--accent);color:var(--accent-on);font-family:var(--mono);font-weight:700;font-size:16px">M</span>
+        </sc-if>
+        <span style="display:block;min-width:0">
+          <span style="display:block;font-family:var(--display);font-size:var(--rail-title-size);font-weight:700;line-height:1.25;color:var(--head)">ספריית התיעוד</span>
+          <span style="display:block;margin-top:var(--rail-sub-gap);font-family:var(--mono);font-size:11px;letter-spacing:var(--rail-sub-track);text-transform:var(--rail-sub-case);color:var(--faint)">{{ docCount }} · he‑IL · rtl</span>
+        </span>
+      </div>
+
+      <input dir="rtl" placeholder="חיפוש במסמכים…" value="{{ q }}" onChange="{{ onSearch }}" style="{{ chrome.search }}" />
+
+      <div style="{{ chrome.railLabel }}">מסמכים</div>
+      <div style="display:flex;flex-direction:column;gap:var(--doc-gap);margin:0 0 10px;border-top:var(--doc-list-rule)">
+        <sc-for list="{{ docs }}" as="doc" hint-placeholder-count="3">
+          <div style="{{ doc.rowStyle }}">
+            <sc-if value="{{ doc.numbered }}" hint-placeholder-val="{{ false }}">
+            <span style="flex:none;font-family:var(--mono);font-size:10.5px;color:{{ doc.numFg }}">{{ doc.num }}</span>
+            </sc-if>
+            <a href="#top" onClick="{{ doc.open }}" style="{{ doc.linkStyle }}">{{ doc.title }}</a>
+            <button onClick="{{ doc.remove }}" title="מחיקה" style="flex:none;padding:2px 6px;border:none;border-radius:var(--r-sm);background:none;color:var(--faint);font-size:14px;line-height:1;cursor:pointer" style-hover="color:var(--red)">×</button>
+          </div>
+        </sc-for>
+      </div>
+      <sc-if value="{{ noResults }}" hint-placeholder-val="{{ false }}">
+        <div style="padding:6px 4px 12px;font-size:13.5px;color:var(--faint)">אין מסמך שתואם לחיפוש.</div>
+      </sc-if>
+
+      <label for="md-file" style="{{ chrome.dropzone }}">
+        גררו לכאן קבצי <span dir="ltr" style="font-family:var(--mono);font-size:12.5px">.md</span><br />או לחצו לבחירה
+      </label>
+      <button onClick="{{ togglePaste }}" style="{{ chrome.pasteBtn }}">{{ pasteLabel }}</button>
+
+      <sc-if value="{{ pasting }}" hint-placeholder-val="{{ false }}">
+      <div style="margin:10px 0 0;display:flex;flex-direction:column;gap:9px">
+        <textarea dir="auto" placeholder="# כותרת המסמך…" value="{{ draft }}" onChange="{{ onDraft }}" style="width:100%;box-sizing:border-box;min-height:120px;padding:11px;background:var(--card);border:1px solid var(--line);border-radius:var(--r-sm);color:var(--head);font-family:var(--mono);font-size:12.5px;line-height:1.7;outline:none;resize:vertical" style-focus="border-color:var(--accent)"></textarea>
+        <button onClick="{{ addDraft }}" style="{{ chrome.addBtn }}">הוספה לספרייה</button>
+      </div>
+      </sc-if>
+
+      <div style="margin-top:20px;padding-top:16px;border-top:1px solid var(--hair);font-size:12.5px;line-height:1.7;color:var(--faint)">
+        המסמכים נשמרים בדפדפן הזה. <button onClick="{{ loadSample }}" style="padding:0;border:none;background:none;color:var(--accent-text);font-family:inherit;font-size:12.5px;cursor:pointer;text-decoration:underline">טעינת מסמך הדגמה</button>
+      </div>
+    </div>
+    </sc-if>
+
+    <sc-if value="{{ onReference }}" hint-placeholder-val="{{ false }}">
+    <div>
+      <div style="display:flex;align-items:center;gap:11px;margin:0 0 var(--rail-head-gap)">
+        <sc-if value="{{ chrome.mark }}" hint-placeholder-val="{{ true }}">
+        <span style="flex:none;display:grid;place-items:center;width:34px;height:34px;border-radius:var(--r-sm);background:var(--accent);color:var(--accent-on);font-family:var(--mono);font-weight:700;font-size:17px">N</span>
+        </sc-if>
+        <span style="display:block">
+          <span style="display:block;font-family:var(--display);font-size:var(--rail-title-size);font-weight:700;line-height:1.25;color:var(--head)">Nimbus Docs</span>
+          <span style="display:block;margin-top:var(--rail-sub-gap);font-family:var(--mono);font-size:11px;letter-spacing:var(--rail-sub-track);text-transform:var(--rail-sub-case);color:var(--faint)">v3.2 · he‑IL · rtl</span>
+        </span>
+      </div>
+
+      <div style="position:relative;margin:0 0 22px">
+        <input dir="auto" placeholder="חיפוש בתיעוד…" style="{{ chrome.searchK }}" />
+        <span style="position:absolute;inset-inline-end:9px;top:50%;transform:translateY(-50%);font-family:var(--mono);font-size:11px;color:var(--faint);pointer-events:none"><span dir="ltr">⌘K</span></span>
+      </div>
+
+      <div style="margin:0 0 20px">
+        <button onClick="{{ toggle.start }}" style="{{ chrome.groupBtn }}">
+          <span>התחלה</span>
+          <sc-if value="{{ open.start }}" hint-placeholder-val="{{ true }}"><span>▾</span></sc-if>
+          <sc-if value="{{ closed.start }}" hint-placeholder-val="{{ false }}"><span>▸</span></sc-if>
+        </button>
+        <sc-if value="{{ open.start }}" hint-placeholder-val="{{ true }}">
+        <div style="display:flex;flex-direction:column;gap:1px">
+          <a href="#top" style="{{ chrome.navLink }}">מבוא ל‑Nimbus</a>
+          <a href="#top" style="{{ chrome.navLink }}">התקנה</a>
+          <a href="#top" style="{{ chrome.navLinkRow }}">
+            <span>הרצה ראשונה</span>
+            <span style="font-family:var(--mono);font-size:10px;padding:1px 6px;border-radius:var(--r-pill);background:var(--tint);color:var(--faint)">טיוטה</span>
+          </a>
+        </div>
+        </sc-if>
+      </div>
+
+      <div style="margin:0 0 20px">
+        <button onClick="{{ toggle.guides }}" style="{{ chrome.groupBtn }}">
+          <span>מדריכים</span>
+          <sc-if value="{{ open.guides }}" hint-placeholder-val="{{ true }}"><span>▾</span></sc-if>
+          <sc-if value="{{ closed.guides }}" hint-placeholder-val="{{ false }}"><span>▸</span></sc-if>
+        </button>
+        <sc-if value="{{ open.guides }}" hint-placeholder-val="{{ true }}">
+        <div style="display:flex;flex-direction:column;gap:1px">
+          <a href="#top" style="{{ chrome.navLink }}">אימות ומפתחות</a>
+          <a href="#top" style="{{ chrome.navLink }}">Webhooks</a>
+          <a href="#top" style="{{ chrome.navLinkRow }}">
+            <span>מגבלות קריאה</span>
+            <span style="font-family:var(--mono);font-size:10px;padding:1px 6px;border-radius:var(--r-pill);background:var(--green-soft);color:var(--green)">חדש</span>
+          </a>
+        </div>
+        </sc-if>
+      </div>
+
+      <div style="margin:0 0 20px">
+        <div style="{{ chrome.railLabel }}">עיצוב ותיעוד</div>
+        <div style="display:flex;flex-direction:column;gap:1px">
+          <a href="#top" onClick="{{ goTop }}" style="{{ chrome.navLinkActive }}">רכיבי Markdown</a>
+          <div style="display:flex;flex-direction:column;gap:1px;padding:4px 0;margin-inline-start:12px;border-inline-start:1px solid var(--line)">
+            <a href="#sec-01" onClick="{{ nav.s0 }}" style="{{ chrome.navSub }}">טיפוגרפיה</a>
+            <a href="#sec-04" onClick="{{ nav.s3 }}" style="{{ chrome.navSub }}">בלוקי קוד</a>
+            <a href="#sec-06" onClick="{{ nav.s5 }}" style="{{ chrome.navSub }}">רפרנס API</a>
+          </div>
+          <a href="#top" style="{{ chrome.navLink }}">סגנון כתיבה</a>
+        </div>
+      </div>
+
+      <div style="margin:0 0 24px">
+        <button onClick="{{ toggle.api }}" style="{{ chrome.groupBtn }}">
+          <span>רפרנס API</span>
+          <sc-if value="{{ open.api }}" hint-placeholder-val="{{ false }}"><span>▾</span></sc-if>
+          <sc-if value="{{ closed.api }}" hint-placeholder-val="{{ true }}"><span>▸</span></sc-if>
+        </button>
+        <sc-if value="{{ open.api }}" hint-placeholder-val="{{ false }}">
+        <div style="display:flex;flex-direction:column;gap:1px">
+          <a href="#top" dir="ltr" style="{{ chrome.navLinkMono }}">/v3/docs</a>
+          <a href="#top" dir="ltr" style="{{ chrome.navLinkMono }}">/v3/blocks</a>
+          <a href="#top" dir="ltr" style="{{ chrome.navLinkMono }}">/v3/search</a>
+        </div>
+        </sc-if>
+      </div>
+
+      <div style="padding-top:18px;border-top:1px solid var(--hair);font-size:12.5px;color:var(--faint);line-height:1.7">
+        3 מתוך 24 עמודים נכתבו.<br />
+        התחלה של ספריית תיעוד.
+      </div>
+    </div>
+    </sc-if>
+  </aside>
+  </sc-if>
+
+  <main id="top" onDragOver="{{ onDragOver }}" onDragLeave="{{ onDragLeave }}" onDrop="{{ onDrop }}" style="min-width:0;padding:var(--main-pad);max-width:var(--main-w)">
+
+    <sc-if value="{{ onLibrary }}" hint-placeholder-val="{{ true }}">
+    <div>
+      <sc-if value="{{ dragging }}" hint-placeholder-val="{{ false }}">
+        <div style="margin:0 0 22px;padding:22px;border:2px dashed var(--accent);border-radius:var(--r-md);background:var(--accent-soft);text-align:center;font-size:15.5px;color:var(--accent-text)">שחררו כאן כדי להוסיף לספרייה</div>
+      </sc-if>
+
+      <sc-if value="{{ hasDoc }}" hint-placeholder-val="{{ true }}">
+      <div>
+        <header style="margin:0 0 var(--doc-head-gap)">
+          <div style="display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin:0 0 14px">
+            <span dir="ltr" style="{{ chrome.fileBadge }}">{{ fileName }}</span>
+            <span style="font-size:13px;color:var(--faint)">{{ meta }}</span>
+          </div>
+          <h1 style="margin:0 0 12px;font-family:var(--display);font-size:var(--h1-size);font-weight:800;line-height:1.14;color:var(--ink);text-wrap:balance">{{ title }}</h1>
+          <p style="margin:0;font-size:var(--lead-size);line-height:1.75;color:var(--soft);max-width:62ch;text-wrap:pretty">{{ lead }}</p>
+        </header>
+
+        <sc-if value="{{ showSource }}" hint-placeholder-val="{{ false }}">
+        <div style="margin:0 0 28px;border:1px solid var(--line);border-radius:var(--r-md);overflow:hidden;background:var(--card)">
+          <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 16px;background:var(--tint);border-bottom:1px solid var(--line)">
+            <span dir="ltr" style="font-family:var(--mono);font-size:12px;color:var(--muted)">{{ fileName }}</span>
+            <button onClick="{{ copySource }}" style="padding:4px 10px;border:1px solid var(--rule);border-radius:var(--r-sm);background:none;font-family:inherit;font-size:12px;color:var(--muted);cursor:pointer" style-hover="color:var(--head)">{{ copyLabel }}</button>
+          </div>
+          <pre dir="auto" style="margin:0;padding:18px 20px;font-family:var(--mono);font-size:12.5px;line-height:1.85;color:var(--text);white-space:pre-wrap;word-break:break-word">{{ source }}</pre>
+        </div>
+        </sc-if>
+
+        <article>{{ body }}</article>
+
+        <div style="display:flex;flex-wrap:wrap;align-items:center;gap:12px;margin:34px 0 0;padding:16px 20px;border:1px dashed var(--rule);border-radius:var(--r-md)">
+          <span style="font-size:14.5px;color:var(--text)">נוצר מתוך <span dir="ltr" style="font-family:var(--mono);font-size:13px">{{ fileName }}</span></span>
+          <button onClick="{{ download }}" style="padding:7px 15px;border:1px solid var(--rule);border-radius:var(--r-pill);background:none;color:var(--text);font-family:inherit;font-size:13.5px;cursor:pointer" style-hover="border-color:var(--accent)">הורדת המקור</button>
+          <label for="md-file" style="padding:7px 15px;border:1px solid var(--rule);border-radius:var(--r-pill);color:var(--text);font-size:13.5px;cursor:pointer" style-hover="border-color:var(--accent);color:var(--accent-text)">העלאת מסמך נוסף</label>
+        </div>
+      </div>
+      </sc-if>
+
+      <sc-if value="{{ noDoc }}" hint-placeholder-val="{{ false }}">
+      <div style="padding:70px 20px;text-align:center">
+        <div style="display:grid;place-items:center;width:64px;height:64px;margin:0 auto 22px;border-radius:var(--r-md);background:var(--tint);border:1px solid var(--line);font-family:var(--mono);font-size:20px;color:var(--accent-text)">md</div>
+        <h1 style="margin:0 0 12px;font-family:var(--display);font-size:34px;font-weight:800;color:var(--ink)">הספרייה ריקה</h1>
+        <p style="margin:0 auto 26px;max-width:46ch;font-size:17px;line-height:1.7;color:var(--soft);text-wrap:pretty">גררו לכאן קבצי Markdown, או העלו אותם מהמחשב. כל מסמך מקבל עמוד, תוכן עניינים ועיצוב אחיד — כולל טבלאות, בלוקי קוד והתראות.</p>
+        <div style="display:flex;justify-content:center;flex-wrap:wrap;gap:10px">
+          <label for="md-file" style="{{ chrome.ctaBtn }}">בחירת קבצים</label>
+          <button onClick="{{ loadSample }}" style="{{ chrome.ghostBtn }}">טעינת מסמך הדגמה</button>
+        </div>
+      </div>
+      </sc-if>
+    </div>
+    </sc-if>
+
+    <sc-if value="{{ onReference }}" hint-placeholder-val="{{ false }}">
+    <div>
+
+    <header style="margin:0 0 34px">
+      <div style="display:flex;align-items:center;gap:8px;margin:0 0 14px">
+        <span style="font-family:var(--mono);font-size:11px;font-weight:500;letter-spacing:0.1em;padding:4px 10px;border-radius:var(--r-pill);background:var(--accent-soft);color:var(--accent-text)">REFERENCE</span>
+        <span style="font-family:var(--mono);font-size:11px;font-weight:500;letter-spacing:0.1em;padding:4px 10px;border-radius:var(--r-pill);background:var(--purple-soft-2);color:var(--purple-text)">RTL READY</span>
+      </div>
+      <h1 style="margin:0 0 14px;font-family:var(--display);font-size:var(--ref-h1);font-weight:800;line-height:1.15;letter-spacing:normal;color:var(--ink);text-wrap:balance">רכיבי Markdown</h1>
+      <p style="margin:0 0 22px;font-size:19px;line-height:1.7;color:var(--soft);max-width:62ch;text-wrap:pretty">כל רכיב שהתיעוד יודע להציג, עם הסינטקס שמייצר אותו. הדף הזה הוא גם הרפרנס וגם בדיקת השפיות של העיצוב — אם רכיב נראה נכון כאן, הוא ייראה נכון בכל מסמך.</p>
+      <div style="display:flex;flex-wrap:wrap;align-items:center;gap:10px">
+        <button onClick="{{ toggleRaw }}" style="display:flex;align-items:center;gap:8px;padding:9px 15px;border:none;border-radius:var(--r-sm);background:var(--accent);color:var(--accent-on);font-family:inherit;font-size:14px;font-weight:600;cursor:pointer" style-hover="background:var(--accent-hover)">
+          <span style="font-family:var(--mono);font-size:13px">&lt;/&gt;</span>
+          <sc-if value="{{ rawOff }}" hint-placeholder-val="{{ true }}"><span>הצג מקור Markdown</span></sc-if>
+          <sc-if value="{{ rawOn }}" hint-placeholder-val="{{ false }}"><span>הסתר מקור Markdown</span></sc-if>
+        </button>
+        <button onClick="{{ copyPage }}" style="display:flex;align-items:center;gap:8px;padding:9px 15px;border:1px solid var(--rule);border-radius:var(--r-sm);background:none;color:var(--text);font-family:inherit;font-size:14px;cursor:pointer" style-hover="background:var(--hover);border-color:var(--rule-strong)">
+          <sc-if value="{{ copiedPage }}" hint-placeholder-val="{{ false }}"><span style="color:var(--green)">הועתק ✓</span></sc-if>
+          <sc-if value="{{ notCopiedPage }}" hint-placeholder-val="{{ true }}"><span>העתקה כ‑Markdown</span></sc-if>
+        </button>
+        <span style="font-size:13px;color:var(--faint)">7 דקות קריאה · 9 רכיבים</span>
+      </div>
+    </header>
+
+    <sc-if value="{{ rawOn }}" hint-placeholder-val="{{ false }}">
+    <div style="margin:0 0 30px;border:1px solid var(--line);border-radius:var(--r-lg);overflow:hidden;background:var(--card)">
+      <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 16px;background:var(--tint);border-bottom:1px solid var(--line)">
+        <span style="font-family:var(--mono);font-size:12px;color:var(--muted)" dir="ltr">docs/he/markdown-components.md</span>
+        <span style="font-family:var(--mono);font-size:11px;color:var(--faint)">מקור</span>
+      </div>
+      <pre style="margin:0;padding:18px 20px;font-family:var(--mono);font-size:13px;line-height:1.85;color:var(--code-text);overflow-x:auto;white-space:pre-wrap">---
+title: רכיבי Markdown
+slug: markdown-components
+locale: he
+dir: rtl
+---
+
+# רכיבי Markdown
+
+&gt; כל רכיב שהתיעוד יודע להציג.
+
+## 01 · טיפוגרפיה
+
+**מודגש**, *נטוי*, ~~מחוק~~, `inline code`, [קישור](/api/auth)
+
+- רשימה
+  - רשימה מקוננת
+- [x] משימה שהושלמה
+
+::: info כללי RTL
+בלוקי קוד נשארים LTR גם בתוך מסמך עברי.
+:::
+
+| רכיב | סינטקס |
+| --- | --- |
+| כותרת | `## כותרת` |</pre>
+    </div>
+    </sc-if>
+
+    <section id="sec-01" data-sec="01" style="background:var(--panel);border:1px solid var(--line);border-radius:var(--r-lg);padding:32px;margin:0 0 22px;box-shadow:var(--shadow)">
+      <h2 style="display:flex;align-items:baseline;gap:12px;margin:0 0 20px;padding-bottom:14px;border-bottom:1px solid var(--line);font-family:var(--display);font-size:var(--ref-h2);font-weight:700;color:var(--head)">
+        <span style="font-family:var(--mono);font-size:14px;font-weight:500;color:var(--accent-text)">01</span>
+        טיפוגרפיה וכותרות
+      </h2>
+      <p style="margin:0 0 18px;font-size:16.5px;line-height:1.85;color:var(--text);text-wrap:pretty">היררכיית הכותרות היא ההסכם היחיד בין הכותב לקורא. <strong style="color:var(--ink);font-weight:700">H2 פותח נושא</strong>, <em style="color:var(--head)">H3 מחלק אותו</em>, ו‑H4 הוא הגבול — מעבר לזה כבר צריך עמוד נפרד. טקסט <del style="color:var(--faint)">שאינו רלוונטי</del> מסומן ולא נמחק, ושמות ערכים נכתבים כ‑<code style="font-family:var(--mono);font-size:0.88em;background:var(--card);border:1px solid var(--line-2);border-radius:var(--r-sm);padding:2px 6px;color:var(--code-inline)">inline code</code>. קישורים כמו <a href="#sec-06">רפרנס ה‑API</a> תמיד מקבלים טקסט שמתאר את היעד.<sup style="font-size:11px"><a href="#footnotes" style="padding-inline-start:2px">1</a></sup></p>
+      <h3 style="margin:26px 0 12px;font-family:var(--display);font-size:var(--ref-h3);font-weight:700;color:var(--green)">H3 — כותרת משנית</h3>
+      <p style="margin:0 0 18px;font-size:16.5px;line-height:1.85;color:var(--text);text-wrap:pretty">ברמה הזאת נכנסים לפרטים: מה קורה בפועל, מה נכשל, ואיך מזהים את זה. פסקה אחת לרעיון אחד.</p>
+      <h4 style="margin:22px 0 10px;font-size:16px;font-weight:700;color:var(--amber)">H4 — מקרה קצה</h4>
+      <p style="margin:0 0 18px;font-size:16.5px;line-height:1.85;color:var(--text);text-wrap:pretty">שמור ל‑<em>אבל</em> אחד: התנהגות חריגה, גרסה ישנה, דגל שצריך לכבות.</p>
+      <div style="display:grid;gap:12px;padding:18px 20px;background:var(--card);border:1px solid var(--line-2);border-radius:var(--r-md)">
+        <div style="display:flex;align-items:baseline;gap:14px"><span style="flex:none;width:74px;font-family:var(--mono);font-size:11px;color:var(--faint)">DISPLAY</span><span style="font-size:34px;font-weight:800;color:var(--ink);line-height:1.2">כותרת ראשית</span></div>
+        <div style="display:flex;align-items:baseline;gap:14px"><span style="flex:none;width:74px;font-family:var(--mono);font-size:11px;color:var(--faint)">LEAD</span><span style="font-size:19px;color:var(--soft)">פסקת פתיחה מובילה</span></div>
+        <div style="display:flex;align-items:baseline;gap:14px"><span style="flex:none;width:74px;font-family:var(--mono);font-size:11px;color:var(--faint)">BODY</span><span style="font-size:16.5px;color:var(--text)">גוף הטקסט, 16.5px / 1.85</span></div>
+        <div style="display:flex;align-items:baseline;gap:14px"><span style="flex:none;width:74px;font-family:var(--mono);font-size:11px;color:var(--faint)">CAPTION</span><span style="font-size:13px;color:var(--muted)">כיתוב, הערות ומטא‑דאטה</span></div>
+      </div>
+    </section>
+
+    <section id="sec-02" data-sec="02" style="background:var(--panel);border:1px solid var(--line);border-radius:var(--r-lg);padding:32px;margin:0 0 22px;box-shadow:var(--shadow)">
+      <h2 style="display:flex;align-items:baseline;gap:12px;margin:0 0 20px;padding-bottom:14px;border-bottom:1px solid var(--line);font-family:var(--display);font-size:var(--ref-h2);font-weight:700;color:var(--head)">
+        <span style="font-family:var(--mono);font-size:14px;font-weight:500;color:var(--accent-text)">02</span>
+        רשימות ומשימות
+      </h2>
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:22px">
+        <div>
+          <div style="margin:0 0 10px;font-family:var(--mono);font-size:11px;letter-spacing:0.1em;text-transform:uppercase;color:var(--faint)">רשימה לא ממוספרת</div>
+          <ul style="margin:0;padding-inline-start:20px;font-size:16px;line-height:1.9;color:var(--text)">
+            <li>שכבת ניתוח שממירה <code style="font-family:var(--mono);font-size:0.88em;background:var(--card);border:1px solid var(--line-2);border-radius:var(--r-sm);padding:2px 6px;color:var(--code-inline)">.md</code> לעץ בלוקים</li>
+            <li>שכבת רינדור
+              <ul style="margin:6px 0 0;padding-inline-start:20px;color:var(--soft)">
+                <li>תבניות RTL</li>
+                <li>הדגשת סינטקס</li>
+              </ul>
+            </li>
+            <li>שכבת חיפוש</li>
+          </ul>
+        </div>
+        <div>
+          <div style="margin:0 0 10px;font-family:var(--mono);font-size:11px;letter-spacing:0.1em;text-transform:uppercase;color:var(--faint)">רשימה ממוספרת</div>
+          <ol style="margin:0;padding-inline-start:22px;font-size:16px;line-height:1.9;color:var(--text)">
+            <li>התקנת ה‑CLI</li>
+            <li>הגדרת <code style="font-family:var(--mono);font-size:0.88em;background:var(--card);border:1px solid var(--line-2);border-radius:var(--r-sm);padding:2px 6px;color:var(--code-inline)">locale: he</code></li>
+            <li>בנייה ופרסום</li>
+          </ol>
+        </div>
+      </div>
+      <div style="margin:24px 0 0;padding:18px 20px;background:var(--card);border:1px solid var(--line-2);border-radius:var(--r-md)">
+        <div style="margin:0 0 12px;font-family:var(--mono);font-size:11px;letter-spacing:0.1em;text-transform:uppercase;color:var(--faint)">רשימת משימות</div>
+        <div style="display:flex;flex-direction:column;gap:10px">
+          <div onClick="{{ task.t0 }}" style="display:flex;align-items:center;gap:11px;cursor:pointer;font-size:16px;color:var(--faint-2)">
+            <span style="flex:none;display:grid;place-items:center;width:19px;height:19px;border-radius:var(--r-sm);background:var(--green);color:var(--green-on);font-size:12px;font-weight:700"><sc-if value="{{ tasks.t0 }}" hint-placeholder-val="{{ true }}"><span>✓</span></sc-if></span>
+            <span style="text-decoration:line-through">הגדרת <span dir="ltr">dir="rtl"</span> על שורש המסמך</span>
+          </div>
+          <div onClick="{{ task.t1 }}" style="display:flex;align-items:center;gap:11px;cursor:pointer;font-size:16px;color:var(--faint-2)">
+            <span style="flex:none;display:grid;place-items:center;width:19px;height:19px;border-radius:var(--r-sm);background:var(--green);color:var(--green-on);font-size:12px;font-weight:700"><sc-if value="{{ tasks.t1 }}" hint-placeholder-val="{{ true }}"><span>✓</span></sc-if></span>
+            <span style="text-decoration:line-through">מעבר לתכונות לוגיות בכל הפריסה</span>
+          </div>
+          <div onClick="{{ task.t2 }}" style="display:flex;align-items:center;gap:11px;cursor:pointer;font-size:16px;color:var(--text)">
+            <span style="flex:none;display:grid;place-items:center;width:19px;height:19px;border-radius:var(--r-sm);border:1.5px solid var(--rule-strong);box-sizing:border-box;color:var(--green);font-size:12px;font-weight:700"><sc-if value="{{ tasks.t2 }}" hint-placeholder-val="{{ false }}"><span>✓</span></sc-if></span>
+            <span>שיקוף אייקוני ניווט בכיוון RTL</span>
+          </div>
+        </div>
+      </div>
+      <div style="margin:24px 0 0">
+        <div style="margin:0 0 12px;font-family:var(--mono);font-size:11px;letter-spacing:0.1em;text-transform:uppercase;color:var(--faint)">רשימת הגדרות</div>
+        <dl style="margin:0;display:grid;gap:14px">
+          <div style="padding-inline-start:14px;border-inline-start:2px solid var(--accent)">
+            <dt style="font-weight:700;color:var(--head);font-size:15.5px">בלוק</dt>
+            <dd style="margin:2px 0 0;font-size:15.5px;color:var(--soft)">יחידת התוכן הקטנה ביותר שהתיעוד מרנדר בנפרד.</dd>
+          </div>
+          <div style="padding-inline-start:14px;border-inline-start:2px solid var(--green)">
+            <dt style="font-weight:700;color:var(--head);font-size:15.5px">קטע</dt>
+            <dd style="margin:2px 0 0;font-size:15.5px;color:var(--soft)">אוסף בלוקים תחת כותרת H2 אחת, עם עוגן משלו.</dd>
+          </div>
+        </dl>
+      </div>
+    </section>
+
+    <section id="sec-03" data-sec="03" style="background:var(--panel);border:1px solid var(--line);border-radius:var(--r-lg);padding:32px;margin:0 0 22px;box-shadow:var(--shadow)">
+      <h2 style="display:flex;align-items:baseline;gap:12px;margin:0 0 20px;padding-bottom:14px;border-bottom:1px solid var(--line);font-family:var(--display);font-size:var(--ref-h2);font-weight:700;color:var(--head)">
+        <span style="font-family:var(--mono);font-size:14px;font-weight:500;color:var(--accent-text)">03</span>
+        ציטוטים והתראות
+      </h2>
+      <blockquote style="margin:0 0 22px;padding:18px 22px;background:var(--card);border-inline-start:3px solid var(--rule-strong);border-radius:0 var(--r-md) var(--r-md) 0;font-size:17px;line-height:1.8;color:var(--text)">
+        תיעוד טוב לא מסביר מה הקוד עושה. הוא מסביר למה החלטנו שזה מה שהוא צריך לעשות.
+        <footer style="margin-top:10px;font-size:13px;color:var(--faint)">— מתוך מדריך הסגנון הפנימי</footer>
+      </blockquote>
+      <div style="display:flex;gap:14px;padding:16px 18px;border-radius:var(--r-md);background:var(--accent-soft);border:1px solid var(--accent-ring);border-inline-start:3px solid var(--accent);margin:0 0 12px">
+        <span style="flex:none;display:grid;place-items:center;width:22px;height:22px;border-radius:50%;background:var(--accent);color:var(--accent-on);font-family:var(--mono);font-size:13px;font-weight:700">i</span>
+        <div style="font-size:15.5px;line-height:1.75;color:var(--text-2)"><strong style="color:var(--ink)">מידע.</strong> בלוקי קוד נשארים <span dir="ltr">LTR</span> גם בתוך מסמך עברי — הכיוון נקבע על הבלוק, לא על העמוד.</div>
+      </div>
+      <div style="display:flex;gap:14px;padding:16px 18px;border-radius:var(--r-md);background:var(--green-soft);border:1px solid var(--green-ring);border-inline-start:3px solid var(--green);margin:0 0 12px">
+        <span style="flex:none;display:grid;place-items:center;width:22px;height:22px;border-radius:50%;background:var(--green);color:var(--green-on);font-size:13px;font-weight:700">✓</span>
+        <div style="font-size:15.5px;line-height:1.75;color:var(--text-2)"><strong style="color:var(--ink)">הצלחה.</strong> העמוד עבר בדיקת RTL: אין תכונה פיזית אחת בפריסה.</div>
+      </div>
+      <div style="display:flex;gap:14px;padding:16px 18px;border-radius:var(--r-md);background:var(--amber-soft);border:1px solid var(--amber-ring);border-inline-start:3px solid var(--amber);margin:0 0 12px">
+        <span style="flex:none;display:grid;place-items:center;width:22px;height:22px;border-radius:50%;background:var(--amber);color:var(--amber-on);font-size:13px;font-weight:700">!</span>
+        <div style="font-size:15.5px;line-height:1.75;color:var(--text-2)"><strong style="color:var(--ink)">אזהרה.</strong> צלליות וגרדיאנטים לא מתהפכים לבד. אם יש להם משמעות כיוונית, הפוך אותם במפורש.</div>
+      </div>
+      <div style="display:flex;gap:14px;padding:16px 18px;border-radius:var(--r-md);background:var(--red-soft);border:1px solid var(--red-ring);border-inline-start:3px solid var(--red);margin:0 0 12px">
+        <span style="flex:none;display:grid;place-items:center;width:22px;height:22px;border-radius:50%;background:var(--red);color:var(--red-on);font-size:13px;font-weight:700">✕</span>
+        <div style="font-size:15.5px;line-height:1.75;color:var(--text-2)"><strong style="color:var(--ink)">שגיאה.</strong> <code style="font-family:var(--mono);font-size:0.88em;background:var(--code-well);border-radius:var(--r-sm);padding:2px 6px;color:var(--red-text)" dir="ltr">flex-direction: row-reverse</code> בתוך הקשר RTL מחזיר את הסדר ל‑LTR. אל תשתמש בו כדי "ליצור" RTL.</div>
+      </div>
+      <div style="display:flex;gap:14px;padding:16px 18px;border-radius:var(--r-md);background:var(--purple-soft);border:1px solid var(--purple-ring);border-inline-start:3px solid var(--purple)">
+        <span style="flex:none;display:grid;place-items:center;width:22px;height:22px;border-radius:50%;background:var(--purple);color:var(--purple-on);font-size:13px;font-weight:700">?</span>
+        <div style="font-size:15.5px;line-height:1.75;color:var(--text-2)"><strong style="color:var(--ink)">הערה.</strong> שדות טופס מקבלים <code style="font-family:var(--mono);font-size:0.88em;background:var(--code-well);border-radius:var(--r-sm);padding:2px 6px;color:var(--purple-text-2)" dir="ltr">dir="auto"</code> כדי שכל ערך יזהה את הכיוון של עצמו.</div>
+      </div>
+    </section>
+
+    <section id="sec-04" data-sec="04" style="background:var(--panel);border:1px solid var(--line);border-radius:var(--r-lg);padding:32px;margin:0 0 22px;box-shadow:var(--shadow)">
+      <h2 style="display:flex;align-items:baseline;gap:12px;margin:0 0 20px;padding-bottom:14px;border-bottom:1px solid var(--line);font-family:var(--display);font-size:var(--ref-h2);font-weight:700;color:var(--head)">
+        <span style="font-family:var(--mono);font-size:14px;font-weight:500;color:var(--accent-text)">04</span>
+        בלוקי קוד
+      </h2>
+      <div style="border:1px solid var(--line);border-radius:var(--r-md);overflow:hidden;background:var(--card);margin:0 0 20px">
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:0 14px;background:var(--tint);border-bottom:1px solid var(--line)">
+          <div style="display:flex;gap:2px">
+            <button onClick="{{ tab.js }}" style="padding:11px 14px;background:none;border:none;border-bottom:2px solid;font-family:var(--mono);font-size:12.5px;cursor:pointer;border-color:{{ tabLine.js }};color:{{ tabFg.js }}">JavaScript</button>
+            <button onClick="{{ tab.py }}" style="padding:11px 14px;background:none;border:none;border-bottom:2px solid;font-family:var(--mono);font-size:12.5px;cursor:pointer;border-color:{{ tabLine.py }};color:{{ tabFg.py }}">Python</button>
+            <button onClick="{{ tab.curl }}" style="padding:11px 14px;background:none;border:none;border-bottom:2px solid;font-family:var(--mono);font-size:12.5px;cursor:pointer;border-color:{{ tabLine.curl }};color:{{ tabFg.curl }}">cURL</button>
+          </div>
+          <button onClick="{{ copyCode }}" style="flex:none;padding:5px 11px;background:none;border:1px solid var(--rule);border-radius:var(--r-sm);font-family:inherit;font-size:12px;color:var(--muted);cursor:pointer" style-hover="background:var(--hover);color:var(--head)">
+            <sc-if value="{{ copiedCode }}" hint-placeholder-val="{{ false }}"><span style="color:var(--green)">הועתק ✓</span></sc-if>
+            <sc-if value="{{ notCopiedCode }}" hint-placeholder-val="{{ true }}"><span>העתק</span></sc-if>
+          </button>
+        </div>
+        <sc-if value="{{ isJs }}" hint-placeholder-val="{{ true }}">
+        <pre dir="ltr" style="margin:0;padding:20px;font-family:var(--mono);font-size:13.5px;line-height:1.75;color:var(--code-text);text-align:left;overflow-x:auto"><span style="color:var(--tok-kw)">import</span> { Nimbus } <span style="color:var(--tok-kw)">from</span> <span style="color:var(--tok-str)">"@nimbus/sdk"</span>;
+
+<span style="color:var(--tok-tag)">const</span> <span style="color:var(--tok-var)">client</span> = <span style="color:var(--tok-kw)">new</span> <span style="color:var(--tok-type)">Nimbus</span>({ <span style="color:var(--tok-var)">apiKey</span>: process.env.<span style="color:var(--tok-var)">NIMBUS_KEY</span> });
+
+<span style="color:var(--tok-comment)">// create a Hebrew, right-to-left document
+</span><span style="color:var(--tok-tag)">const</span> <span style="color:var(--tok-var)">doc</span> = <span style="color:var(--tok-kw)">await</span> client.docs.<span style="color:var(--tok-fn)">create</span>({
+  <span style="color:var(--tok-var)">slug</span>: <span style="color:var(--tok-str)">"markdown-components"</span>,
+  <span style="color:var(--tok-var)">locale</span>: <span style="color:var(--tok-str)">"he"</span>,
+  <span style="color:var(--tok-var)">direction</span>: <span style="color:var(--tok-str)">"rtl"</span>,
+  <span style="color:var(--tok-var)">blocks</span>: <span style="color:var(--tok-num)">9</span>,
+});
+
+console.<span style="color:var(--tok-fn)">log</span>(doc.<span style="color:var(--tok-var)">url</span>);</pre>
+        </sc-if>
+        <sc-if value="{{ isPy }}" hint-placeholder-val="{{ false }}">
+        <pre dir="ltr" style="margin:0;padding:20px;font-family:var(--mono);font-size:13.5px;line-height:1.75;color:var(--code-text);text-align:left;overflow-x:auto"><span style="color:var(--tok-kw)">import</span> os
+<span style="color:var(--tok-kw)">from</span> nimbus <span style="color:var(--tok-kw)">import</span> Nimbus
+
+<span style="color:var(--tok-var)">client</span> = <span style="color:var(--tok-type)">Nimbus</span>(api_key=os.environ[<span style="color:var(--tok-str)">"NIMBUS_KEY"</span>])
+
+<span style="color:var(--tok-comment)"># create a Hebrew, right-to-left document
+</span><span style="color:var(--tok-var)">doc</span> = client.docs.<span style="color:var(--tok-fn)">create</span>(
+    slug=<span style="color:var(--tok-str)">"markdown-components"</span>,
+    locale=<span style="color:var(--tok-str)">"he"</span>,
+    direction=<span style="color:var(--tok-str)">"rtl"</span>,
+    blocks=<span style="color:var(--tok-num)">9</span>,
+)
+
+<span style="color:var(--tok-fn)">print</span>(doc.url)</pre>
+        </sc-if>
+        <sc-if value="{{ isCurl }}" hint-placeholder-val="{{ false }}">
+        <pre dir="ltr" style="margin:0;padding:20px;font-family:var(--mono);font-size:13.5px;line-height:1.75;color:var(--code-text);text-align:left;overflow-x:auto"><span style="color:var(--tok-fn)">curl</span> -X POST https://api.nimbus.dev/v3/docs \
+  -H <span style="color:var(--tok-str)">"Authorization: Bearer $NIMBUS_KEY"</span> \
+  -H <span style="color:var(--tok-str)">"Content-Type: application/json"</span> \
+  -d <span style="color:var(--tok-str)">'{"slug":"markdown-components","locale":"he","direction":"rtl"}'</span></pre>
+        </sc-if>
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:16px">
+        <div>
+          <div style="margin:0 0 8px;font-family:var(--mono);font-size:11px;letter-spacing:0.1em;text-transform:uppercase;color:var(--faint)">בלוק שינויים</div>
+          <pre dir="ltr" style="margin:0;padding:16px 18px;background:var(--card);border:1px solid var(--line-2);border-radius:var(--r-md);font-family:var(--mono);font-size:13px;line-height:1.8;text-align:left;overflow-x:auto"><span style="display:block;background:var(--red-soft);color:var(--red-text-2)">- direction: "ltr"</span><span style="display:block;background:var(--green-soft);color:var(--green-text)">+ direction: "rtl"</span><span style="color:var(--code-text)">  locale: "he"</span></pre>
+        </div>
+        <div>
+          <div style="margin:0 0 8px;font-family:var(--mono);font-size:11px;letter-spacing:0.1em;text-transform:uppercase;color:var(--faint)">טרמינל</div>
+          <pre dir="ltr" style="margin:0;padding:16px 18px;background:var(--card);border:1px solid var(--line-2);border-radius:var(--r-md);font-family:var(--mono);font-size:13px;line-height:1.8;text-align:left;overflow-x:auto"><span style="color:var(--faint)">$</span> npx nimbus build --locale he
+<span style="color:var(--green)">✔</span> <span style="color:var(--code-text)">24 documents compiled in 1.8s
+</span><span style="color:var(--amber)">!</span> <span style="color:var(--code-text)">2 drafts skipped</span></pre>
+        </div>
+      </div>
+    </section>
+
+    <section id="sec-05" data-sec="05" style="background:var(--panel);border:1px solid var(--line);border-radius:var(--r-lg);padding:32px;margin:0 0 22px;box-shadow:var(--shadow)">
+      <h2 style="display:flex;align-items:baseline;gap:12px;margin:0 0 20px;padding-bottom:14px;border-bottom:1px solid var(--line);font-family:var(--display);font-size:var(--ref-h2);font-weight:700;color:var(--head)">
+        <span style="font-family:var(--mono);font-size:14px;font-weight:500;color:var(--accent-text)">05</span>
+        טבלאות
+      </h2>
+      <div style="border:1px solid var(--line);border-radius:var(--r-md);overflow:hidden;margin:0 0 24px">
+        <table style="width:100%;border-collapse:collapse;background:var(--card);font-size:15px">
+          <thead>
+            <tr style="background:var(--accent)">
+              <th style="padding:13px 16px;text-align:start;font-weight:600;color:var(--ink)">רכיב</th>
+              <th style="padding:13px 16px;text-align:start;font-weight:600;color:var(--ink)">סינטקס</th>
+              <th style="padding:13px 16px;text-align:start;font-weight:600;color:var(--ink)">שימוש</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr style="border-bottom:1px solid var(--hair)" style-hover="background:var(--accent-soft-2)">
+              <td style="padding:13px 16px;color:var(--head)">כותרת קטע</td>
+              <td style="padding:13px 16px"><code dir="ltr" style="font-family:var(--mono);font-size:12.5px;color:var(--code-inline)">## כותרת</code></td>
+              <td style="padding:13px 16px;color:var(--muted)">פותח נושא חדש</td>
+            </tr>
+            <tr style="border-bottom:1px solid var(--hair)" style-hover="background:var(--accent-soft-2)">
+              <td style="padding:13px 16px;color:var(--head)">התראה</td>
+              <td style="padding:13px 16px"><code dir="ltr" style="font-family:var(--mono);font-size:12.5px;color:var(--code-inline)">::: warning</code></td>
+              <td style="padding:13px 16px;color:var(--muted)">אזהרה בתוך הזרימה</td>
+            </tr>
+            <tr style="border-bottom:1px solid var(--hair)" style-hover="background:var(--accent-soft-2)">
+              <td style="padding:13px 16px;color:var(--head)">בלוק קוד</td>
+              <td style="padding:13px 16px"><code dir="ltr" style="font-family:var(--mono);font-size:12.5px;color:var(--code-inline)">```js title=…</code></td>
+              <td style="padding:13px 16px;color:var(--muted)">דוגמה שאפשר להריץ</td>
+            </tr>
+            <tr style-hover="background:var(--accent-soft-2)">
+              <td style="padding:13px 16px;color:var(--head)">תג</td>
+              <td style="padding:13px 16px"><code dir="ltr" style="font-family:var(--mono);font-size:12.5px;color:var(--code-inline)">{badge:new}</code></td>
+              <td style="padding:13px 16px;color:var(--muted)">סטטוס של ערך</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <div style="margin:0 0 10px;font-family:var(--mono);font-size:11px;letter-spacing:0.1em;text-transform:uppercase;color:var(--faint)">מספרים נשארים LTR</div>
+      <div style="border:1px solid var(--line);border-radius:var(--r-md);overflow:hidden">
+        <table style="width:100%;border-collapse:collapse;background:var(--card);font-size:15px">
+          <thead>
+            <tr style="background:var(--tint)">
+              <th style="padding:12px 16px;text-align:start;font-weight:600;color:var(--text);border-bottom:1px solid var(--line)">מסמך</th>
+              <th style="padding:12px 16px;text-align:start;font-weight:600;color:var(--text);border-bottom:1px solid var(--line)">סטטוס</th>
+              <th dir="ltr" style="padding:12px 16px;text-align:end;font-weight:600;color:var(--text);border-bottom:1px solid var(--line)">מילים</th>
+              <th dir="ltr" style="padding:12px 16px;text-align:end;font-weight:600;color:var(--text);border-bottom:1px solid var(--line)">עודכן</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr style="border-bottom:1px solid var(--hair)" style-hover="background:var(--accent-soft-2)">
+              <td style="padding:12px 16px;color:var(--head)">רכיבי Markdown</td>
+              <td style="padding:12px 16px"><span style="display:inline-block;padding:3px 11px;border-radius:var(--r-pill);background:var(--green);color:var(--green-on);font-size:12px;font-weight:700">פורסם</span></td>
+              <td dir="ltr" style="padding:12px 16px;text-align:end;font-family:var(--mono);color:var(--text)">1,428</td>
+              <td dir="ltr" style="padding:12px 16px;text-align:end;font-family:var(--mono);color:var(--muted)">12.07.2026</td>
+            </tr>
+            <tr style="border-bottom:1px solid var(--hair)" style-hover="background:var(--accent-soft-2)">
+              <td style="padding:12px 16px;color:var(--head)">אימות ומפתחות</td>
+              <td style="padding:12px 16px"><span style="display:inline-block;padding:3px 11px;border-radius:var(--r-pill);background:var(--amber);color:var(--amber-on);font-size:12px;font-weight:700">בבדיקה</span></td>
+              <td dir="ltr" style="padding:12px 16px;text-align:end;font-family:var(--mono);color:var(--text)">960</td>
+              <td dir="ltr" style="padding:12px 16px;text-align:end;font-family:var(--mono);color:var(--muted)">28.06.2026</td>
+            </tr>
+            <tr style-hover="background:var(--accent-soft-2)">
+              <td style="padding:12px 16px;color:var(--head)">מגבלות קריאה</td>
+              <td style="padding:12px 16px"><span style="display:inline-block;padding:3px 11px;border-radius:var(--r-pill);background:var(--tint-2);color:var(--muted);font-size:12px;font-weight:700">טיוטה</span></td>
+              <td dir="ltr" style="padding:12px 16px;text-align:end;font-family:var(--mono);color:var(--text)">204</td>
+              <td dir="ltr" style="padding:12px 16px;text-align:end;font-family:var(--mono);color:var(--muted)">03.07.2026</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section id="sec-06" data-sec="06" style="background:var(--panel);border:1px solid var(--line);border-radius:var(--r-lg);padding:32px;margin:0 0 22px;box-shadow:var(--shadow)">
+      <h2 style="display:flex;align-items:baseline;gap:12px;margin:0 0 20px;padding-bottom:14px;border-bottom:1px solid var(--line);font-family:var(--display);font-size:var(--ref-h2);font-weight:700;color:var(--head)">
+        <span style="font-family:var(--mono);font-size:14px;font-weight:500;color:var(--accent-text)">06</span>
+        רפרנס API
+      </h2>
+      <div style="border:1px solid var(--line);border-radius:var(--r-md);overflow:hidden;background:var(--card);margin:0 0 14px">
+        <div style="display:flex;align-items:center;gap:14px;padding:14px 18px;background:var(--accent-soft-2);border-bottom:1px solid var(--line)">
+          <span style="flex:none;padding:4px 11px;border-radius:var(--r-sm);background:var(--green);color:var(--green-on);font-family:var(--mono);font-size:12px;font-weight:700">GET</span>
+          <span dir="ltr" style="font-family:var(--mono);font-size:14px;color:var(--head)">/v3/docs/{slug}</span>
+          <span style="margin-inline-start:auto;font-size:13.5px;color:var(--muted)">שליפת מסמך בודד</span>
+        </div>
+        <div style="padding:18px">
+          <p style="margin:0 0 16px;font-size:15.5px;line-height:1.8;color:var(--text)">מחזיר את עץ הבלוקים המרונדר יחד עם המטא‑דאטה. אם המסמך טיוטה, נדרש מפתח עם הרשאת <code style="font-family:var(--mono);font-size:0.88em;background:var(--tint);border-radius:var(--r-sm);padding:2px 6px;color:var(--code-inline)" dir="ltr">docs:read_draft</code>.</p>
+          <table style="width:100%;border-collapse:collapse;font-size:14.5px">
+            <thead>
+              <tr>
+                <th style="padding:9px 12px;text-align:start;font-family:var(--mono);font-size:11px;letter-spacing:0.08em;text-transform:uppercase;color:var(--faint);border-bottom:1px solid var(--line)">פרמטר</th>
+                <th style="padding:9px 12px;text-align:start;font-family:var(--mono);font-size:11px;letter-spacing:0.08em;text-transform:uppercase;color:var(--faint);border-bottom:1px solid var(--line)">טיפוס</th>
+                <th style="padding:9px 12px;text-align:start;font-family:var(--mono);font-size:11px;letter-spacing:0.08em;text-transform:uppercase;color:var(--faint);border-bottom:1px solid var(--line)">תיאור</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr style="border-bottom:1px solid var(--hover)">
+                <td style="padding:11px 12px"><code dir="ltr" style="font-family:var(--mono);color:var(--code-inline)">slug</code> <span style="font-size:11px;color:var(--red)">חובה</span></td>
+                <td style="padding:11px 12px;font-family:var(--mono);color:var(--muted)">string</td>
+                <td style="padding:11px 12px;color:var(--text)">מזהה המסמך בכתובת</td>
+              </tr>
+              <tr>
+                <td style="padding:11px 12px"><code dir="ltr" style="font-family:var(--mono);color:var(--code-inline)">locale</code></td>
+                <td style="padding:11px 12px;font-family:var(--mono);color:var(--muted)">"he" | "en"</td>
+                <td style="padding:11px 12px;color:var(--text)">ברירת המחדל היא שפת הפרויקט</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+      <div style="display:flex;align-items:center;gap:14px;padding:14px 18px;border:1px solid var(--line);border-radius:var(--r-md);background:var(--card);margin:0 0 10px">
+        <span style="flex:none;padding:4px 11px;border-radius:var(--r-sm);background:var(--accent);color:var(--accent-on);font-family:var(--mono);font-size:12px;font-weight:700">POST</span>
+        <span dir="ltr" style="font-family:var(--mono);font-size:14px;color:var(--head)">/v3/docs</span>
+        <span style="margin-inline-start:auto;font-size:13.5px;color:var(--muted)">יצירת מסמך</span>
+      </div>
+      <div style="display:flex;align-items:center;gap:14px;padding:14px 18px;border:1px solid var(--line);border-radius:var(--r-md);background:var(--card)">
+        <span style="flex:none;padding:4px 11px;border-radius:var(--r-sm);background:var(--red);color:var(--red-on);font-family:var(--mono);font-size:12px;font-weight:700">DEL</span>
+        <span dir="ltr" style="font-family:var(--mono);font-size:14px;color:var(--head)">/v3/docs/{slug}</span>
+        <span style="margin-inline-start:auto;font-size:13.5px;color:var(--muted)">מחיקה רכה</span>
+      </div>
+    </section>
+
+    <section id="sec-07" data-sec="07" style="background:var(--panel);border:1px solid var(--line);border-radius:var(--r-lg);padding:32px;margin:0 0 22px;box-shadow:var(--shadow)">
+      <h2 style="display:flex;align-items:baseline;gap:12px;margin:0 0 20px;padding-bottom:14px;border-bottom:1px solid var(--line);font-family:var(--display);font-size:var(--ref-h2);font-weight:700;color:var(--head)">
+        <span style="font-family:var(--mono);font-size:14px;font-weight:500;color:var(--accent-text)">07</span>
+        מדיה, עצים ותרשימים
+      </h2>
+      <figure style="margin:0 0 24px">
+        <div style="height:230px;border-radius:var(--r-md);border:1px solid var(--line);background-color:var(--card);background-image:repeating-linear-gradient(135deg,var(--hatch) 0 10px,transparent 10px 20px);display:grid;place-items:center">
+          <span style="font-family:var(--mono);font-size:12px;letter-spacing:0.08em;color:var(--faint)" dir="ltr">screenshot · docs dashboard · 1600×900</span>
+        </div>
+        <figcaption style="margin-top:10px;font-size:13.5px;color:var(--muted)">לוח הבקרה של התיעוד. לכל צילום מסך יש כיתוב שמסביר מה מסתכלים עליו.</figcaption>
+      </figure>
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(290px,1fr));gap:16px">
+        <div>
+          <div style="margin:0 0 8px;font-family:var(--mono);font-size:11px;letter-spacing:0.1em;text-transform:uppercase;color:var(--faint)">עץ קבצים</div>
+          <pre dir="ltr" style="margin:0;padding:18px;background:var(--card);border:1px solid var(--line-2);border-radius:var(--r-md);font-family:var(--mono);font-size:12.5px;line-height:1.85;text-align:left;overflow-x:auto"><span style="color:var(--amber)">docs/</span>
+├─ <span style="color:var(--amber)">he/</span>
+│  ├─ <span style="color:var(--accent-text)">index.md</span>
+│  ├─ <span style="color:var(--accent-text)">markdown-components.md</span>
+│  └─ <span style="color:var(--amber)">api/</span>
+│     ├─ <span style="color:var(--accent-text)">auth.md</span>
+│     └─ <span style="color:var(--accent-text)">webhooks.md</span>
+├─ <span style="color:var(--accent-text)">nimbus.config.ts</span>
+└─ <span style="color:var(--amber)">theme/</span>
+   └─ <span style="color:var(--accent-text)">rtl.css</span></pre>
+        </div>
+        <div>
+          <div style="margin:0 0 8px;font-family:var(--mono);font-size:11px;letter-spacing:0.1em;text-transform:uppercase;color:var(--faint)">תרשים זרימה</div>
+          <pre dir="ltr" style="margin:0;padding:18px;background:var(--card);border:1px solid var(--line-2);border-radius:var(--r-md);font-family:var(--mono);font-size:12.5px;line-height:1.6;text-align:center;color:var(--code-text);overflow-x:auto">┌────────┐   ┌────────┐   ┌────────┐
+│  .md   │ → │ parser │ → │ blocks │
+└────────┘   └────────┘   └────────┘
+                              ↓
+                        ┌──────────┐
+                        │ RTL view │
+                        └──────────┘</pre>
+        </div>
+      </div>
+    </section>
+
+    <section id="sec-08" data-sec="08" style="background:var(--panel);border:1px solid var(--line);border-radius:var(--r-lg);padding:32px;margin:0 0 22px;box-shadow:var(--shadow)">
+      <h2 style="display:flex;align-items:baseline;gap:12px;margin:0 0 20px;padding-bottom:14px;border-bottom:1px solid var(--line);font-family:var(--display);font-size:var(--ref-h2);font-weight:700;color:var(--head)">
+        <span style="font-family:var(--mono);font-size:14px;font-weight:500;color:var(--accent-text)">08</span>
+        רכיבי ממשק
+      </h2>
+      <div style="margin:0 0 22px">
+        <div style="margin:0 0 10px;font-family:var(--mono);font-size:11px;letter-spacing:0.1em;text-transform:uppercase;color:var(--faint)">תגים</div>
+        <div style="display:flex;flex-wrap:wrap;gap:8px">
+          <span style="padding:4px 13px;border-radius:var(--r-pill);background:var(--accent);color:var(--accent-on);font-size:12.5px;font-weight:700">ראשי</span>
+          <span style="padding:4px 13px;border-radius:var(--r-pill);background:var(--green);color:var(--green-on);font-size:12.5px;font-weight:700">פורסם</span>
+          <span style="padding:4px 13px;border-radius:var(--r-pill);background:var(--amber);color:var(--amber-on);font-size:12.5px;font-weight:700">בטא</span>
+          <span style="padding:4px 13px;border-radius:var(--r-pill);background:var(--red);color:var(--red-on);font-size:12.5px;font-weight:700">הוצא משימוש</span>
+          <span style="padding:4px 13px;border-radius:var(--r-pill);background:var(--purple);color:var(--purple-on);font-size:12.5px;font-weight:700">ניסיוני</span>
+          <span style="padding:4px 13px;border-radius:var(--r-pill);border:1px solid var(--rule-strong);color:var(--muted);font-size:12.5px;font-weight:700">טיוטה</span>
+        </div>
+      </div>
+      <div style="margin:0 0 22px">
+        <div style="margin:0 0 10px;font-family:var(--mono);font-size:11px;letter-spacing:0.1em;text-transform:uppercase;color:var(--faint)">כפתורים וקיצורי מקלדת</div>
+        <div style="display:flex;flex-wrap:wrap;align-items:center;gap:10px">
+          <button style="padding:9px 18px;border:none;border-radius:var(--r-sm);background:var(--accent);color:var(--accent-on);font-family:inherit;font-size:14px;font-weight:600;cursor:pointer" style-hover="background:var(--accent-hover)">פעולה ראשית</button>
+          <button style="padding:9px 18px;border:1px solid var(--rule);border-radius:var(--r-sm);background:none;color:var(--text);font-family:inherit;font-size:14px;cursor:pointer" style-hover="background:var(--hover);border-color:var(--rule-strong)">משנית</button>
+          <button style="padding:9px 14px;border:none;border-radius:var(--r-sm);background:none;color:var(--muted);font-family:inherit;font-size:14px;cursor:pointer" style-hover="color:var(--head)">שקופה</button>
+          <span style="display:flex;align-items:center;gap:5px;margin-inline-start:8px;font-size:13px;color:var(--muted)">
+            <kbd style="font-family:var(--mono);font-size:12px;padding:3px 8px;border-radius:var(--r-sm);background:var(--tint-2);border:1px solid var(--rule-2);border-bottom-width:2px;color:var(--text-2)">⌘</kbd>
+            <kbd style="font-family:var(--mono);font-size:12px;padding:3px 8px;border-radius:var(--r-sm);background:var(--tint-2);border:1px solid var(--rule-2);border-bottom-width:2px;color:var(--text-2)">K</kbd>
+            <span>לחיפוש</span>
+          </span>
+        </div>
+      </div>
+      <div style="margin:0 0 22px">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin:0 0 8px">
+          <span style="font-family:var(--mono);font-size:11px;letter-spacing:0.1em;text-transform:uppercase;color:var(--faint)">התקדמות תרגום</span>
+          <span style="font-family:var(--mono);font-size:12.5px;color:var(--accent-text)" dir="ltr">64%</span>
+        </div>
+        <div style="height:7px;border-radius:var(--r-pill);background:var(--card);overflow:hidden">
+          <div style="width:64%;height:100%;border-radius:var(--r-pill);background:var(--accent)"></div>
+        </div>
+      </div>
+      <div style="margin:0 0 22px">
+        <div style="margin:0 0 12px;font-family:var(--mono);font-size:11px;letter-spacing:0.1em;text-transform:uppercase;color:var(--faint)">שלבים</div>
+        <div style="display:grid;gap:0">
+          <div style="display:flex;gap:14px">
+            <div style="display:flex;flex-direction:column;align-items:center;flex:none"><span style="display:grid;place-items:center;width:28px;height:28px;border-radius:50%;background:var(--accent);color:var(--accent-on);font-family:var(--mono);font-size:13px;font-weight:700">1</span><span style="flex:1;width:1px;background:var(--line)"></span></div>
+            <div style="padding-bottom:18px"><div style="font-size:16px;font-weight:600;color:var(--head)">כתיבת הקובץ</div><div style="font-size:14.5px;color:var(--muted)">מסמך <span dir="ltr">Markdown</span> אחד עם front‑matter.</div></div>
+          </div>
+          <div style="display:flex;gap:14px">
+            <div style="display:flex;flex-direction:column;align-items:center;flex:none"><span style="display:grid;place-items:center;width:28px;height:28px;border-radius:50%;background:var(--accent);color:var(--accent-on);font-family:var(--mono);font-size:13px;font-weight:700">2</span><span style="flex:1;width:1px;background:var(--line)"></span></div>
+            <div style="padding-bottom:18px"><div style="font-size:16px;font-weight:600;color:var(--head)">בנייה מקומית</div><div style="font-size:14.5px;color:var(--muted)">בדיקת RTL, קישורים שבורים וכותרות חסרות.</div></div>
+          </div>
+          <div style="display:flex;gap:14px">
+            <div style="flex:none"><span style="display:grid;place-items:center;width:28px;height:28px;border-radius:50%;border:1.5px solid var(--rule-strong);box-sizing:border-box;color:var(--muted);font-family:var(--mono);font-size:13px;font-weight:700">3</span></div>
+            <div><div style="font-size:16px;font-weight:600;color:var(--head)">פרסום</div><div style="font-size:14.5px;color:var(--muted)">מיזוג ל‑<span dir="ltr">main</span> מפרסם אוטומטית.</div></div>
+          </div>
+        </div>
+      </div>
+      <div>
+        <div style="margin:0 0 12px;font-family:var(--mono);font-size:11px;letter-spacing:0.1em;text-transform:uppercase;color:var(--faint)">אקורדיון</div>
+        <details style="border:1px solid var(--line);border-radius:var(--r-md);background:var(--card);margin:0 0 8px">
+          <summary style="display:flex;align-items:center;justify-content:space-between;padding:14px 18px;font-size:15.5px;font-weight:600;color:var(--head)">
+            <span>איך מוסיפים רכיב חדש לספרייה?</span>
+            <span style="color:var(--faint);font-size:13px">▾</span>
+          </summary>
+          <div style="padding:0 18px 16px;font-size:15.5px;line-height:1.8;color:var(--text)">מגדירים אותו כ‑directive בקובץ התצורה, מוסיפים דוגמה לדף הזה, ומריצים את בדיקת הרכיבים. רכיב שאין לו דוגמה כאן נחשב לא מתועד.</div>
+        </details>
+        <details style="border:1px solid var(--line);border-radius:var(--r-md);background:var(--card)">
+          <summary style="display:flex;align-items:center;justify-content:space-between;padding:14px 18px;font-size:15.5px;font-weight:600;color:var(--head)">
+            <span>מה קורה לתוכן באנגלית בתוך פסקה עברית?</span>
+            <span style="color:var(--faint);font-size:13px">▾</span>
+          </summary>
+          <div style="padding:0 18px 16px;font-size:15.5px;line-height:1.8;color:var(--text)">המעבד עוטף אותו בבידוד כיוון, כך שמספרים, כתובות ומזהים כמו <span dir="ltr">050-1234567</span> או <span dir="ltr">api.nimbus.dev/v3</span> לא מתהפכים.</div>
+        </details>
+      </div>
+    </section>
+
+    <div id="footnotes" style="padding:22px 26px;background:var(--tint);border:1px solid var(--hair);border-radius:var(--r-lg);margin:0 0 26px">
+      <div style="margin:0 0 10px;font-family:var(--mono);font-size:11px;letter-spacing:0.1em;text-transform:uppercase;color:var(--faint)">הערות שוליים</div>
+      <div style="display:flex;gap:10px;font-size:14.5px;line-height:1.8;color:var(--soft)">
+        <span style="flex:none;font-family:var(--mono);color:var(--accent-text)">1.</span>
+        <span>"לחץ כאן" הוא לא טקסט קישור. הקישור צריך לתאר את היעד גם כשקוראים אותו לבד, למשל בקורא מסך.</span>
+      </div>
+    </div>
+
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:14px;margin:0 0 26px">
+      <a href="#top" style="display:block;padding:18px 20px;border:1px solid var(--line);border-radius:var(--r-lg);background:var(--tint)" style-hover="border-color:var(--rule-strong);background:var(--panel-2)">
+        <div style="font-size:12.5px;color:var(--faint);margin-bottom:5px">→ הקודם</div>
+        <div style="font-size:16px;font-weight:600;color:var(--head)">סגנון כתיבה</div>
+      </a>
+      <a href="#top" style="display:block;padding:18px 20px;border:1px solid var(--line);border-radius:var(--r-lg);background:var(--tint);text-align:end" style-hover="border-color:var(--rule-strong);background:var(--panel-2)">
+        <div style="font-size:12.5px;color:var(--faint);margin-bottom:5px">הבא ←</div>
+        <div style="font-size:16px;font-weight:600;color:var(--head)">אימות ומפתחות</div>
+      </a>
+    </div>
+
+    <div style="display:flex;flex-wrap:wrap;align-items:center;gap:12px;padding:16px 20px;border:1px dashed var(--rule);border-radius:var(--r-lg)">
+      <span style="font-size:14.5px;color:var(--text)">העמוד הזה עזר?</span>
+      <button onClick="{{ voteYes }}" style="padding:7px 16px;border:1px solid var(--rule);border-radius:var(--r-pill);background:none;color:var(--text);font-family:inherit;font-size:13.5px;cursor:pointer" style-hover="border-color:var(--green);color:var(--green)">כן</button>
+      <button onClick="{{ voteNo }}" style="padding:7px 16px;border:1px solid var(--rule);border-radius:var(--r-pill);background:none;color:var(--text);font-family:inherit;font-size:13.5px;cursor:pointer" style-hover="border-color:var(--red);color:var(--red)">לא ממש</button>
+      <sc-if value="{{ voted }}" hint-placeholder-val="{{ false }}"><span style="font-size:13.5px;color:var(--green)">תודה — נרשם.</span></sc-if>
+    </div>
+    </div>
+    </sc-if>
+  </main>
+
+  <sc-if value="{{ tocVisible }}" hint-placeholder-val="{{ true }}">
+  <aside style="position:sticky;top:var(--bar-h);width:214px;box-sizing:border-box;height:calc(100vh - var(--bar-h));overflow-y:auto;padding:40px 16px 36px;border-inline-start:1px solid var(--hair)">
+    <div style="{{ chrome.railLabel }}">בעמוד הזה</div>
+    <div style="position:relative;padding-inline-start:12px">
+      <span style="position:absolute;inset-inline-start:0;top:0;bottom:0;width:1px;background:var(--hair)"></span>
+      <span style="position:absolute;inset-inline-start:0;top:0;width:2px;height:20px;border-radius:2px;background:var(--accent);transition:transform 0.25s cubic-bezier(0.4,0,0.2,1);transform:translateY({{ tocY }}px)"></span>
+      <div style="display:flex;flex-direction:column">
+        <sc-for list="{{ toc }}" as="item" hint-placeholder-count="5">
+          <a href="{{ item.href }}" onClick="{{ item.go }}" style="display:block;height:32px;line-height:20px;padding:6px 8px;box-sizing:border-box;font-size:13.5px;color:{{ item.fg }};white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:pointer" style-hover="color:var(--accent-text)">{{ item.label }}</a>
+        </sc-for>
+      </div>
+    </div>
+    <sc-if value="{{ tocEmpty }}" hint-placeholder-val="{{ false }}">
+      <div style="font-size:13px;color:var(--faint)">אין כותרות במסמך.</div>
+    </sc-if>
+  </aside>
+  </sc-if>
+
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;showToc&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:true,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;פריסה&quot;},&quot;numberedHeadings&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:true,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;תוכן&quot;},&quot;showSourceByDefault&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:false,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;תוכן&quot;},&quot;defaultTheme&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;auto&quot;,&quot;dark&quot;,&quot;light&quot;],&quot;default&quot;:&quot;auto&quot;,&quot;tsType&quot;:&quot;'auto' | 'dark' | 'light'&quot;,&quot;section&quot;:&quot;עיצוב&quot;},&quot;defaultCodeTab&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;javascript&quot;,&quot;python&quot;,&quot;curl&quot;],&quot;default&quot;:&quot;javascript&quot;,&quot;tsType&quot;:&quot;'javascript' | 'python' | 'curl'&quot;,&quot;section&quot;:&quot;תוכן&quot;}}">
+const KEY = "md-docs-site-v1";
+const THEME_KEY = "md-docs-theme";
+
+const SAMPLE = [
+  "---",
+  "title: רכיבי Markdown",
+  "locale: he",
+  "dir: rtl",
+  "---",
+  "",
+  "# רכיבי Markdown",
+  "",
+  "כל רכיב שהתיעוד יודע להציג, עם הסינטקס שמייצר אותו. הדף הזה הוא גם רפרנס וגם בדיקת שפיות לעיצוב.",
+  "",
+  "## טיפוגרפיה",
+  "",
+  "היררכיית הכותרות היא ההסכם היחיד בין הכותב לקורא. **H2 פותח נושא**, *H3 מחלק אותו*, ומעבר לזה כבר צריך עמוד נפרד. טקסט ~~שאינו רלוונטי~~ מסומן ולא נמחק, ושמות ערכים נכתבים כ-`inline code`. קישורים כמו [רפרנס ה-API](https://example.com) תמיד מקבלים טקסט שמתאר את היעד.",
+  "",
+  "### כותרת משנית",
+  "",
+  "ברמה הזאת נכנסים לפרטים: מה קורה בפועל, מה נכשל, ואיך מזהים את זה.",
+  "",
+  "## רשימות ומשימות",
+  "",
+  "- שכבת ניתוח שממירה `.md` לעץ בלוקים",
+  "- שכבת רינדור",
+  "  - תבניות RTL",
+  "  - הדגשת סינטקס",
+  "- שכבת חיפוש",
+  "",
+  "1. התקנת ה-CLI",
+  "2. הגדרת `locale: he`",
+  "3. בנייה ופרסום",
+  "",
+  "- [x] הגדרת dir=rtl על שורש המסמך",
+  "- [x] מעבר לתכונות לוגיות בכל הפריסה",
+  "- [ ] שיקוף אייקוני ניווט בכיוון RTL",
+  "",
+  "## ציטוטים והתראות",
+  "",
+  "> תיעוד טוב לא מסביר מה הקוד עושה. הוא מסביר למה החלטנו שזה מה שהוא צריך לעשות.",
+  "",
+  "::: info מידע",
+  "בלוקי קוד נשארים LTR גם בתוך מסמך עברי — הכיוון נקבע על הבלוק, לא על העמוד.",
+  ":::",
+  "",
+  "::: success הצלחה",
+  "העמוד עבר בדיקת RTL: אין תכונה פיזית אחת בפריסה.",
+  ":::",
+  "",
+  "::: warning אזהרה",
+  "צלליות וגרדיאנטים לא מתהפכים לבד. אם יש להם משמעות כיוונית, הפוך אותם במפורש.",
+  ":::",
+  "",
+  "::: danger שגיאה",
+  "`flex-direction: row-reverse` בתוך הקשר RTL מחזיר את הסדר ל-LTR.",
+  ":::",
+  "",
+  "::: note הערה",
+  "שדות טופס מקבלים `dir=auto` כדי שכל ערך יזהה את הכיוון של עצמו.",
+  ":::",
+  "",
+  "## בלוקי קוד",
+  "",
+  "```js sdk/create-doc.js",
+  'import { Nimbus } from "@nimbus/sdk";',
+  "",
+  "const client = new Nimbus({ apiKey: process.env.NIMBUS_KEY });",
+  "",
+  "// create a Hebrew, right-to-left document",
+  "const doc = await client.docs.create({",
+  '  slug: "markdown-components",',
+  '  locale: "he",',
+  '  direction: "rtl",',
+  "  blocks: 9,",
+  "});",
+  "```",
+  "",
+  "```bash",
+  "$ npx nimbus build --locale he",
+  "24 documents compiled in 1.8s",
+  "```",
+  "",
+  "```sql",
+  "select slug, locale, count(*) as blocks",
+  "from doc_blocks",
+  "where locale = 'he' and published is true",
+  "group by slug, locale",
+  "order by blocks desc",
+  "limit 10;",
+  "```",
+  "",
+  "## תרשימים",
+  "",
+  "```mermaid",
+  "flowchart LR",
+  '  A["source .md"] --> B["parser"]',
+  '  B --> C["block tree"]',
+  '  C --> D["RTL renderer"]',
+  '  C --> E["search index"]',
+  "```",
+  "",
+  "::: details לחצו לפתיחה — קוד בתוך בלוק מתקפל",
+  "בלוק מתקפל יכול להכיל כל רכיב, כולל קוד:",
+  "",
+  "```python",
+  "blocks = parse(open('doc.md').read())",
+  "print(len(blocks))",
+  "```",
+  ":::",
+  "",
+  "## טבלאות",
+  "",
+  "| רכיב | סינטקס | שימוש |",
+  "| --- | --- | --- |",
+  "| כותרת קטע | `## כותרת` | פותח נושא חדש |",
+  "| התראה | `::: warning` | אזהרה בתוך הזרימה |",
+  "| בלוק קוד | גדר של שלושה גרשים + `js` | דוגמה שאפשר להריץ |",
+  "",
+  "| מסמך | מילים | עודכן |",
+  "| --- | --- | --- |",
+  "| רכיבי Markdown | 1,428 | 12.07.2026 |",
+  "| אימות ומפתחות | 960 | 28.06.2026 |",
+  "",
+  "## מדיה",
+  "",
+  "![לוח הבקרה של התיעוד](dashboard.png)",
+  "",
+  "---",
+  "",
+  "מסמך זה נטען כדוגמה. מחקו אותו והעלו את המסמכים שלכם."
+].join("\n");
+
+/* ═══════════════════════════════════════════════════════════════════
+   ערכות העיצוב — מקור האמת היחיד
+
+   כל צבע, פונט וגיאומטריה של שני המצבים יושבים כאן ורק כאן.
+   applyTheme כותב אותם כמשתני CSS על <html>, וכל שאר הקוד — גם ה-HTML
+   של התבנית, גם ה-CSS ב-helmet וגם ה-React ב-render_blocks — קורא
+   אותם דרך var(). אין הגדרת צבע שנייה בשום מקום בקובץ.
+
+   היוצא מן הכלל היחיד הוא mermaid: הוא מקבל צבעים כערכי JS ולא יודע
+   לקרוא var(), ולכן לכל ערכה יש מפת mermaid משלה עם ערכים ממשיים.
+   ═══════════════════════════════════════════════════════════════════ */
+
+const DARK = {
+  sans: "'Heebo','Assistant','Noto Sans Hebrew',sans-serif",
+  display: "'Heebo','Assistant',sans-serif",
+  mono: "'JetBrains Mono','Consolas',monospace",
+
+  bg: "#0e1022", rail: "#0b0d1c", bar: "rgba(11,13,28,0.9)",
+  panel: "#151c36", "panel-2": "#161d38", card: "#0a0c1a",
+  tint: "#12172c", "tint-2": "#1b2440", hover: "#1a2340",
+  line: "#253156", "line-2": "#222c4d", hair: "#1e2745",
+  rule: "#2b3660", "rule-2": "#34406a", "rule-strong": "#3d5a80",
+
+  ink: "#ffffff", head: "#e9edf7", text: "#c9d3ea", "text-2": "#d6dff2",
+  soft: "#a8b4d2", muted: "#93a0c2", faint: "#6a779b", "faint-2": "#8f9dc0",
+  "code-text": "#c3cee3", "code-inline": "#7fdbca", "code-well": "rgba(0,0,0,0.35)",
+
+  accent: "#0088cc", "accent-text": "#45b6ec", "accent-hover": "#8ad3f7", "accent-on": "#02131f",
+  "accent-soft": "rgba(0,136,204,0.14)", "accent-soft-2": "rgba(0,136,204,0.07)", "accent-ring": "rgba(0,136,204,0.28)",
+
+  green: "#2ecc71", "green-soft": "rgba(46,204,113,0.12)", "green-ring": "rgba(46,204,113,0.28)", "green-on": "#06210f", "green-text": "#88e0ab",
+  amber: "#f39c12", "amber-soft": "rgba(243,156,18,0.12)", "amber-ring": "rgba(243,156,18,0.28)", "amber-on": "#241300",
+  red: "#e74c3c", "red-soft": "rgba(231,76,60,0.12)", "red-ring": "rgba(231,76,60,0.28)", "red-on": "#2b0703", "red-text": "#ffb3aa", "red-text-2": "#f0918a",
+  purple: "#9b59b6", "purple-soft": "rgba(155,89,182,0.12)", "purple-soft-2": "rgba(155,89,182,0.16)", "purple-ring": "rgba(155,89,182,0.28)", "purple-on": "#160521", "purple-text": "#c39bd8", "purple-text-2": "#dcb6ee",
+
+  pink: "#e0518f", "pink-soft": "rgba(224,81,143,0.12)", "pink-on": "#2a0714",
+  sky: "#45b6ec", "sky-soft": "rgba(69,182,236,0.12)", "sky-on": "#02131f",
+  teal: "#16b0a8", "teal-soft": "rgba(22,176,168,0.12)", "teal-on": "#00201e",
+  gray: "#8f9dc0", "gray-soft": "rgba(143,157,192,0.1)", "gray-on": "#0e1022",
+  brown: "#b07a4a", "brown-soft": "rgba(176,122,74,0.14)", "brown-on": "#22140a",
+  steel: "#6a8ec0", "steel-soft": "rgba(106,142,192,0.12)", "steel-on": "#04121f",
+  steelblue: "#4a90d9", "steelblue-soft": "rgba(74,144,217,0.12)", "steelblue-on": "#02131f",
+
+  hatch: "rgba(61,90,128,0.16)", sel: "rgba(0,136,204,0.35)", scroll: "#2a3860",
+  shadow: "0 6px 30px rgba(0,0,0,0.25)", "shadow-2": "0 10px 40px rgba(0,0,0,0.35)",
+
+  "tok-comment": "#6a9955", "tok-punct": "#a8b4d2", "tok-kw": "#c586c0", "tok-kw-weight": "400",
+  "tok-str": "#ce9178", "tok-fn": "#dcdcaa", "tok-num": "#b5cea8", "tok-var": "#9cdcfe",
+  "tok-tag": "#569cd6", "tok-type": "#4ec9b0", "tok-ins": "#2ecc71", "tok-del": "#e74c3c",
+
+  "r-sm": "7px", "r-md": "10px", "r-lg": "12px", "r-pill": "20px",
+  "bar-h": "56px", "bar-pad": "22px", "bar-gap": "9px",
+  "rail-w": "280px", "rail-pad": "24px 18px 36px", "rail-head-gap": "20px",
+  "rail-title-size": "15.5px", "rail-sub-gap": "0px", "rail-sub-track": "0", "rail-sub-case": "none",
+  "crumb-font": "'Heebo','Assistant',sans-serif", "crumb-size": "13.5px", "crumb-track": "0",
+  "shell-w": "1560px", "main-w": "900px", "main-pad": "40px 30px 90px",
+  "doc-gap": "2px", "doc-list-rule": "0", "doc-head-gap": "30px",
+  "h1-size": "44px", "lead-size": "18.5px",
+  "ref-h1": "46px", "ref-h2": "27px", "ref-h3": "20px"
+};
+
+const LIGHT = {
+  sans: "'Assistant','Heebo',sans-serif",
+  display: "'Frank Ruhl Libre','Georgia',serif",
+  mono: "'IBM Plex Mono','Consolas',monospace",
+
+  bg: "#f7f5f1", rail: "#f2efe9", bar: "rgba(247,245,241,0.92)",
+  panel: "#fffdf9", "panel-2": "#faf8f3", card: "#fffdf9",
+  tint: "#f1eee7", "tint-2": "#eae5db", hover: "#f1eee7",
+  line: "#e2ddd3", "line-2": "#e8e3d9", hair: "#e2ddd3",
+  rule: "#cfc8bb", "rule-2": "#bdb5a6", "rule-strong": "#a39c8f",
+
+  ink: "#1c1b18", head: "#1c1b18", text: "#33302a", "text-2": "#3a372f",
+  soft: "#57534b", muted: "#57534b", faint: "#a39c8f", "faint-2": "#8e887c",
+  "code-text": "#3a372f", "code-inline": "#7a2b20", "code-well": "rgba(28,27,24,0.06)",
+
+  accent: "#9c3b2e", "accent-text": "#9c3b2e", "accent-hover": "#7a2b20", "accent-on": "#f7f5f1",
+  "accent-soft": "rgba(156,59,46,0.08)", "accent-soft-2": "rgba(156,59,46,0.05)", "accent-ring": "rgba(156,59,46,0.3)",
+
+  green: "#3f7d4f", "green-soft": "rgba(63,125,79,0.09)", "green-ring": "rgba(63,125,79,0.3)", "green-on": "#f7f5f1", "green-text": "#3f7d4f",
+  amber: "#9a6b16", "amber-soft": "rgba(154,107,22,0.1)", "amber-ring": "rgba(154,107,22,0.3)", "amber-on": "#f7f5f1",
+  red: "#a33327", "red-soft": "rgba(163,51,39,0.09)", "red-ring": "rgba(163,51,39,0.3)", "red-on": "#f7f5f1", "red-text": "#a33327", "red-text-2": "#8f2a20",
+  purple: "#6b4a8f", "purple-soft": "rgba(107,74,143,0.09)", "purple-soft-2": "rgba(107,74,143,0.13)", "purple-ring": "rgba(107,74,143,0.3)", "purple-on": "#f7f5f1", "purple-text": "#6b4a8f", "purple-text-2": "#57397a",
+
+  pink: "#a8305f", "pink-soft": "rgba(168,48,95,0.08)", "pink-on": "#f7f5f1",
+  sky: "#2b6f8f", "sky-soft": "rgba(43,111,143,0.08)", "sky-on": "#f7f5f1",
+  teal: "#1c7a72", "teal-soft": "rgba(28,122,114,0.08)", "teal-on": "#f7f5f1",
+  gray: "#6f6a61", "gray-soft": "rgba(111,106,97,0.07)", "gray-on": "#f7f5f1",
+  brown: "#8a5a2b", "brown-soft": "rgba(138,90,43,0.09)", "brown-on": "#f7f5f1",
+  steel: "#4a6c96", "steel-soft": "rgba(74,108,150,0.08)", "steel-on": "#f7f5f1",
+  steelblue: "#3a6ea5", "steelblue-soft": "rgba(58,110,165,0.08)", "steelblue-on": "#f7f5f1",
+
+  hatch: "rgba(28,27,24,0.05)", sel: "rgba(156,59,46,0.16)", scroll: "#d3cdc2",
+  shadow: "0 1px 2px rgba(28,27,24,0.05)", "shadow-2": "0 2px 10px rgba(28,27,24,0.08)",
+
+  "tok-comment": "#8f8a7c", "tok-punct": "#6f6a61", "tok-kw": "#8a3f96", "tok-kw-weight": "500",
+  "tok-str": "#a3592a", "tok-fn": "#2b5f8f", "tok-num": "#1c7a72", "tok-var": "#a33327",
+  "tok-tag": "#a33327", "tok-type": "#1c7a72", "tok-ins": "#3f7d4f", "tok-del": "#a33327",
+
+  "r-sm": "3px", "r-md": "3px", "r-lg": "3px", "r-pill": "3px",
+  "bar-h": "58px", "bar-pad": "26px", "bar-gap": "16px",
+  "rail-w": "272px", "rail-pad": "34px 26px 40px", "rail-head-gap": "26px",
+  "rail-title-size": "24px", "rail-sub-gap": "6px", "rail-sub-track": "0.08em", "rail-sub-case": "uppercase",
+  "crumb-font": "'IBM Plex Mono','Consolas',monospace", "crumb-size": "11.5px", "crumb-track": "0.06em",
+  "shell-w": "1580px", "main-w": "940px", "main-pad": "52px 40px 100px",
+  "doc-gap": "0px", "doc-list-rule": "1px solid #e2ddd3", "doc-head-gap": "36px",
+  "h1-size": "54px", "lead-size": "19.5px",
+  "ref-h1": "50px", "ref-h2": "31px", "ref-h3": "23px"
+};
+
+/* מפות mermaid — הערכים כאן חייבים להיות ממשיים ולא var(), כי mermaid
+   מקבל אותם כאובייקט JS ומזריק אותם ל-SVG בעצמו. */
+const MERMAID = {
+  dark: {
+    node: "#123950", nodeBorder: "#0088cc", cluster: "#101830", clusterBorder: "#3d5a80",
+    line: "#45b6ec", text: "#e9edf7", edgeBg: "#0d1223", surface: "#0d1223",
+    vars: {
+      darkMode: true, background: "#0d1223", primaryColor: "#123950", primaryBorderColor: "#0088cc", primaryTextColor: "#e9edf7",
+      secondaryColor: "#14352a", secondaryBorderColor: "#2ecc71", secondaryTextColor: "#e9edf7",
+      tertiaryColor: "#2a2040", tertiaryBorderColor: "#9b59b6", tertiaryTextColor: "#e9edf7",
+      lineColor: "#45b6ec", textColor: "#c9d3ea", mainBkg: "#123950", nodeBorder: "#0088cc",
+      clusterBkg: "#101830", clusterBorder: "#3d5a80", edgeLabelBackground: "#0d1223", titleColor: "#e9edf7",
+      noteBkgColor: "#2a2313", noteBorderColor: "#f39c12", fontSize: "16px"
+    }
+  },
+  light: {
+    node: "#f2e3dc", nodeBorder: "#9c3b2e", cluster: "#f7f5f1", clusterBorder: "#cfc8bb",
+    line: "#9c3b2e", text: "#1c1b18", edgeBg: "#fffdf9", surface: "#fffdf9",
+    vars: {
+      darkMode: false, background: "#fffdf9", primaryColor: "#f2e3dc", primaryBorderColor: "#9c3b2e", primaryTextColor: "#1c1b18",
+      secondaryColor: "#e6ecdd", secondaryBorderColor: "#5f7a4d", secondaryTextColor: "#1c1b18",
+      tertiaryColor: "#e2e9f2", tertiaryBorderColor: "#2b5f8f", tertiaryTextColor: "#1c1b18",
+      lineColor: "#9c3b2e", textColor: "#33302a", mainBkg: "#f2e3dc", nodeBorder: "#9c3b2e",
+      clusterBkg: "#f7f5f1", clusterBorder: "#cfc8bb", edgeLabelBackground: "#fffdf9", titleColor: "#1c1b18",
+      noteBkgColor: "#f6efd9", noteBorderColor: "#c9a227", fontSize: "16px"
+    }
+  }
+};
+
+/* סוגי ההתראות. הצבע הוא שם של גוון, לא ערך — כך אותה מפה משרתת
+   את שני המצבים, וכל גוון מוגדר פעם אחת בערכה. */
+const CALLOUT = {
+  info: { hue: "accent", g: "i", label: "מידע" },
+  success: { hue: "green", g: "✓", label: "הצלחה" },
+  warning: { hue: "amber", g: "!", label: "אזהרה" },
+  caution: { hue: "amber", g: "!", label: "זהירות" },
+  danger: { hue: "red", g: "✕", label: "שגיאה" },
+  bug: { hue: "red", g: "✕", label: "באג" },
+  note: { hue: "purple", g: "¶", label: "הערה" },
+  tip: { hue: "green", g: "★", label: "טיפ" },
+  important: { hue: "pink", g: "!", label: "חשוב" },
+  question: { hue: "sky", g: "?", label: "שאלה" },
+  help: { hue: "sky", g: "?", label: "עזרה" },
+  example: { hue: "teal", g: "·", label: "דוגמה" },
+  quote: { hue: "gray", g: "”", label: "ציטוט" },
+  experimental: { hue: "purple", g: "◇", label: "ניסיוני" },
+  deprecated: { hue: "brown", g: "–", label: "הוצא משימוש" },
+  todo: { hue: "steel", g: "□", label: "לביצוע" },
+  abstract: { hue: "steelblue", g: "≡", label: "תקציר" },
+  summary: { hue: "steelblue", g: "≡", label: "תקציר" },
+  details: { hue: "gray", g: "▸", label: "פרטים" }
+};
+
+const FALLBACK_HUE = "gray";
+
+/* גוון → שלישיית משתני CSS. הפונקציה לא יודעת באיזה מצב אנחנו —
+   הדפדפן פותר את ה-var() לפי המצב הפעיל. */
+function hue(name) {
+  const soft = name === "accent" ? "--accent-soft" : "--" + name + "-soft";
+  return { c: "var(--" + name + ")", bg: "var(" + soft + ")", on: "var(--" + name + "-on)" };
+}
+
+/* חלקי הממשק שצורתם — לא רק צבעם — שונה בין העיצובים.
+   כל צבע כאן הוא var(), כך שגם הרצועות האלה מתעדכנות עם המצב. */
+const CHROME = {
+  dark: {
+    mark: true,
+    wordmark: false,
+    srcLabel: "</> מקור",
+    pasteLabel: "הדבקת Markdown ידנית",
+    srcBtn: "padding:6px 12px;border:1px solid var(--rule);border-radius:var(--r-sm);background:none;font-family:var(--mono);font-size:12px;color:var(--text);cursor:pointer",
+    uploadBtn: "display:flex;align-items:center;gap:7px;padding:6px 14px;border:1px solid var(--accent);border-radius:var(--r-sm);background:var(--accent);color:var(--accent-on);font-size:13px;font-weight:600;cursor:pointer",
+    search: "width:100%;box-sizing:border-box;margin:0 0 18px;padding:9px 12px;background:var(--tint);border:1px solid var(--line);border-radius:var(--r-sm);color:var(--head);font-size:14px;outline:none",
+    searchK: "width:100%;box-sizing:border-box;padding:9px 12px;padding-inline-end:52px;background:var(--tint);border:1px solid var(--line);border-radius:var(--r-sm);color:var(--head);font-size:14px;outline:none",
+    railLabel: "padding:0 4px 8px;font-family:var(--mono);font-size:11px;font-weight:500;letter-spacing:0.1em;text-transform:uppercase;color:var(--faint)",
+    dropzone: "display:block;margin:16px 0 10px;padding:16px 14px;border:1px dashed var(--rule);border-radius:var(--r-md);text-align:center;font-size:13.5px;color:var(--muted);cursor:pointer",
+    pasteBtn: "width:100%;padding:8px;border:none;border-radius:var(--r-sm);background:none;color:var(--faint);font-family:inherit;font-size:13px;cursor:pointer",
+    addBtn: "padding:8px;border:1px solid var(--accent);border-radius:var(--r-sm);background:var(--accent);color:var(--accent-on);font-family:inherit;font-size:13.5px;font-weight:600;cursor:pointer",
+    fileBadge: "font-family:var(--mono);font-size:11px;font-weight:500;letter-spacing:0.1em;padding:4px 10px;border-radius:var(--r-pill);background:var(--accent-soft);color:var(--accent-text)",
+    ctaBtn: "padding:11px 22px;border-radius:var(--r-sm);background:var(--accent);color:var(--accent-on);font-size:14.5px;font-weight:600;cursor:pointer",
+    ghostBtn: "padding:11px 22px;border:1px solid var(--rule);border-radius:var(--r-sm);background:none;color:var(--text);font-family:inherit;font-size:14.5px;cursor:pointer",
+    groupBtn: "display:flex;align-items:center;justify-content:space-between;width:100%;padding:0 4px 8px;background:none;border:none;cursor:pointer;font-family:var(--mono);font-size:11px;font-weight:500;letter-spacing:0.1em;text-transform:uppercase;color:var(--faint)",
+    navLink: "padding:7px 12px;border-radius:var(--r-sm);font-size:14px;color:var(--soft)",
+    navLinkRow: "display:flex;align-items:center;justify-content:space-between;padding:7px 12px;border-radius:var(--r-sm);font-size:14px;color:var(--soft)",
+    navLinkActive: "display:block;padding:7px 12px;border-radius:var(--r-sm);background:var(--accent-soft);border-inline-start:2px solid var(--accent);font-size:14px;font-weight:600;color:var(--accent-text)",
+    navLinkMono: "padding:7px 12px;border-radius:var(--r-sm);font-family:var(--mono);font-size:13px;color:var(--soft)",
+    navSub: "padding:4px 12px;font-size:13px;color:var(--faint-2)"
+  },
+  light: {
+    mark: false,
+    wordmark: true,
+    srcLabel: "source",
+    pasteLabel: "paste markdown",
+    srcBtn: "padding:0;border:none;background:none;font-family:var(--mono);font-size:11.5px;letter-spacing:0.06em;text-transform:uppercase;color:var(--soft);cursor:pointer;border-bottom:1px solid var(--rule)",
+    uploadBtn: "display:flex;align-items:center;gap:7px;padding:7px 16px;border:1px solid var(--accent);border-radius:var(--r-sm);background:var(--accent);color:var(--accent-on);font-size:13.5px;font-weight:600;cursor:pointer",
+    search: "width:100%;box-sizing:border-box;margin:0 0 24px;padding:7px 2px;background:none;border:none;border-bottom:1px solid var(--rule);color:var(--ink);font-size:14.5px;outline:none",
+    searchK: "width:100%;box-sizing:border-box;padding:7px 2px;padding-inline-end:52px;background:none;border:none;border-bottom:1px solid var(--rule);color:var(--ink);font-size:14.5px;outline:none",
+    railLabel: "padding:0 0 10px;font-family:var(--mono);font-size:10.5px;font-weight:500;letter-spacing:0.14em;text-transform:uppercase;color:var(--faint)",
+    dropzone: "display:block;margin:0 0 10px;padding:18px 14px;border:1px dashed var(--rule);border-radius:var(--r-sm);text-align:center;font-size:13.5px;color:var(--soft);cursor:pointer",
+    pasteBtn: "width:100%;padding:4px 0;border:none;background:none;font-family:var(--mono);font-size:11px;letter-spacing:0.08em;text-transform:uppercase;color:var(--faint);cursor:pointer",
+    addBtn: "padding:9px;border:1px solid var(--accent);border-radius:var(--r-sm);background:var(--accent);color:var(--accent-on);font-family:inherit;font-size:13.5px;font-weight:600;cursor:pointer",
+    fileBadge: "font-family:var(--mono);font-size:10.5px;font-weight:600;letter-spacing:0.12em;text-transform:uppercase;padding:3px 0;border-bottom:1px solid var(--rule);color:var(--soft)",
+    ctaBtn: "padding:11px 24px;border:1px solid var(--accent);border-radius:var(--r-sm);background:var(--accent);color:var(--accent-on);font-size:14.5px;font-weight:600;cursor:pointer",
+    ghostBtn: "padding:11px 24px;border:1px solid var(--rule);border-radius:var(--r-sm);background:none;color:var(--text);font-family:inherit;font-size:14.5px;cursor:pointer",
+    groupBtn: "display:flex;align-items:center;justify-content:space-between;width:100%;padding:0 0 10px;background:none;border:none;cursor:pointer;font-family:var(--mono);font-size:10.5px;font-weight:500;letter-spacing:0.14em;text-transform:uppercase;color:var(--faint)",
+    navLink: "padding:6px 0;font-size:14.5px;color:var(--text)",
+    navLinkRow: "display:flex;align-items:center;justify-content:space-between;padding:6px 0;font-size:14.5px;color:var(--text)",
+    navLinkActive: "display:block;padding:6px 0;border-inline-start:2px solid var(--accent);padding-inline-start:10px;font-size:14.5px;font-weight:700;color:var(--accent-text)",
+    navLinkMono: "padding:6px 0;font-family:var(--mono);font-size:12.5px;color:var(--text)",
+    navSub: "padding:4px 12px;font-size:13px;color:var(--soft)"
+  }
+};
+
+const THEMES = { dark: DARK, light: LIGHT };
+
+const REF_SECTIONS = [
+  { id: "sec-01", label: "טיפוגרפיה וכותרות" },
+  { id: "sec-02", label: "רשימות ומשימות" },
+  { id: "sec-03", label: "ציטוטים והתראות" },
+  { id: "sec-04", label: "בלוקי קוד" },
+  { id: "sec-05", label: "טבלאות" },
+  { id: "sec-06", label: "רפרנס API" },
+  { id: "sec-07", label: "מדיה ותרשימים" },
+  { id: "sec-08", label: "רכיבי ממשק" }
+];
+
+const KEYWORDS = /\b(import|from|export|const|let|var|function|return|await|async|new|class|if|else|for|while|try|catch|def|print|None|True|False|null|undefined|true|false)\b/g;
+
+class Component extends DCLogic {
+  state = {
+    theme: "dark", screen: "library",
+    docs: [], current: null, q: "", active: 0, showSource: null, pasting: false, draft: "",
+    dragging: false, copied: false, codeCopied: "", openMap: {}, narrow: false, mobile: false,
+    tab: null, raw: null, tasks: { t0: true, t1: true, t2: false },
+    groups: { start: true, guides: true, api: false }, voted: false
+  };
+
+  componentDidMount() {
+    this.applyTheme(this.initialTheme());
+
+    let docs = [];
+    try { docs = JSON.parse(localStorage.getItem(KEY) || "[]"); } catch (e) { docs = []; }
+    if (!Array.isArray(docs) || !docs.length) docs = [{ id: "sample", name: "markdown-components.md", src: SAMPLE }];
+    docs = docs.map((d) => (d && d.id === "sample" ? { id: "sample", name: d.name, src: SAMPLE } : d));
+    this.setState({ docs: docs, current: docs[0].id });
+
+    this.onScroll = () => {
+      const sel = this.state.screen === "reference" ? "[data-sec]" : "[data-h2]";
+      const nodes = Array.from(document.querySelectorAll(sel));
+      if (!nodes.length) return;
+      let i = 0;
+      nodes.forEach((n, idx) => { if (n.getBoundingClientRect().top < 170) i = idx; });
+      if (i !== this.state.active) this.setState({ active: i });
+    };
+    window.addEventListener("scroll", this.onScroll, { passive: true });
+
+    this.mqNarrow = window.matchMedia("(max-width: 900px)");
+    this.mqMobile = window.matchMedia("(max-width: 880px)");
+    this.onMq = () => this.setState({ narrow: this.mqNarrow.matches, mobile: this.mqMobile.matches });
+    this.mqNarrow.addEventListener("change", this.onMq);
+    this.mqMobile.addEventListener("change", this.onMq);
+    this.onMq();
+
+    /* אם המשתמש לא בחר מצב ידנית, נעקוב אחרי הגדרת המערכת גם תוך כדי. */
+    this.mqDark = window.matchMedia("(prefers-color-scheme: dark)");
+    this.onScheme = () => { if (!this.storedTheme()) this.applyTheme(this.mqDark.matches ? "dark" : "light"); };
+    this.mqDark.addEventListener("change", this.onScheme);
+
+    this.pending = {};
+    this.libTick = setInterval(() => {
+      if (window.Prism && !this.prismReady) { this.prismReady = true; this.forceUpdate(); }
+      if (window.mermaid) this.drawDiagrams();
+      if (window.Prism && window.mermaid) { clearInterval(this.libTick); this.libTick = null; }
+    }, 250);
+  }
+
+  componentDidUpdate() {
+    this.drawDiagrams();
+  }
+
+  componentWillUnmount() {
+    window.removeEventListener("scroll", this.onScroll);
+    if (this.libTick) clearInterval(this.libTick);
+    clearTimeout(this.codeTimer);
+    if (this.mqNarrow) this.mqNarrow.removeEventListener("change", this.onMq);
+    if (this.mqMobile) this.mqMobile.removeEventListener("change", this.onMq);
+    if (this.mqDark) this.mqDark.removeEventListener("change", this.onScheme);
+    clearTimeout(this.timer);
+  }
+
+  /* ---------- ערכת עיצוב ---------- */
+
+  storedTheme() {
+    let v = null;
+    try { v = localStorage.getItem(THEME_KEY); } catch (e) { v = null; }
+    return v === "dark" || v === "light" ? v : null;
+  }
+
+  initialTheme() {
+    const stored = this.storedTheme();
+    if (stored) return stored;
+    const prop = this.props.defaultTheme || "auto";
+    if (prop === "dark" || prop === "light") return prop;
+    try {
+      return window.matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark";
+    } catch (e) { return "dark"; }
+  }
+
+  /* כאן, ורק כאן, ערכי הערכה הופכים למשתני CSS על <html>.
+     כל שאר הקוד קורא var() ולא יודע איזה מצב פעיל. */
+  applyTheme(mode) {
+    const c = THEMES[mode] || DARK;
+    const root = document.documentElement;
+    root.setAttribute("data-theme", mode);
+    root.style.colorScheme = mode;
+    Object.keys(c).forEach((k) => root.style.setProperty("--" + k, c[k]));
+    this.setState({ theme: mode });
+    this.repaintDiagrams();
+  }
+
+  toggleTheme() {
+    const next = this.state.theme === "dark" ? "light" : "dark";
+    try { localStorage.setItem(THEME_KEY, next); } catch (e) { /* אחסון חסום */ }
+    this.applyTheme(next);
+  }
+
+  /* mermaid לא קורא var(), ולכן החלפת מצב מחייבת ציור מחדש של התרשימים:
+     מאפסים את data-drawn כדי ש-drawDiagrams יזהה אותם כלא-מצוירים. */
+  repaintDiagrams() {
+    this.mermaidReady = false;
+    Array.prototype.forEach.call(document.querySelectorAll("[data-mermaid]"), (el) => {
+      el.removeAttribute("data-drawn");
+    });
+  }
+
+  mermaid() {
+    return MERMAID[this.state.theme] || MERMAID.dark;
+  }
+
+  drawDiagrams() {
+    const m = window.mermaid;
+    if (!m) return;
+    const P = this.mermaid();
+    if (!this.mermaidReady) {
+      try {
+        m.initialize({ startOnLoad: false, securityLevel: "loose", theme: "base", fontFamily: "Heebo, Assistant, sans-serif", themeVariables: P.vars });
+      } catch (e) { return; }
+      this.mermaidReady = true;
+    }
+    const init = "%%{init: " + JSON.stringify({ theme: "base", fontFamily: "Heebo, Assistant, sans-serif", themeVariables: P.vars }) + "}%%\n";
+    Array.prototype.forEach.call(document.querySelectorAll("[data-mermaid]"), (el, i) => {
+      const src = el.getAttribute("data-mermaid");
+      if (!src || el.getAttribute("data-drawn") === src) return;
+      el.setAttribute("data-drawn", src);
+      try {
+        m.render("mmd" + i + "-" + Math.random().toString(36).slice(2, 7), init + src)
+          .then((r) => {
+            el.innerHTML = r.svg;
+            const svg = el.querySelector("svg");
+            if (!svg) return;
+            const vb = svg.viewBox && svg.viewBox.baseVal;
+            svg.removeAttribute("width");
+            svg.removeAttribute("height");
+            svg.style.maxWidth = "none";
+            svg.style.height = "auto";
+            if (vb && vb.width) svg.style.width = Math.round(vb.width) + "px";
+            this.paintSvg(svg);
+          })
+          .catch(() => { el.textContent = src; });
+      } catch (e) { el.textContent = src; }
+    });
+  }
+
+  paintSvg(svg) {
+    const P = this.mermaid();
+    const set = (sel, fn) => Array.prototype.forEach.call(svg.querySelectorAll(sel), fn);
+    set("g.node rect, g.node polygon, g.node circle, g.node ellipse, g.node path", (el) => { el.style.fill = P.node; el.style.stroke = P.nodeBorder; el.style.strokeWidth = "1.4px"; });
+    set("g.cluster rect, g.cluster polygon", (el) => { el.style.fill = P.cluster; el.style.stroke = P.clusterBorder; });
+    set("path.flowchart-link, .edgePath path, .edgePaths path, line.messageLine0, line.messageLine1, .relation, .transition", (el) => { el.style.stroke = P.line; el.style.fill = "none"; });
+    set("marker path, marker polygon, .arrowMarkerPath, .marker path, .marker polygon", (el) => { el.style.fill = P.line; el.style.stroke = P.line; });
+    set("text, tspan, .nodeLabel, .edgeLabel, .label, .titleText", (el) => { el.style.fill = P.text; el.style.color = P.text; });
+    set(".edgeLabel rect, .labelBkg, .edgeLabel .label-container", (el) => { el.style.fill = P.edgeBg; el.style.background = P.edgeBg; el.style.backgroundColor = P.edgeBg; });
+  }
+
+  /* ---------- כלי עזר ---------- */
+
+  copyText(text, key) {
+    return async () => {
+      let ok = false;
+      try { await navigator.clipboard.writeText(text); ok = true; } catch (e) { ok = false; }
+      if (!ok) {
+        try {
+          const ta = document.createElement("textarea");
+          ta.value = text;
+          ta.setAttribute("readonly", "");
+          ta.style.position = "fixed";
+          ta.style.top = "-1000px";
+          document.body.appendChild(ta);
+          ta.select();
+          ta.setSelectionRange(0, text.length);
+          document.execCommand("copy");
+          document.body.removeChild(ta);
+        } catch (e) { /* ignore */ }
+      }
+      this.setState({ codeCopied: key });
+      clearTimeout(this.codeTimer);
+      this.codeTimer = setTimeout(() => this.setState({ codeCopied: "" }), 1800);
+    };
+  }
+
+  copyIcon(bg) {
+    return React.createElement("span", { key: "i", style: { position: "relative", display: "inline-block", width: 14, height: 15, flex: "none" } },
+      React.createElement("span", { key: "a", style: { position: "absolute", left: 4, top: 0, width: 8, height: 10, border: "1.2px solid currentColor", borderRadius: 2 } }),
+      React.createElement("span", { key: "b", style: { position: "absolute", left: 0, top: 4, width: 8, height: 10, border: "1.2px solid currentColor", borderRadius: 2, background: bg } }));
+  }
+
+  langOf(lang) {
+    const alias = { js: "javascript", jsx: "jsx", ts: "typescript", tsx: "tsx", sh: "bash", shell: "bash", zsh: "bash", console: "bash", py: "python", yml: "yaml", md: "markdown", html: "markup", xml: "markup", "c++": "cpp", cs: "csharp", golang: "go", rb: "ruby", ps1: "powershell" };
+    const l = (lang || "").toLowerCase();
+    return alias[l] || l;
+  }
+
+  codeHtml(code, lang) {
+    const P = window.Prism;
+    const l = this.langOf(lang);
+    if (!P || !l) return null;
+    if (P.languages[l]) {
+      try { return P.highlight(code, P.languages[l], l); } catch (e) { return null; }
+    }
+    if (P.plugins && P.plugins.autoloader && !this.pending[l]) {
+      this.pending[l] = true;
+      P.plugins.autoloader.loadLanguages(l, () => this.forceUpdate(), () => this.forceUpdate());
+    }
+    return null;
+  }
+
+  save(docs) {
+    try { localStorage.setItem(KEY, JSON.stringify(docs)); } catch (e) { /* אחסון מלא או חסום */ }
+  }
+
+  addDocs(items) {
+    if (!items.length) return;
+    const docs = this.state.docs.concat(items);
+    this.save(docs);
+    this.setState({ docs: docs, current: items[0].id, active: 0, q: "", screen: "library" });
+    window.scrollTo({ top: 0 });
+  }
+
+  readFiles(fileList) {
+    const files = Array.from(fileList || []).filter((f) => /\.(md|markdown|txt)$/i.test(f.name) || f.type.indexOf("text") === 0);
+    if (!files.length) return;
+    Promise.all(files.map((f) => f.text().then((src) => ({ id: "d" + Date.now() + Math.random().toString(36).slice(2, 6), name: f.name, src: src }))))
+      .then((items) => this.addDocs(items));
+  }
+
+  scrollToId(id) {
+    return (e) => {
+      if (e) e.preventDefault();
+      const el = document.getElementById(id);
+      if (!el) return;
+      window.scrollTo({ top: el.getBoundingClientRect().top + window.scrollY - 90, behavior: "smooth" });
+    };
+  }
+
+  flash(key, text) {
+    return async () => {
+      try { if (navigator.clipboard && text) await navigator.clipboard.writeText(text); } catch (err) { /* לוח חסום */ }
+      this.setState({ codeCopied: key });
+      clearTimeout(this.codeTimer);
+      this.codeTimer = setTimeout(() => this.setState({ codeCopied: "" }), 1800);
+    };
+  }
+
+  toggleGroup(key) {
+    return () => this.setState((s) => ({ groups: Object.assign({}, s.groups, { [key]: !s.groups[key] }) }));
+  }
+
+  toggleTask(key) {
+    return () => this.setState((s) => ({ tasks: Object.assign({}, s.tasks, { [key]: !s.tasks[key] }) }));
+  }
+
+  apiCode(tab) {
+    if (tab === "python") return 'from nimbus import Nimbus\n\nclient = Nimbus(api_key=os.environ["NIMBUS_KEY"])\n\ndoc = client.docs.create(\n    slug="markdown-components",\n    locale="he",\n    direction="rtl",\n    blocks=9,\n)\nprint(doc.url)';
+    if (tab === "curl") return 'curl -X POST https://api.nimbus.dev/v3/docs \\\n  -H "Authorization: Bearer $NIMBUS_KEY" \\\n  -H "Content-Type: application/json" \\\n  -d \'{"slug":"markdown-components","locale":"he","direction":"rtl"}\'';
+    return 'import { Nimbus } from "@nimbus/sdk";\n\nconst client = new Nimbus({ apiKey: process.env.NIMBUS_KEY });\n\nconst doc = await client.docs.create({\n  slug: "markdown-components",\n  locale: "he",\n  direction: "rtl",\n  blocks: 9,\n});\n\nconsole.log(doc.url);';
+  }
+
+  /* ---------- markdown → blocks ---------- */
+
+  parse(src) {
+    const lines = String(src || "").replace(/\r\n?/g, "\n").split("\n");
+    const front = {};
+    let i = 0;
+    if (lines[0] && lines[0].trim() === "---") {
+      i = 1;
+      while (i < lines.length && lines[i].trim() !== "---") {
+        const m = lines[i].match(/^([\w-]+)\s*:\s*(.*)$/);
+        if (m) front[m[1]] = m[2].trim();
+        i++;
+      }
+      i++;
+    }
+    const blocks = [];
+    while (i < lines.length) {
+      const raw = lines[i];
+      const line = raw.trim();
+      if (!line) { i++; continue; }
+
+      let m;
+      if ((m = line.match(/^```\s*(\S+)?\s*(.*)$/))) {
+        const body = [];
+        i++;
+        while (i < lines.length && lines[i].trim().indexOf("```") !== 0) { body.push(lines[i]); i++; }
+        i++;
+        blocks.push({ t: "code", lang: m[1] || "", title: m[2] || "", code: body.join("\n") });
+        continue;
+      }
+      if ((m = line.match(/^:::\s*([\w-]+)?\s*(.*)$/))) {
+        const body = [];
+        i++;
+        while (i < lines.length && lines[i].trim() !== ":::") { body.push(lines[i]); i++; }
+        i++;
+        blocks.push({ t: "callout", kind: (m[1] || "info").toLowerCase(), title: m[2] || "", inner: this.parse(body.join("\n")).blocks });
+        continue;
+      }
+      if ((m = line.match(/^(#{1,6})\s+(.*)$/))) {
+        blocks.push({ t: "h", level: m[1].length, text: m[2] });
+        i++;
+        continue;
+      }
+      if (/^(-{3,}|\*{3,}|_{3,})$/.test(line)) { blocks.push({ t: "hr" }); i++; continue; }
+      if ((m = line.match(/^!\[([^\]]*)\]\(([^)]+)\)$/))) { blocks.push({ t: "img", alt: m[1], src: m[2] }); i++; continue; }
+      if (line.indexOf(">") === 0) {
+        const body = [];
+        while (i < lines.length && lines[i].trim().indexOf(">") === 0) { body.push(lines[i].trim().replace(/^>\s?/, "")); i++; }
+        blocks.push({ t: "quote", text: body.join(" ") });
+        continue;
+      }
+      if (/^[-*+]\s+\[[ xX]\]/.test(line)) {
+        const items = [];
+        while (i < lines.length && /^\s*[-*+]\s+\[[ xX]\]/.test(lines[i])) {
+          const mm = lines[i].match(/^\s*[-*+]\s+\[([ xX])\]\s*(.*)$/);
+          items.push({ done: mm[1].toLowerCase() === "x", text: mm[2], line: i });
+          i++;
+        }
+        blocks.push({ t: "tasks", items: items });
+        continue;
+      }
+      if (/^[-*+]\s+/.test(line) || /^\d+[.)]\s+/.test(line)) {
+        const ordered = /^\d+[.)]\s+/.test(line);
+        const items = [];
+        while (i < lines.length && lines[i].trim() && (/^\s*[-*+]\s+/.test(lines[i]) || /^\s*\d+[.)]\s+/.test(lines[i]))) {
+          const indent = lines[i].match(/^\s*/)[0].length;
+          items.push({ depth: indent >= 2 ? 1 : 0, text: lines[i].trim().replace(/^([-*+]|\d+[.)])\s+/, "") });
+          i++;
+        }
+        blocks.push({ t: "list", ordered: ordered, items: items });
+        continue;
+      }
+      if (line.indexOf("|") === 0 || (line.indexOf("|") > 0 && /\|\s*$/.test(line))) {
+        const rows = [];
+        while (i < lines.length && lines[i].indexOf("|") > -1 && lines[i].trim()) {
+          const cells = lines[i].trim().replace(/^\||\|$/g, "").split("|").map((c) => c.trim());
+          if (!cells.every((c) => /^:?-{2,}:?$/.test(c))) rows.push(cells);
+          i++;
+        }
+        if (rows.length) { blocks.push({ t: "table", rows: rows }); continue; }
+      }
+      const para = [];
+      while (i < lines.length && lines[i].trim() && !/^(#{1,6}\s|```|:::|>|\||!\[|[-*+]\s|\d+[.)]\s|-{3,}$)/.test(lines[i].trim())) {
+        para.push(lines[i].trim());
+        i++;
+      }
+      if (para.length) blocks.push({ t: "p", text: para.join(" ") });
+      else i++;
+    }
+    return { front: front, blocks: blocks };
+  }
+
+  /* ---------- inline ---------- */
+
+  toggleTaskLine(lineIdx) {
+    return (e) => {
+      if (e) e.stopPropagation();
+      if (lineIdx == null) return;
+      const cur = this.state.current;
+      const docs = this.state.docs.map((d) => {
+        if (d.id !== cur) return d;
+        const lines = d.src.replace(/\r\n?/g, "\n").split("\n");
+        const ln = lines[lineIdx];
+        if (ln == null || !/\[[ xX]\]/.test(ln)) return d;
+        lines[lineIdx] = /\[[xX]\]/.test(ln) ? ln.replace(/\[[xX]\]/, "[ ]") : ln.replace(/\[ \]/, "[x]");
+        return Object.assign({}, d, { src: lines.join("\n") });
+      });
+      this.save(docs);
+      this.setState({ docs: docs });
+    };
+  }
+
+  toggleOpen(key) {
+    return () => this.setState((st) => {
+      const next = Object.assign({}, st.openMap);
+      next[key] = !next[key];
+      return { openMap: next };
+    });
+  }
+
+  kids(str) {
+    return /[`*~=\[]/.test(str) ? this.inline(str) : str;
+  }
+
+  inline(text) {
+    const ed = this.state.theme === "light";
+    const out = [];
+    const re = /(`[^`]+`)|(\*\*[^*]+\*\*)|(\*[^*\n]+\*)|(~~[^~]+~~)|(==[^=]+==)|(\[[^\]]+\]\([^)]+\))/g;
+    let last = 0, m, k = 0;
+    while ((m = re.exec(text))) {
+      if (m.index > last) out.push(text.slice(last, m.index));
+      const s = m[0];
+      k++;
+      if (s[0] === "`") {
+        out.push(React.createElement("code", { key: k, dir: "ltr", style: { fontFamily: "var(--mono)", fontSize: ed ? "0.85em" : "0.87em", background: ed ? "var(--tint)" : "var(--card)", border: "1px solid var(--line-2)", borderRadius: "var(--r-sm)", padding: ed ? "1px 5px" : "2px 6px", color: "var(--code-inline)", unicodeBidi: "isolate" } }, s.slice(1, -1)));
+      } else if (s.indexOf("**") === 0) {
+        out.push(React.createElement("strong", { key: k, style: { color: "var(--ink)", fontWeight: 700 } }, this.kids(s.slice(2, -2))));
+      } else if (s[0] === "*") {
+        out.push(React.createElement("em", { key: k, style: { color: "var(--head)" } }, this.kids(s.slice(1, -1))));
+      } else if (s.indexOf("~~") === 0) {
+        out.push(React.createElement("del", { key: k, style: { color: "var(--faint)" } }, this.kids(s.slice(2, -2))));
+      } else if (s.indexOf("==") === 0) {
+        out.push(React.createElement("mark", { key: k, style: { background: "var(--amber-soft)", color: "var(--ink)", borderRadius: "var(--r-sm)", padding: "1px 4px" } }, this.kids(s.slice(2, -2))));
+      } else {
+        const mm = s.match(/^\[([^\]]+)\]\(([^)]+)\)$/);
+        out.push(React.createElement("a", { key: k, href: mm[2], style: { color: "var(--accent-text)", borderBottom: "1px solid var(--accent-ring)" } }, mm[1]));
+      }
+      last = m.index + s.length;
+    }
+    if (last < text.length) out.push(text.slice(last));
+    return out;
+  }
+
+  highlight(code, lang) {
+    const l = (lang || "").toLowerCase();
+    const commentRe = l === "py" || l === "python" || l === "bash" || l === "sh" || l === "yaml" ? /^(\s*)(#.*)$/ : /^(\s*)(\/\/.*)$/;
+    return code.split("\n").map((line, idx) => {
+      const parts = [];
+      const cm = line.match(commentRe);
+      if (cm) {
+        parts.push(React.createElement("span", { key: "c", style: { color: "var(--tok-comment)" } }, line));
+      } else {
+        const re = /("[^"]*"|'[^']*')/g;
+        let last = 0, m, k = 0;
+        const push = (chunk) => {
+          let sub = [], p = 0, mm;
+          const kw = new RegExp(KEYWORDS.source, "g");
+          while ((mm = kw.exec(chunk))) {
+            if (mm.index > p) sub.push(chunk.slice(p, mm.index));
+            sub.push(React.createElement("span", { key: "k" + mm.index, style: { color: "var(--tok-kw)" } }, mm[0]));
+            p = mm.index + mm[0].length;
+          }
+          if (p < chunk.length) sub.push(chunk.slice(p));
+          return sub;
+        };
+        while ((m = re.exec(line))) {
+          if (m.index > last) parts.push.apply(parts, push(line.slice(last, m.index)));
+          k++;
+          parts.push(React.createElement("span", { key: "s" + k, style: { color: "var(--tok-str)" } }, m[0]));
+          last = m.index + m[0].length;
+        }
+        if (last < line.length) parts.push.apply(parts, push(line.slice(last)));
+      }
+      return React.createElement("span", { key: idx, style: { display: "block", minHeight: "1.75em" } }, parts.length ? parts : " ");
+    });
+  }
+
+  /* ---------- blocks → react ----------
+     ed = המצב הבהיר (Editorial). ההסתעפות כאן היא על מבנה בלבד —
+     צורת הכותרת, הקו המפריד, מסגרת ההתראה. הצבעים תמיד var(). */
+
+  render_blocks(parsed, numbered, skipIdx, nested) {
+    const ed = this.state.theme === "light";
+    const out = [];
+    let h2 = 0, hi = 0;
+    parsed.blocks.forEach((b, idx) => {
+      const key = "b" + idx;
+      if (idx === skipIdx) return;
+
+      if (b.t === "h" && nested) {
+        out.push(React.createElement("div", { key: key, style: { margin: "6px 0 8px", fontFamily: ed ? "var(--display)" : "inherit", fontSize: ed ? 17 : 15.5, fontWeight: 700, color: ed ? "var(--ink)" : "var(--head)" } }, this.inline(b.text)));
+        return;
+      }
+
+      if (b.t === "h") {
+        if (b.level === 1) return;
+        hi++;
+        if (b.level === 2) {
+          h2++;
+          const num = ("0" + h2).slice(-2);
+          if (ed) {
+            out.push(React.createElement("h2", { key: key, id: "h-" + hi, "data-h2": num, style: { position: "relative", margin: out.length ? "52px 0 20px" : "0 0 20px", paddingTop: out.length ? 18 : 0, borderTop: out.length ? "1px solid var(--rule)" : "none", fontFamily: "var(--display)", fontSize: 33, fontWeight: 700, lineHeight: 1.25, color: "var(--ink)", scrollMarginTop: 90 } },
+              numbered ? React.createElement("span", { key: "n", style: { display: "block", marginBottom: 6, fontFamily: "var(--mono)", fontSize: 11, fontWeight: 500, letterSpacing: "0.14em", color: "var(--accent)" } }, num) : null,
+              React.createElement("span", { key: "t" }, this.inline(b.text))));
+          } else {
+            out.push(React.createElement("h2", { key: key, id: "h-" + hi, "data-h2": num, style: { display: "flex", alignItems: "baseline", gap: 12, margin: "40px 0 18px", paddingBottom: 14, borderBottom: "1px solid var(--line)", fontSize: 27, fontWeight: 700, color: "var(--head)", scrollMarginTop: 90 } },
+              numbered ? React.createElement("span", { key: "n", style: { fontFamily: "var(--mono)", fontSize: 14, fontWeight: 500, color: "var(--accent-text)" } }, num) : null,
+              React.createElement("span", { key: "t" }, this.inline(b.text))));
+          }
+        } else if (b.level === 3) {
+          out.push(React.createElement("h3", { key: key, id: "h-" + hi, style: ed
+            ? { margin: "32px 0 12px", fontFamily: "var(--display)", fontSize: 23, fontWeight: 700, color: "var(--ink)", scrollMarginTop: 90 }
+            : { margin: "28px 0 12px", fontSize: 20, fontWeight: 700, color: "var(--green)", scrollMarginTop: 90 } }, this.inline(b.text)));
+        } else {
+          out.push(React.createElement("h4", { key: key, id: "h-" + hi, style: ed
+            ? { margin: "24px 0 10px", fontSize: 15, fontWeight: 700, letterSpacing: "0.02em", color: "var(--accent)", scrollMarginTop: 90 }
+            : { margin: "22px 0 10px", fontSize: 16, fontWeight: 700, color: "var(--amber)", scrollMarginTop: 90 } }, this.inline(b.text)));
+        }
+
+      } else if (b.t === "p") {
+        out.push(React.createElement("p", { key: key, style: nested
+          ? { margin: "0 0 12px", fontSize: ed ? 16 : 15.5, lineHeight: ed ? 1.8 : 1.75, color: ed ? "var(--text)" : "var(--text-2)" }
+          : ed
+            ? { margin: "0 0 20px", fontSize: 17.5, lineHeight: 1.9, color: "var(--text)", maxWidth: "68ch", textWrap: "pretty" }
+            : { margin: "0 0 18px", fontSize: 16.5, lineHeight: 1.85, color: "var(--text)", textWrap: "pretty" } }, this.inline(b.text)));
+
+      } else if (b.t === "hr") {
+        out.push(ed
+          ? React.createElement("div", { key: key, style: { margin: "40px 0", textAlign: "center", fontFamily: "var(--mono)", fontSize: 13, letterSpacing: "0.6em", color: "var(--faint)" } }, "***")
+          : React.createElement("hr", { key: key, style: { border: "none", borderTop: "1px solid var(--line)", margin: "32px 0" } }));
+
+      } else if (b.t === "quote") {
+        out.push(React.createElement("blockquote", { key: key, style: ed
+          ? { margin: "0 0 26px", padding: "4px 24px", borderInlineStart: "2px solid var(--accent)", fontFamily: "var(--display)", fontSize: 21, fontStyle: "italic", lineHeight: 1.7, color: "var(--ink)", maxWidth: "60ch" }
+          : { margin: "0 0 22px", padding: "18px 22px", background: "var(--card)", borderInlineStart: "3px solid var(--rule-strong)", borderRadius: "0 var(--r-md) var(--r-md) 0", fontSize: 17, lineHeight: 1.8, color: "var(--text)" } }, this.inline(b.text)));
+
+      } else if (b.t === "callout") {
+        const def = CALLOUT[b.kind] || { hue: FALLBACK_HUE, g: "·", label: b.kind };
+        const c = hue(def.hue);
+        const label = b.title || def.label || b.kind;
+        const inner = React.createElement("div", { key: "in", style: { minWidth: 0, marginBottom: -12 } }, this.render_blocks({ blocks: b.inner || [] }, false, -1, true));
+        const collapsible = b.kind === "details" || b.kind === "summary";
+        const open = !!this.state.openMap["o" + idx];
+
+        if (ed) {
+          out.push(React.createElement("div", { key: key, style: { margin: "0 0 16px", padding: "14px 18px", background: c.bg, borderInlineStart: "2px solid " + c.c, maxWidth: "68ch" } },
+            collapsible
+              ? React.createElement("div", null,
+                  React.createElement("button", { key: "s", onClick: this.toggleOpen("o" + idx), style: { display: "flex", alignItems: "center", gap: 9, width: "100%", padding: 0, border: "none", background: "none", fontFamily: "var(--mono)", fontSize: 10.5, fontWeight: 600, letterSpacing: "0.14em", textTransform: "uppercase", color: c.c, textAlign: "start", cursor: "pointer" } },
+                    React.createElement("span", { key: "g", style: { flex: "none", fontSize: 9 } }, open ? "▼" : "◀"),
+                    React.createElement("span", { key: "l" }, label)),
+                  open ? React.createElement("div", { key: "b", style: { marginTop: 10 } }, inner) : null)
+              : React.createElement("div", null,
+                  React.createElement("div", { key: "l", style: { marginBottom: 4, fontFamily: "var(--mono)", fontSize: 10.5, fontWeight: 600, letterSpacing: "0.14em", textTransform: "uppercase", color: c.c } }, label),
+                  inner)));
+        } else {
+          out.push(React.createElement("div", { key: key, style: { display: "flex", alignItems: "flex-start", gap: 13, padding: "15px 18px", borderRadius: "var(--r-md)", background: c.bg, border: "1px solid " + c.c, borderInlineStart: "3px solid " + c.c, margin: "0 0 14px" } },
+            React.createElement("span", { key: "g", style: { flex: "none", display: "grid", placeItems: "center", width: 21, height: 21, marginTop: 3, borderRadius: "50%", background: c.c, color: c.on, fontFamily: "var(--mono)", fontSize: 12.5, fontWeight: 700, lineHeight: 1 } }, def.g),
+            collapsible
+              ? React.createElement("div", { key: "d", style: { flex: 1, minWidth: 0 } },
+                  React.createElement("button", { key: "s", onClick: this.toggleOpen("o" + idx), style: { display: "flex", alignItems: "center", gap: 9, width: "100%", padding: 0, border: "none", background: "none", fontFamily: "inherit", fontSize: 15.5, fontWeight: 700, color: "var(--ink)", textAlign: "start", cursor: "pointer" } },
+                    React.createElement("span", { key: "g", style: { flex: "none", fontSize: 9, color: c.c } }, open ? "▼" : "◀"),
+                    React.createElement("span", { key: "l" }, label)),
+                  open ? React.createElement("div", { key: "b", style: { marginTop: 12 } }, inner) : null)
+              : React.createElement("div", { key: "t", style: { flex: 1, minWidth: 0, fontSize: 15.5, lineHeight: 1.75, color: "var(--text-2)" } },
+                  React.createElement("div", { key: "l", style: { marginBottom: 4, fontSize: 14, fontWeight: 700, color: "var(--ink)" } }, label),
+                  inner)));
+        }
+
+      } else if (b.t === "code") {
+        if ((b.lang || "").toLowerCase() === "mermaid") {
+          out.push(React.createElement("div", { key: key, dir: "ltr", style: { border: "1px solid var(--line)", borderRadius: "var(--r-md)", background: "var(--card)", margin: "0 0 24px", padding: "24px 18px", overflowX: "auto", textAlign: "center" } },
+            React.createElement("div", { key: "m", "data-mermaid": b.code, style: { minHeight: 40, fontFamily: "var(--mono)", fontSize: 12.5, color: "var(--faint)" } })));
+          return;
+        }
+        const ck = "c" + idx;
+        const done = this.state.codeCopied === ck;
+        const html = this.codeHtml(b.code, b.lang);
+        const codeStyle = { fontFamily: "var(--mono)", fontSize: ed ? 13 : 13.5, color: "var(--code-text)", background: "none", textShadow: "none", whiteSpace: "pre", padding: 0 };
+        out.push(React.createElement("div", { key: key, style: { border: "1px solid var(--line)", borderRadius: "var(--r-md)", overflow: "hidden", background: "var(--card)", margin: ed ? "0 0 24px" : "0 0 20px" } },
+          React.createElement("div", { key: "bar", style: { display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, padding: ed ? "7px 12px" : "8px 12px", background: "var(--tint)", borderBottom: "1px solid var(--line)" } },
+            React.createElement("button", { key: "c", onClick: this.copyText(b.code, ck), title: done ? "הועתק" : "העתקת הקוד", style: { display: "flex", alignItems: "center", justifyContent: "center", width: 28, height: 26, border: "1px solid " + (done ? "var(--green-ring)" : "var(--rule)"), borderRadius: "var(--r-sm)", background: "none", color: done ? "var(--green)" : "var(--muted)", cursor: "pointer" } },
+              done ? React.createElement("span", { key: "v", style: { fontSize: 13, lineHeight: 1 } }, "✓") : this.copyIcon("var(--tint)")),
+            React.createElement("span", { key: "n", dir: "ltr", style: { fontFamily: "var(--mono)", fontSize: ed ? 11.5 : 12, color: "var(--muted)" } }, b.title || b.lang || "code")),
+          React.createElement("pre", { key: "p", dir: "ltr", style: { margin: 0, padding: "18px 20px", fontFamily: "var(--mono)", fontSize: ed ? 13 : 13.5, lineHeight: 1.75, color: "var(--code-text)", textAlign: "left", overflowX: "auto" } },
+            html
+              ? React.createElement("code", { className: "language-" + this.langOf(b.lang), style: codeStyle, dangerouslySetInnerHTML: { __html: html } })
+              : React.createElement("code", { style: codeStyle }, this.highlight(b.code, b.lang)))));
+
+      } else if (b.t === "list") {
+        const tag = b.ordered ? "ol" : "ul";
+        const top = [];
+        b.items.forEach((it) => {
+          if (it.depth === 1 && top.length) top[top.length - 1].children.push(it.text);
+          else top.push({ text: it.text, children: [] });
+        });
+        out.push(React.createElement(tag, { key: key, style: ed
+          ? { margin: "0 0 24px", paddingInlineStart: 24, fontSize: 17, lineHeight: 1.9, color: "var(--text)", maxWidth: "66ch" }
+          : { margin: "0 0 20px", paddingInlineStart: 22, fontSize: 16.5, lineHeight: 1.9, color: "var(--text)" } },
+          top.map((it, k) => React.createElement("li", { key: k, style: { margin: ed ? "7px 0" : "6px 0", paddingInlineStart: ed ? 4 : 0 } },
+            this.inline(it.text),
+            it.children.length ? React.createElement("ul", { key: "sub", style: { margin: "6px 0 0", paddingInlineStart: 20, color: ed ? "var(--muted)" : "var(--soft)", fontSize: ed ? 16.5 : undefined } }, it.children.map((c, j) => React.createElement("li", { key: j }, this.inline(c)))) : null))));
+
+      } else if (b.t === "tasks") {
+        if (ed) {
+          out.push(React.createElement("div", { key: key, style: { display: "flex", flexDirection: "column", margin: "0 0 24px", borderTop: "1px solid var(--line-2)", maxWidth: "66ch" } },
+            b.items.map((it, k) => React.createElement("div", { key: k, onClick: nested ? null : this.toggleTaskLine(it.line), style: { display: "flex", alignItems: "center", gap: 12, padding: "10px 2px", borderBottom: "1px solid var(--line-2)", fontSize: 16.5, color: it.done ? "var(--faint)" : "var(--text)", cursor: nested ? "default" : "pointer", userSelect: "none" } },
+              React.createElement("span", { key: "x", style: it.done
+                ? { flex: "none", display: "grid", placeItems: "center", width: 17, height: 17, border: "1px solid var(--accent)", background: "var(--accent)", color: "var(--accent-on)", fontSize: 11, lineHeight: 1 }
+                : { flex: "none", width: 17, height: 17, border: "1px solid var(--rule)", background: "var(--card)", boxSizing: "border-box" } }, it.done ? "✓" : ""),
+              React.createElement("span", { key: "t", style: it.done ? { textDecoration: "line-through" } : null }, this.inline(it.text))))));
+        } else {
+          out.push(React.createElement("div", { key: key, style: { display: "flex", flexDirection: "column", gap: 10, padding: "18px 20px", background: "var(--card)", border: "1px solid var(--line-2)", borderRadius: "var(--r-md)", margin: "0 0 20px" } },
+            b.items.map((it, k) => React.createElement("div", { key: k, onClick: nested ? null : this.toggleTaskLine(it.line), style: { display: "flex", alignItems: "center", gap: 11, fontSize: 16, color: it.done ? "var(--faint-2)" : "var(--text)", cursor: nested ? "default" : "pointer", userSelect: "none" } },
+              React.createElement("span", { key: "x", style: it.done
+                ? { flex: "none", display: "grid", placeItems: "center", width: 19, height: 19, borderRadius: "var(--r-sm)", background: "var(--green)", color: "var(--green-on)", fontSize: 12, fontWeight: 700 }
+                : { flex: "none", width: 19, height: 19, borderRadius: "var(--r-sm)", border: "1.5px solid var(--rule-strong)", boxSizing: "border-box" } }, it.done ? "✓" : ""),
+              React.createElement("span", { key: "t", style: it.done ? { textDecoration: "line-through" } : null }, this.inline(it.text))))));
+        }
+
+      } else if (b.t === "table") {
+        const head = b.rows[0], body = b.rows.slice(1);
+        const numeric = (v) => /^[\d.,%+\-]+$/.test(v.replace(/\s/g, ""));
+        if (ed) {
+          out.push(React.createElement("table", { key: key, style: { width: "100%", borderCollapse: "collapse", margin: "0 0 28px", fontSize: 16 } },
+            React.createElement("thead", { key: "h" }, React.createElement("tr", null,
+              head.map((c, k) => React.createElement("th", { key: k, style: { padding: "0 14px 9px", textAlign: "start", borderBottom: "1.5px solid var(--ink)", fontFamily: "var(--mono)", fontSize: 10.5, fontWeight: 600, letterSpacing: "0.12em", textTransform: "uppercase", color: "var(--soft)" } }, this.inline(c))))),
+            React.createElement("tbody", { key: "b" }, body.map((row, k) => React.createElement("tr", { key: k },
+              row.map((c, j) => numeric(c)
+                ? React.createElement("td", { key: j, dir: "ltr", style: { padding: "11px 14px", textAlign: "end", borderBottom: "1px solid var(--line-2)", fontFamily: "var(--mono)", fontSize: 14.5, color: "var(--text)" } }, c)
+                : React.createElement("td", { key: j, style: { padding: "11px 14px", borderBottom: "1px solid var(--line-2)", color: j === 0 ? "var(--ink)" : "var(--muted)", fontWeight: j === 0 ? 600 : 400 } }, this.inline(c))))))));
+        } else {
+          out.push(React.createElement("div", { key: key, style: { border: "1px solid var(--line)", borderRadius: "var(--r-md)", overflow: "hidden", margin: "0 0 22px" } },
+            React.createElement("table", { style: { width: "100%", borderCollapse: "collapse", background: "var(--card)", fontSize: 15 } },
+              React.createElement("thead", { key: "h" }, React.createElement("tr", { style: { background: "var(--accent)" } },
+                head.map((c, k) => React.createElement("th", { key: k, style: { padding: "12px 16px", textAlign: "start", fontWeight: 600, color: "var(--accent-on)" } }, this.inline(c))))),
+              React.createElement("tbody", { key: "b" }, body.map((row, k) => React.createElement("tr", { key: k, style: { borderBottom: k === body.length - 1 ? "none" : "1px solid var(--hair)" } },
+                row.map((c, j) => numeric(c)
+                  ? React.createElement("td", { key: j, dir: "ltr", style: { padding: "12px 16px", textAlign: "end", fontFamily: "var(--mono)", color: "var(--text)" } }, c)
+                  : React.createElement("td", { key: j, style: { padding: "12px 16px", color: j === 0 ? "var(--head)" : "var(--muted)" } }, this.inline(c)))))))));
+        }
+
+      } else if (b.t === "img") {
+        out.push(React.createElement("figure", { key: key, style: { margin: ed ? "0 0 28px" : "0 0 24px" } },
+          React.createElement("div", { key: "i", style: { height: ed ? 240 : 230, borderRadius: "var(--r-md)", border: "1px solid var(--line)", backgroundColor: "var(--card)", backgroundImage: "repeating-linear-gradient(135deg,var(--hatch) 0 10px,transparent 10px 20px)", display: "grid", placeItems: "center", overflow: "hidden" } },
+            React.createElement("span", { dir: "ltr", style: { fontFamily: "var(--mono)", fontSize: ed ? 11.5 : 12, letterSpacing: "0.08em", color: "var(--faint)" } }, "image · " + b.src)),
+          b.alt ? React.createElement("figcaption", { key: "c", style: ed
+            ? { marginTop: 10, paddingInlineStart: 10, fontSize: 13.5, color: "var(--soft)", borderInlineStart: "2px solid var(--line)" }
+            : { marginTop: 10, fontSize: 13.5, color: "var(--muted)" } }, b.alt) : null));
+      }
+    });
+    return out;
+  }
+
+  /* ---------- view model ---------- */
+
+  renderVals() {
+    const s = this.state;
+    const ed = s.theme === "light";
+    const chrome = CHROME[s.theme] || CHROME.dark;
+    const onReference = s.screen === "reference";
+
+    const doc = s.docs.filter((d) => d.id === s.current)[0] || s.docs[0] || null;
+    const parsed = doc ? this.parse(doc.src) : { front: {}, blocks: [] };
+    const numbered = this.props.numberedHeadings ?? true;
+
+    const h1 = parsed.blocks.filter((b) => b.t === "h" && b.level === 1)[0];
+    const title = parsed.front.title || (h1 ? h1.text : (doc ? doc.name.replace(/\.(md|markdown|txt)$/i, "") : ""));
+    let leadIdx = -1;
+    for (let bi = 0; bi < parsed.blocks.length; bi++) {
+      const bt = parsed.blocks[bi].t;
+      if (bt === "p") { leadIdx = bi; break; }
+      if (bt !== "h") break;
+      if (parsed.blocks[bi].level !== 1) break;
+    }
+    const firstP = leadIdx > -1 ? parsed.blocks[leadIdx] : null;
+    const words = doc ? doc.src.split(/\s+/).filter(Boolean).length : 0;
+
+    const q = s.q.trim().toLowerCase();
+    const list = s.docs.filter((d) => !q || d.name.toLowerCase().indexOf(q) > -1 || d.src.toLowerCase().indexOf(q) > -1);
+
+    /* תוכן העניינים משרת את שני המסכים: כותרות המסמך בספרייה,
+       קטעי העמוד ברפרנס. */
+    const toc = [];
+    if (onReference) {
+      REF_SECTIONS.forEach((sec, i) => toc.push({
+        label: sec.label,
+        href: "#" + sec.id,
+        fg: i === s.active ? "var(--head)" : "var(--faint-2)",
+        go: this.scrollToId(sec.id)
+      }));
+    } else {
+      let hi = 0;
+      parsed.blocks.forEach((b) => {
+        if (b.t !== "h" || b.level === 1) return;
+        hi++;
+        if (b.level > 3) return;
+        const id = "h-" + hi;
+        toc.push({
+          label: b.text.replace(/[`*~=]/g, ""),
+          href: "#" + id,
+          fg: b.level === 2 ? "var(--soft)" : "var(--faint-2)",
+          go: (e) => {
+            const el = document.getElementById(id);
+            if (!el) return;
+            if (e) e.preventDefault();
+            window.scrollTo({ top: el.getBoundingClientRect().top + window.scrollY - 90, behavior: "smooth" });
+            if (window.history && window.history.replaceState) window.history.replaceState(null, "", "#" + id);
+          }
+        });
+      });
+    }
+
+    const tabOn = "padding:5px 13px;border:none;border-radius:var(--r-sm);background:var(--accent);color:var(--accent-on);font-family:inherit;font-size:12.5px;font-weight:600;cursor:pointer";
+    const tabOff = "padding:5px 13px;border:none;border-radius:var(--r-sm);background:none;color:var(--muted);font-family:inherit;font-size:12.5px;font-weight:500;cursor:pointer";
+
+    const apiTab = s.tab || this.props.defaultCodeTab || "javascript";
+    const raw = s.raw === null ? false : s.raw;
+    const g = s.groups;
+    const tabFgOn = "var(--head)", tabFgOff = "var(--faint-2)";
+
+    return {
+      /* --- ערכת עיצוב --- */
+      theme: s.theme,
+      themeGlyph: ed ? "☾" : "☀",
+      themeTitle: ed ? "מעבר למצב כהה" : "מעבר למצב בהיר",
+      toggleTheme: () => this.toggleTheme(),
+      chrome: chrome,
+      srcLabel: chrome.srcLabel,
+      pasteLabel: chrome.pasteLabel,
+
+      /* --- מסכים --- */
+      onLibrary: !onReference,
+      onReference: onReference,
+      screenTab: { library: onReference ? tabOff : tabOn, reference: onReference ? tabOn : tabOff },
+      goLibrary: () => { this.setState({ screen: "library", active: 0 }); window.scrollTo({ top: 0 }); },
+      goReference: () => { this.setState({ screen: "reference", active: 0 }); window.scrollTo({ top: 0 }); },
+
+      /* --- ספרייה --- */
+      docs: list.map((d, i) => {
+        const p = this.parse(d.src);
+        const t = p.front.title || (p.blocks.filter((b) => b.t === "h" && b.level === 1)[0] || {}).text || d.name;
+        const on = d.id === s.current;
+        return {
+          title: t,
+          num: ("0" + (i + 1)).slice(-2),
+          numFg: on ? "var(--accent)" : "var(--faint)",
+          numbered: ed,
+          rowStyle: ed
+            ? "display:flex;align-items:baseline;gap:9px;padding:9px 0;border-bottom:1px solid var(--line)"
+            : "display:flex;align-items:center;gap:6px;border-radius:var(--r-sm);background:" + (on ? "var(--accent-soft)" : "transparent") + ";border-inline-start:2px solid " + (on ? "var(--accent)" : "transparent"),
+          linkStyle: ed
+            ? "flex:1;min-width:0;font-size:14.5px;font-weight:" + (on ? "700" : "400") + ";color:" + (on ? "var(--accent-text)" : "var(--text)") + ";white-space:nowrap;overflow:hidden;text-overflow:ellipsis"
+            : "flex:1;min-width:0;padding:8px 11px;font-size:14px;color:" + (on ? "var(--accent-hover)" : "var(--soft)") + ";white-space:nowrap;overflow:hidden;text-overflow:ellipsis",
+          open: (e) => { if (e) e.preventDefault(); this.setState({ current: d.id, active: 0, showSource: null, screen: "library" }); window.scrollTo({ top: 0 }); },
+          remove: () => {
+            const docs = this.state.docs.filter((x) => x.id !== d.id);
+            this.save(docs);
+            this.setState({ docs: docs, current: this.state.current === d.id ? (docs[0] ? docs[0].id : null) : this.state.current });
+          }
+        };
+      }),
+      docCount: s.docs.length + " מסמכים",
+      noResults: !!q && !list.length,
+      hasDoc: !!doc,
+      noDoc: !doc,
+      crumb: onReference ? "רכיבי Markdown" : (doc ? title : "ספרייה ריקה"),
+      title: title,
+      lead: firstP ? firstP.text.replace(/[`*~]/g, "") : "",
+      fileName: doc ? doc.name : "",
+      meta: words + " מילים · " + Math.max(1, Math.round(words / 200)) + " דקות קריאה",
+      source: doc ? doc.src : "",
+      body: this.render_blocks(parsed, numbered, leadIdx),
+
+      toc: toc,
+      tocEmpty: !toc.length,
+      tocY: s.active * 32 + 6,
+      tocVisible: (this.props.showToc ?? true) && !s.narrow && (onReference || !!doc),
+      sidebarVisible: !s.mobile,
+      sidebarHidden: s.mobile,
+
+      showSource: s.showSource === null ? (this.props.showSourceByDefault ?? false) : s.showSource,
+      toggleSource: () => this.setState({ showSource: !(s.showSource === null ? (this.props.showSourceByDefault ?? false) : s.showSource) }),
+      copyLabel: s.copied ? "הועתק ✓" : "העתקה",
+      copySource: async () => {
+        try { if (doc) await navigator.clipboard.writeText(doc.src); } catch (e) {}
+        this.setState({ copied: true });
+        clearTimeout(this.timer);
+        this.timer = setTimeout(() => this.setState({ copied: false }), 1600);
+      },
+      download: () => {
+        if (!doc) return;
+        const url = URL.createObjectURL(new Blob([doc.src], { type: "text/markdown" }));
+        const a = document.createElement("a");
+        a.href = url; a.download = doc.name; a.click();
+        setTimeout(() => URL.revokeObjectURL(url), 2000);
+      },
+      q: s.q,
+      onSearch: (e) => this.setState({ q: e.target.value }),
+      pasting: s.pasting,
+      togglePaste: () => this.setState({ pasting: !s.pasting }),
+      draft: s.draft,
+      onDraft: (e) => this.setState({ draft: e.target.value }),
+      addDraft: () => {
+        const src = s.draft.trim();
+        if (!src) return;
+        const m = src.match(/^#\s+(.*)$/m);
+        const name = (m ? m[1].slice(0, 40).replace(/\s+/g, "-") : "pasted-" + (s.docs.length + 1)) + ".md";
+        this.addDocs([{ id: "d" + Date.now(), name: name, src: src }]);
+        this.setState({ draft: "", pasting: false });
+      },
+      onFiles: (e) => { this.readFiles(e.target.files); e.target.value = ""; },
+      dragging: s.dragging,
+      onDragOver: (e) => { e.preventDefault(); if (!s.dragging) this.setState({ dragging: true }); },
+      onDragLeave: () => this.setState({ dragging: false }),
+      onDrop: (e) => { e.preventDefault(); this.setState({ dragging: false }); this.readFiles(e.dataTransfer.files); },
+      loadSample: () => {
+        if (this.state.docs.some((d) => d.id === "sample")) { this.setState({ current: "sample", screen: "library" }); return; }
+        this.addDocs([{ id: "sample", name: "markdown-components.md", src: SAMPLE }]);
+      },
+
+      /* --- רפרנס --- */
+      nav: {
+        s0: this.scrollToId("sec-01"), s1: this.scrollToId("sec-02"), s2: this.scrollToId("sec-03"), s3: this.scrollToId("sec-04"),
+        s4: this.scrollToId("sec-05"), s5: this.scrollToId("sec-06"), s6: this.scrollToId("sec-07"), s7: this.scrollToId("sec-08")
+      },
+      goTop: this.scrollToId("top"),
+      open: g,
+      closed: { start: !g.start, guides: !g.guides, api: !g.api },
+      toggle: { start: this.toggleGroup("start"), guides: this.toggleGroup("guides"), api: this.toggleGroup("api") },
+      rawOn: raw,
+      rawOff: !raw,
+      toggleRaw: () => this.setState({ raw: !raw }),
+      isJs: apiTab === "javascript",
+      isPy: apiTab === "python",
+      isCurl: apiTab === "curl",
+      tab: { js: () => this.setState({ tab: "javascript" }), py: () => this.setState({ tab: "python" }), curl: () => this.setState({ tab: "curl" }) },
+      tabFg: { js: apiTab === "javascript" ? tabFgOn : tabFgOff, py: apiTab === "python" ? tabFgOn : tabFgOff, curl: apiTab === "curl" ? tabFgOn : tabFgOff },
+      tabLine: { js: apiTab === "javascript" ? "var(--accent)" : "transparent", py: apiTab === "python" ? "var(--accent)" : "transparent", curl: apiTab === "curl" ? "var(--accent)" : "transparent" },
+      copyCode: this.flash("code", this.apiCode(apiTab)),
+      copiedCode: s.codeCopied === "code",
+      notCopiedCode: s.codeCopied !== "code",
+      copyPage: this.flash("page", "# רכיבי Markdown\n\nכל רכיב שהתיעוד יודע להציג, עם הסינטקס שמייצר אותו."),
+      copiedPage: s.codeCopied === "page",
+      notCopiedPage: s.codeCopied !== "page",
+      tasks: s.tasks,
+      task: { t0: this.toggleTask("t0"), t1: this.toggleTask("t1"), t2: this.toggleTask("t2") },
+      voted: s.voted,
+      voteYes: () => this.setState({ voted: true }),
+      voteNo: () => this.setState({ voted: true })
+    };
+  }
+}
+</script>
+</body>
+</html>

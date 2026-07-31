@@ -315,7 +315,7 @@ fetch('/api/projects/secret-project', { method: 'DELETE', credentials: 'same-ori
 שבעה שלבים. כל אחד מסתיים במשהו שאפשר להשתמש בו — לא בחצי תשתית.
 
 ### 1. תשתית
-Postgres ב-Render עם `Asia/Jerusalem` ו-UTF8, שרת, מיגרציות, בדיקת בריאות. `render.yaml` עובר מ-`runtime: static` ל-`runtime: node`, והפרונט מוגש מאותו שירות — כך אין CORS ואין דומיין שני. בנוסף: `integrity` ו-`crossorigin` לשלוש תגיות ה-CDN של Prism ו-mermaid ב-`index.html`.
+Postgres ב-Render עם `Asia/Jerusalem` ו-UTF8, שרת FastAPI, SQLAlchemy async, מיגרציות Alembic, בדיקת בריאות. `render.yaml` עובר מ-`runtime: static` ל-`runtime: python`, והפרונט מוגש מאותו שירות כקבצים סטטיים — כך אין CORS ואין דומיין שני. בנוסף: `integrity` ו-`crossorigin` לשלוש תגיות ה-CDN של Prism ו-mermaid ב-`index.html`.
 **המדד:** `/api/health` מחזיר 200 מ-Render, המיגרציות רצות בדיפלוי, ושינוי תו אחד ב-hash מונע את טעינת הספרייה.
 
 ### 2. כניסה

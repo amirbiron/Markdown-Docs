@@ -37,6 +37,18 @@
 ### כלל 7: SSRF — URL מ-user → allowlist origin, לא רק https
 > כל endpoint שה-backend עושה אליו fetch/POST עם URL שמשתמש סיפק (webhooks, redirect URIs, image-proxy, file-download) חייב לאמת origin מול allowlist קבוע. הגבלת `https://` בלבד לא מספיקה — `https://169.254.169.254/` היא URL חוקי שמצביע ל-AWS metadata service. לדוגמה: Slack webhook → `https://hooks.slack.com/services/` בלבד.
 
+### כלל 8: `ORDER BY` בלי tiebreaker ייחודי = סדר לא מוגדר
+> כל `ORDER BY` שמזין דפדוף או תצוגה מסודרת חייב להסתיים בעמודה ייחודית: `.order_by(Doc.position, Doc.id)`. שתי שורות עם אותו ערך מיון מקבלות סדר שרירותי שמשתנה בין הרצות — פריטים ידלגו או יופיעו פעמיים בין דפים, והרשימה תתהפך בלי סיבה נראית לעין. במיוחד: עמודות `position` שמתחילות ב-0, ו-`ts_rank` שמחזיר ערכים זהים.
+
+### כלל 9: `LIKE` על קלט משתמש — escape של `%` ו-`_`
+> `%` ו-`_` הם wildcards. prefix של `"test_key"` תופס גם `"testXkey"`, ו-prefix של `"%"` תופס הכול. ב-SQLAlchemy: `col.startswith(value, autoescape=True)`. ב-SQL גולמי: escape ל-`%`, `_` ולתו ה-escape עצמו, ואז `LIKE :p ESCAPE '\'`. אם לא נדרש חיפוש prefix — `=` מדויק.
+
+### כלל 10: `String(N)` שמתמלא מ-enum — ודא ש-N מספיק
+> `Column(String(10))` עם ערך `"email_provider"` (14 תווים) עובר ב-SQLite ונכשל ב-INSERT של Postgres. SQLite לא אוכף אורך, ולכן זה מתגלה רק בפרודקשן. עדיף `Enum(EnumClass)` שיוצר את הטיפוס ב-DB; אם חייבים `String(N)`, הוסף טסט ש-`N >= max(len(v) for v in EnumClass)`.
+
+### כלל 11: כל constraint ו-index ב-migration חייב להשתקף במודל
+> `op.create_index()` ב-Alembic בלי `__table_args__` מקביל במודל = ה-index קיים בפרודקשן הממוגרר ולא קיים ב-DB טרי, כלומר test, dev ו-prod-from-scratch מתפצלים בשקט. באותו אופן: `DROP COLUMN` ב-migration בזמן שהקוד עדיין מתייחס לעמודה, ו-revision id ארוך מ-32 תווים שנחתך ב-`alembic_version`. מיגרציות הן additive כל עוד קוד ישן עדיין רץ.
+
 ---
 
 ## עדכון בטלגרם — לפי בקשה

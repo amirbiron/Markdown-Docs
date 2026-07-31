@@ -125,6 +125,11 @@ class Document(Base):
     content: Mapped[str] = mapped_column(Text, nullable=False, server_default="")
     position: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
 
+    # המונה האחרון שהתקבל מהעורך. סדר ההגעה של בקשות לשרת אינו סדר
+    # השליחה — שמירה אוטומטית שנתקעה ברשת יכולה לנחות אחרי שמירה חדשה
+    # יותר ולהחזיר את המסמך אחורה בזמן. הכתיבה מתקבלת רק אם המונה עלה.
+    last_client_seq: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
+
     created_at: Mapped[datetime] = mapped_column(_TS, nullable=False, server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
         _TS, nullable=False, server_default=func.now(), onupdate=func.now()

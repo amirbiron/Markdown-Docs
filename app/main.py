@@ -10,6 +10,7 @@ import logging
 from contextlib import asynccontextmanager
 
 from fastapi import APIRouter, Depends, FastAPI, Request, Response
+from fastapi.exceptions import RequestValidationError
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy import text
@@ -20,6 +21,8 @@ from app.security import PasswordPolicyError
 from app.db import SessionLocal, engine, get_session
 from app.middleware import BodySizeLimit, OriginGuard
 from app.routers import auth as auth_router
+from app.routers import documents as documents_router
+from app.routers import projects as projects_router
 from app.seed import seed_admin
 
 # בלי הגדרת רמה מפורשת, logger.info לא מגיע לפלט של uvicorn — ובדיקת
@@ -101,6 +104,28 @@ async def lifespan(app: FastAPI):
 app = FastAPI(title="Markdown Docs", lifespan=lifespan, docs_url=None, redoc_url=None)
 
 
+@app.exception_handler(RequestValidationError)
+async def validation_error(request: Request, exc: RequestValidationError) -> JSONResponse:
+    """תשובה גנרית בעברית על קלט לא תקין.
+
+    ברירת המחדל של FastAPI מחזירה את הקלט השגוי בחזרה בתוך גוף התשובה.
+    שני דברים רעים נובעים מזה. האחד הוא כלל 3 — התשובה מחזירה שמות שדות
+    פנימיים ואת ההודעות הטכניות באנגלית של pydantic. השני מפתיע יותר:
+    קלט כמו {"position": NaN} עובר את הפענוח של json, נדחה על ידי
+    pydantic, ואז *נכשל בסריאליזציה חזרה* — כי NaN אינו JSON חוקי. כלומר
+    בקשה שגויה הייתה מחזירה 500 במקום 422.
+
+    שמות השדות שנכשלו כן מוחזרים, כי בלעדיהם אי אפשר לתקן את הבקשה.
+    הערכים עצמם לא.
+    """
+    fields = sorted({".".join(str(part) for part in error["loc"][1:]) for error in exc.errors()})
+    logger.info("קלט לא תקין ב-%s: %s", request.url.path, fields)
+    return JSONResponse(
+        {"detail": "הנתונים שנשלחו אינם תקינים", "fields": fields},
+        status_code=422,
+    )
+
+
 @app.middleware("http")
 async def security_headers(request: Request, call_next) -> Response:
     response = await call_next(request)
@@ -135,6 +160,8 @@ async def health_db(session: AsyncSession = Depends(get_session)) -> Response:
 
 
 api.include_router(auth_router.router)
+api.include_router(projects_router.router)
+api.include_router(documents_router.router)
 app.include_router(api)
 
 # הסדר כאן הוא מה שקובע מה רץ קודם: מה שנוסף אחרון עוטף את הכול.

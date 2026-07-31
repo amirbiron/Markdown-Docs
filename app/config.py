@@ -43,6 +43,10 @@ class Settings(BaseSettings):
     # גבול גודל הגוף, בבתים של UTF-8. נאכף לפני קריאת הבקשה.
     max_body_bytes: int = 1_048_576
 
+    # כמה גרסאות נשמרות לכל מסמך. שמירה אוטומטית כל כמה שניות מייצרת
+    # היסטוריה שגדלה בלי גבול, ולכן הישנות נמחקות.
+    document_versions_kept: int = 50
+
     @property
     def async_database_url(self) -> str:
         """מנרמל את ה-URL של Render לדרייבר asyncpg."""

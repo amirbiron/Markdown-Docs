@@ -39,9 +39,19 @@ def _rate_keys(request: Request, email: str) -> list[str]:
     לפי כתובת בלבד — תוקף עם כמה כתובות עוקף. לפי חשבון בלבד — אפשר
     לנעול את בעל החשבון מרחוק. שניהם יחד סוגרים את שתי הפרצות.
     """
-    headers = {k.decode("latin-1").lower(): v.decode("latin-1") for k, v in request.scope.get("headers", [])}
-    ip = client_ip(headers, request.client.host if request.client else None)
+    ip = client_ip(request.headers, request.client.host if request.client else None)
     return [f"ip:{ip}", f"user:{email}"]
+
+
+def mask_email(email: str) -> str:
+    """מזהה יציב ללוג בלי לרשום את הכתובת עצמה.
+
+    לוג הוא לא רק לנו: הוא נשמר, נגרר לשירותי ניטור, ולפעמים משותף. כתובת
+    מייל היא מידע אישי, ואין סיבה שתשב שם רק כדי לזהות ניסיון כושל.
+    """
+    local, _, domain = email.partition("@")
+    head = local[:2] if len(local) > 2 else local[:1]
+    return f"{head}***@{domain}" if domain else f"{head}***"
 
 
 @router.post("/login")
@@ -67,7 +77,7 @@ async def login(
     # כדי שזמן התגובה לא יסגיר אילו חשבונות רשומים.
     if user is None or not verify_password(payload.password, user.password_hash):
         login_limiter.register_failure(keys)
-        logger.warning("כניסה נכשלה (%s)", email)
+        logger.warning("כניסה נכשלה (%s)", mask_email(email))
         return JSONResponse(GENERIC_FAILURE, status_code=status.HTTP_401_UNAUTHORIZED)
 
     login_limiter.register_success(keys)
@@ -85,7 +95,7 @@ async def login(
         max_age=settings.session_ttl_days * 86400,
         path="/",
     )
-    logger.info("כניסה הצליחה (%s)", email)
+    logger.info("כניסה הצליחה (%s)", mask_email(email))
     return response
 
 

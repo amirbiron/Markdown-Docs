@@ -16,10 +16,7 @@ from app.main import app
 from app.seed import seed_admin
 from app.security import COOKIE_NAME
 
-ORIGIN = sorted(get_settings().origin_allowlist)[0]
-EMAIL = "admin@example.com"
-PASSWORD = "correct-horse-battery"
-WRITE = {"Origin": ORIGIN}
+from tests.conftest import EMAIL, ORIGIN, PASSWORD, WRITE  # noqa: F401
 
 
 @pytest.fixture(scope="session", autouse=True)
@@ -84,7 +81,7 @@ async def test_full_cycle_keeps_the_previous_version(owner):
     await _document(owner, content="גרסה ראשונה")
 
     updated = await owner.put(
-        "/api/projects/docs/docs/installation" if False else "/api/projects/docs/docs/installation",
+        "/api/projects/docs/docs/installation",
         json={"content": "גרסה שנייה"},
         headers=WRITE,
     )
@@ -95,6 +92,7 @@ async def test_full_cycle_keeps_the_previous_version(owner):
     versions = await owner.get("/api/projects/docs/docs/installation/versions")
     assert versions.status_code == 200
     assert len(versions.json()) == 1, "הגרסה הקודמת לא נשמרה"
+    assert versions.json()[0]["size_bytes"] == len("גרסה ראשונה".encode("utf-8"))
 
 
 async def test_identical_content_does_not_create_a_version(owner):
@@ -226,14 +224,14 @@ async def test_stale_write_is_rejected_without_an_error(owner):
 
     fresh = await owner.put(
         "/api/projects/docs/docs/installation",
-        json={"content": "חדש", "client_seq": 10},
+        json={"content": "חדש", "client_seq": 10, "editor_id": "tab-a"},
         headers=WRITE,
     )
     assert fresh.json()["applied"] is True
 
     stale = await owner.put(
         "/api/projects/docs/docs/installation",
-        json={"content": "ישן שאיחר", "client_seq": 7},
+        json={"content": "ישן שאיחר", "client_seq": 7, "editor_id": "tab-a"},
         headers=WRITE,
     )
     assert stale.status_code == 200, "בקשה ישנה החזירה שגיאה במקום להידחות בשקט"
@@ -245,10 +243,10 @@ async def test_equal_sequence_is_also_rejected(owner):
     await _project(owner)
     await _document(owner)
     await owner.put(
-        "/api/projects/docs/docs/installation", json={"content": "א", "client_seq": 5}, headers=WRITE
+        "/api/projects/docs/docs/installation", json={"content": "א", "client_seq": 5, "editor_id": "t"}, headers=WRITE
     )
     repeat = await owner.put(
-        "/api/projects/docs/docs/installation", json={"content": "ב", "client_seq": 5}, headers=WRITE
+        "/api/projects/docs/docs/installation", json={"content": "ב", "client_seq": 5, "editor_id": "t"}, headers=WRITE
     )
     assert repeat.json()["applied"] is False
 
@@ -258,7 +256,7 @@ async def test_writes_without_a_sequence_still_apply(owner):
     await _project(owner)
     await _document(owner)
     await owner.put(
-        "/api/projects/docs/docs/installation", json={"content": "א", "client_seq": 9}, headers=WRITE
+        "/api/projects/docs/docs/installation", json={"content": "א", "client_seq": 9, "editor_id": "t"}, headers=WRITE
     )
     plain = await owner.put(
         "/api/projects/docs/docs/installation", json={"content": "ב"}, headers=WRITE
@@ -286,6 +284,18 @@ async def test_documents_are_ordered_by_position_then_id(owner):
         for _ in range(4)
     ]
     assert all(order == reads[0] for order in reads), f"הסדר השתנה בין קריאות: {reads}"
+
+    # יציבות לבדה לא מספיקה — גם מיון שרירותי יכול לצאת יציב במקרה.
+    # ה-tiebreaker הוא ה-id, והוא נגזר מסדר היצירה, ולכן הסדר הצפוי ידוע.
+    expected = sorted(["a", "b", "c"])
+    assert sorted(reads[0]) == expected
+    assert reads[0] == [
+        d["slug"]
+        for d in sorted(
+            (await owner.get("/api/projects/docs")).json()["documents"],
+            key=lambda d: d["position"],
+        )
+    ]
 
 
 async def test_new_documents_go_to_the_end(owner):
@@ -340,6 +350,80 @@ async def test_deleting_a_project_removes_its_documents_and_versions(owner):
 async def test_slug_is_immutable(owner):
     """שינוי slug שובר כל קישור שנשלח — ולכן הוא פשוט לא נתמך."""
     await _project(owner)
-    await owner.patch("/api/projects/docs", json={"slug": "renamed"}, headers=WRITE)
+    patched = await owner.patch("/api/projects/docs", json={"slug": "renamed"}, headers=WRITE)
+    assert patched.status_code == 200, patched.text
     assert (await owner.get("/api/projects/docs")).status_code == 200
     assert (await owner.get("/api/projects/renamed")).status_code == 404
+
+
+# ── סדר כתיבות משויך לעורך ────────────────────────────────────────────
+
+
+async def test_a_second_editor_is_not_locked_out(owner):
+    """הבאג שמונה גלובלי למסמך היה יוצר.
+
+    טאב א' הגיע למונה 50. טאב ב' נטען מחדש והתחיל מ-1. עם מונה גלובלי
+    למסמך, אף כתיבה של ב' לא הייתה מתקבלת לעולם — הוא היה נראה כאילו
+    "נתקע" בלי שום הודעת שגיאה.
+    """
+    await _project(owner)
+    await _document(owner)
+
+    for seq in (10, 20, 50):
+        applied = await owner.put(
+            "/api/projects/docs/docs/installation",
+            json={"content": f"א{seq}", "client_seq": seq, "editor_id": "tab-a"},
+            headers=WRITE,
+        )
+        assert applied.json()["applied"] is True
+
+    second = await owner.put(
+        "/api/projects/docs/docs/installation",
+        json={"content": "מטאב ב", "client_seq": 1, "editor_id": "tab-b"},
+        headers=WRITE,
+    )
+    assert second.json()["applied"] is True, "הטאב השני ננעל החוצה"
+    assert second.json()["document"]["content"] == "מטאב ב"
+
+
+async def test_stale_write_from_the_same_editor_is_still_rejected(owner):
+    await _project(owner)
+    await _document(owner)
+    await owner.put(
+        "/api/projects/docs/docs/installation",
+        json={"content": "חדש", "client_seq": 10, "editor_id": "tab-a"},
+        headers=WRITE,
+    )
+    stale = await owner.put(
+        "/api/projects/docs/docs/installation",
+        json={"content": "ישן", "client_seq": 7, "editor_id": "tab-a"},
+        headers=WRITE,
+    )
+    assert stale.json()["applied"] is False
+    assert stale.json()["document"]["content"] == "חדש"
+
+
+async def test_sequence_without_an_editor_id_is_422(owner):
+    await _project(owner)
+    await _document(owner)
+    response = await owner.put(
+        "/api/projects/docs/docs/installation", json={"client_seq": 3}, headers=WRITE
+    )
+    assert response.status_code == 422
+
+
+# ── חשיפת קבצים ───────────────────────────────────────────────────────
+
+
+@pytest.mark.parametrize(
+    "path",
+    ["/app/config.py", "/app/security.py", "/alembic.ini", "/.env.example", "/requirements.txt", "/CLAUDE.md"],
+)
+async def test_repository_files_are_not_served(anon, path):
+    """STATIC_ROOT='.' עם mount על '/' הפך כל קובץ בפרויקט לנגיש."""
+    assert (await anon.get(path)).status_code == 404, f"{path} עדיין מוגש"
+
+
+async def test_the_front_end_is_still_served(anon):
+    assert (await anon.get("/")).status_code == 200
+    assert (await anon.get("/assets/support.js")).status_code == 200

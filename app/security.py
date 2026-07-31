@@ -7,7 +7,7 @@ import time
 from dataclasses import dataclass, field
 
 import bcrypt
-from itsdangerous import BadSignature, URLSafeSerializer
+from itsdangerous import BadData, URLSafeSerializer
 
 from app.config import get_settings
 
@@ -92,7 +92,10 @@ def read_token(token: str, now: float | None = None) -> dict | None:
     """
     try:
         payload = _serializer.loads(token)
-    except BadSignature:
+    except BadData:
+        # BadData היא השורש של כל שגיאות itsdangerous — חתימה פגומה, אבל
+        # גם payload שלא ניתן לפענוח וכותרת שבורה. תפיסת BadSignature
+        # בלבד הייתה מפילה 500 על טוקן מעוות במקום להחזיר 401.
         return None
     if not isinstance(payload, dict):
         return None
@@ -165,8 +168,18 @@ class LoginRateLimiter:
         """מונע גדילה בלי גבול כשתוקף מסובב כתובות."""
         if len(self._buckets) <= self.max_keys:
             return
+
         stale = now - self.cap_seconds * 2
         for key in [k for k, b in self._buckets.items() if b.last_seen < stale]:
+            del self._buckets[key]
+
+        # ניקוי הישנים לבדו אינו מספיק: תוקף ששולח מכתובות חדשות בקצב
+        # מהיר מייצר רשומות שכולן טריות, ואז אין מה למחוק והמילון ממשיך
+        # לגדול. מפנים את הוותיקות ביותר עד שחוזרים לגבול.
+        if len(self._buckets) <= self.max_keys:
+            return
+        ordered = sorted(self._buckets.items(), key=lambda item: item[1].last_seen)
+        for key, _ in ordered[: len(self._buckets) - self.max_keys]:
             del self._buckets[key]
 
     def retry_after(self, keys: list[str], now: float | None = None) -> float:

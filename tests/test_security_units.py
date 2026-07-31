@@ -116,8 +116,28 @@ def test_expired_token_is_rejected():
 
 
 def test_tampered_token_is_rejected():
+    """משנים את ה-payload, לא את התו האחרון של החתימה.
+
+    היפוך התו האחרון נראה כמו בדיקה טובה אבל הוא לא יציב: בקידוד
+    base64url התו האחרון יכול לשאת ביטים שאינם בשימוש, ואז כמה תווים
+    שונים מפוענחים לאותם בתים בדיוק והחתימה נשארת תקפה. הטסט היה עובר
+    או נכשל לפי ה-exp שהוגרל באותה שנייה.
+    """
     token = issue_token("11111111-1111-1111-1111-111111111111", 1)
-    assert read_token(token[:-1] + ("A" if token[-1] != "A" else "B")) is None
+    payload, _, signature = token.rpartition(".")
+    assert payload and signature, "מבנה הטוקן השתנה"
+
+    flipped = ("B" if payload[0] != "B" else "C") + payload[1:]
+    assert read_token(f"{flipped}.{signature}") is None
+
+
+def test_tampering_is_rejected_for_many_tokens():
+    """מריצים על טוקנים רבים כדי שהתוצאה לא תהיה תלויה בהגרלה."""
+    for offset in range(40):
+        token = issue_token("11111111-1111-1111-1111-111111111111", 1, now=time.time() + offset)
+        payload, _, signature = token.rpartition(".")
+        flipped = payload[:-1] + ("B" if payload[-1] != "B" else "C")
+        assert read_token(f"{flipped}.{signature}") is None, f"טוקן {offset} לא נדחה"
 
 
 def test_token_signed_with_another_secret_is_rejected():
@@ -178,8 +198,22 @@ def test_account_key_and_ip_key_are_independent():
 
 
 def test_pruning_bounds_memory():
+    """רשומות ישנות נמחקות עד שחוזרים לגבול."""
     limiter = LoginRateLimiter(free_attempts=1, cap_seconds=10.0, max_keys=50)
     for i in range(200):
         limiter.register_failure([f"ip:{i}"], now=1000.0)
     limiter.register_failure(["ip:fresh"], now=2000.0)
-    assert len(limiter._buckets) < 200, "המילון גדל בלי גבול"
+    assert list(limiter._buckets) == ["ip:fresh"], f"נשארו {len(limiter._buckets)} רשומות"
+
+
+def test_pruning_evicts_oldest_when_everything_is_fresh():
+    """תוקף שמסובב כתובות מייצר רשומות שכולן טריות.
+
+    ניקוי לפי גיל בלבד לא מוחק אף אחת מהן, והמילון ממשיך לגדול. הפינוי
+    חייב ליפול חזרה על הוותיקות ביותר.
+    """
+    limiter = LoginRateLimiter(free_attempts=1, cap_seconds=10.0, max_keys=20)
+    for i in range(60):
+        limiter.register_failure([f"ip:{i}"], now=1000.0 + i * 0.001)
+    assert len(limiter._buckets) <= 21, f"המילון הגיע ל-{len(limiter._buckets)}"
+    assert "ip:59" in limiter._buckets, "דווקא החדשה ביותר פונתה"

@@ -6,6 +6,7 @@ import logging
 
 from fastapi import APIRouter, Depends, HTTPException, Response, status
 from sqlalchemy import delete, func, select
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -90,36 +91,40 @@ async def create_document(
     try:
         slug = slugs.resolve(payload.slug, payload.title)
     except slugs.SlugError as error:
-        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, str(error)) from None
+        raise HTTPException(422, str(error)) from None
 
-    position = payload.position
-    if position is None:
-        # מחושב בתוך השאילתה ולא בשתי פעולות, כדי ששתי יצירות במקביל לא
-        # יקבלו את אותו מקום.
-        position = (
-            await session.execute(
-                select(func.coalesce(func.max(Document.position), -1) + 1).where(
-                    Document.project_id == project.id
-                )
-            )
-        ).scalar_one()
+    # המקום מחושב *בתוך* פקודת ה-INSERT, ולא בשאילתה נפרדת שקודמת לה.
+    # SELECT MAX ואז INSERT הן שתי פעולות ששתי יצירות במקביל יכולות
+    # לשזור ביניהן, ושתיהן היו מקבלות את אותו מקום (כלל 2).
+    if payload.position is None:
+        next_position = (
+            select(func.coalesce(func.max(Document.position), -1) + 1)
+            .where(Document.project_id == project.id)
+            .scalar_subquery()
+        )
+    else:
+        next_position = payload.position
 
-    document = Document(
-        project_id=project.id,
-        slug=slug,
-        title=payload.title.strip(),
-        content=payload.content,
-        position=position,
+    statement = (
+        pg_insert(Document)
+        .values(
+            project_id=project.id,
+            slug=slug,
+            title=payload.title.strip(),
+            content=payload.content,
+            position=next_position,
+        )
+        .returning(Document.id)
     )
-    session.add(document)
 
     try:
+        document_id = (await session.execute(statement)).scalar_one()
         await session.commit()
     except IntegrityError:
         await session.rollback()
         raise HTTPException(status.HTTP_409_CONFLICT, "כבר קיים מסמך עם המזהה הזה בפרויקט") from None
 
-    await session.refresh(document)
+    document = await session.get(Document, document_id)
     return DocumentPrivate.model_validate(document)
 
 
@@ -151,7 +156,10 @@ async def update_document(
     # סדר הכתיבות. בקשה עם מונה שאינו גדול מהאחרון שהתקבל הגיעה מאוחר
     # ואיננה רלוונטית — מחזירים 200 עם המצב הנוכחי ולא שגיאה, כי מבחינת
     # המשתמש לא קרה שום דבר רע.
-    if payload.client_seq is not None and payload.client_seq <= document.last_client_seq:
+    # הדחייה חלה רק כשהבקשה הגיעה *מאותו עורך*. עורך אחר שהתחיל למנות
+    # מאפס אינו "מאחר" — הוא פשוט עורך אחר, ושם הכלל הוא האחרון מנצח.
+    same_editor = payload.editor_id is not None and payload.editor_id == document.last_editor_id
+    if same_editor and payload.client_seq is not None and payload.client_seq <= document.last_client_seq:
         logger.info(
             "כתיבה ישנה נדחתה (%s/%s): seq=%d, אחרון=%d",
             project.slug,
@@ -179,6 +187,7 @@ async def update_document(
         document.position = payload.position
     if payload.client_seq is not None:
         document.last_client_seq = payload.client_seq
+        document.last_editor_id = payload.editor_id
 
     await session.flush()
     await _trim_versions(session, document.id)
@@ -210,7 +219,10 @@ async def list_versions(
         .scalars()
         .all()
     )
-    return [VersionSummary(created_at=v.created_at, size=len(v.content)) for v in versions]
+    return [
+        VersionSummary(created_at=v.created_at, size_bytes=len(v.content.encode("utf-8")))
+        for v in versions
+    ]
 
 
 @router.delete("/{doc_slug}", status_code=status.HTTP_204_NO_CONTENT)

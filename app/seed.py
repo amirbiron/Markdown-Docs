@@ -25,7 +25,10 @@ async def seed_admin(session: AsyncSession) -> None:
 
     if not email or not password:
         message = "ADMIN_EMAIL או ADMIN_PASSWORD לא הוגדרו — לא נוצר משתמש, והתחברות תיכשל"
-        logger.error(message) if settings.is_production else logger.warning(message)
+        if settings.is_production:
+            logger.error(message)
+        else:
+            logger.warning(message)
         return
 
     # hash_password מאמת את המדיניות וזורק PasswordPolicyError. השגיאה

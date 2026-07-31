@@ -1180,6 +1180,11 @@ const KEYWORDS = /\b(import|from|export|const|let|var|function|return|await|asyn
 function safeHref(raw) {
   const url = String(raw == null ? "" : raw).replace(/[\u0000-\u001F\u007F]/g, "").trim();
   if (!url) return "#";
+  /* `//evil.example` הוא URL יחסי-לפרוטוקול: הדפדפן משלים אותו ל-
+     `https://evil.example` ויוצא מהאתר, למרות שהוא מתחיל בלוכסן ונראה
+     מקומי. `/\\evil.example` מתנהג אותו דבר, כי דפדפנים מנרמלים `\\`
+     ל-`/` בתחילת נתיב. שניהם נחסמים לפני בדיקת הנתיב היחסי. */
+  if (/^\/[\/\\]/.test(url)) return "#";
   if (/^(#|\/|\.\/|\.\.\/)/.test(url)) return url;   // עוגן או נתיב יחסי — אין סכמה
   if (/^(https?|mailto):/i.test(url)) return url;
   return "#";

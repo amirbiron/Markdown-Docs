@@ -2,7 +2,21 @@
 
 from functools import lru_cache
 
+from pydantic import model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+# ערכים שמופיעים בקוד, בתיעוד וב-.env.example. אם אחד מהם שרד עד
+# פרודקשן, אף אחד לא הגדיר סוד אמיתי — וכל ה-cookies ניתנים לזיוף.
+PLACEHOLDER_SECRETS = frozenset(
+    {
+        "dev-only-not-for-production",
+        "change-me",
+        "changeme",
+        "secret",
+        "",
+    }
+)
+MIN_SECRET_LENGTH = 32
 
 
 class Settings(BaseSettings):
@@ -56,6 +70,24 @@ class Settings(BaseSettings):
         if url.startswith("postgresql://"):
             url = "postgresql+asyncpg://" + url[len("postgresql://") :]
         return url
+
+    @model_validator(mode="after")
+    def _reject_weak_secret_in_production(self) -> "Settings":
+        """סוד ברירת מחדל בפרודקשן הוא כשל שקט מהסוג הגרוע ביותר.
+
+        הכול נראה עובד — הכניסה מצליחה, ה-cookie נחתם — פשוט כל אחד יכול
+        לחתום cookie משלו, כי הסוד כתוב בקוד המקור. מפילים את העלייה.
+        """
+        if self.environment != "production":
+            return self
+        secret = (self.session_secret or "").strip()
+        if secret in PLACEHOLDER_SECRETS:
+            raise ValueError("SESSION_SECRET לא הוגדר בפרודקשן — נשאר ערך ברירת המחדל")
+        if len(secret) < MIN_SECRET_LENGTH:
+            raise ValueError(
+                f"SESSION_SECRET קצר מדי בפרודקשן — נדרשים לפחות {MIN_SECRET_LENGTH} תווים"
+            )
+        return self
 
     @property
     def is_production(self) -> bool:

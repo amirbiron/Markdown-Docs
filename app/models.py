@@ -106,7 +106,12 @@ class Project(Base):
         back_populates="project", cascade="all, delete-orphan"
     )
 
-    __table_args__ = (Index("ix_projects_owner_id_id", "owner_id", "id"),)
+    __table_args__ = (
+        Index("ix_projects_owner_id_id", "owner_id", "id"),
+        # תואם ל-ORDER BY של list_projects. אינדקס שלא תואם למיון בפועל
+        # אינו משמש אותו כלל, וה-DB חוזר למיון בזיכרון.
+        Index("ix_projects_name_id", "name", "id"),
+    )
 
 
 class Document(Base):
@@ -125,9 +130,16 @@ class Document(Base):
     content: Mapped[str] = mapped_column(Text, nullable=False, server_default="")
     position: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
 
-    # המונה האחרון שהתקבל מהעורך. סדר ההגעה של בקשות לשרת אינו סדר
-    # השליחה — שמירה אוטומטית שנתקעה ברשת יכולה לנחות אחרי שמירה חדשה
-    # יותר ולהחזיר את המסמך אחורה בזמן. הכתיבה מתקבלת רק אם המונה עלה.
+    # סדר הכתיבות. סדר ההגעה של בקשות לשרת אינו סדר השליחה — שמירה
+    # אוטומטית שנתקעה ברשת יכולה לנחות אחרי שמירה חדשה יותר ולהחזיר את
+    # המסמך אחורה בזמן.
+    #
+    # המונה משויך למזהה העורך ולא למסמך, וזה ההבדל שקובע. מונה גלובלי
+    # למסמך נשמע פשוט יותר, אבל הוא נועל טאב שני לחלוטין: אם טאב א' הגיע
+    # ל-50 וטאב ב' נטען מחדש והתחיל מ-1, אף כתיבה של ב' לא תתקבל לעולם.
+    # עם שיוך לעורך, ההגנה חלה בתוך אותו עורך, ובין עורכים שונים חוזרים
+    # לכלל המוצהר — האחרון ששומר מנצח.
+    last_editor_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
     last_client_seq: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
 
     created_at: Mapped[datetime] = mapped_column(_TS, nullable=False, server_default=func.now())

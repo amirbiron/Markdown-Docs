@@ -34,7 +34,10 @@ logging.basicConfig(
 logger = logging.getLogger("markdown_docs")
 settings = get_settings()
 
-STATIC_ROOT = "."
+# רק תיקיית הנכסים מוגשת, ולא שורש הריפו. STATIC_ROOT="." עם mount על
+# "/" הפך כל קובץ בפרויקט לנגיש — alembic.ini, app/config.py, .env.example
+# והשאר. index.html מוגש בנתיב מפורש, ולכן אין צורך למאונט לראות אותו.
+ASSETS_DIR = "assets"
 INDEX_FILE = "index.html"
 
 # אותן כותרות שהיו ב-render.yaml כשהאתר היה סטטי. ברגע שהוא הפך לשירות
@@ -76,17 +79,22 @@ async def lifespan(app: FastAPI):
     server_encoding שאינו UTF8 משחית עברית, והתיקון דורש מיגרציית נתונים.
     עדיף להיכשל ברעש בעלייה מאשר לגלות את זה משורה שנשמרה עקום.
     """
+    encoding = None
     try:
         async with engine.connect() as conn:
             encoding = (await conn.execute(text("SHOW server_encoding"))).scalar_one()
             timezone = (await conn.execute(text("SHOW timezone"))).scalar_one()
-        if encoding.upper() != "UTF8":
-            logger.error("server_encoding הוא %s ולא UTF8 — טקסט עברי ישתבש", encoding)
         logger.info("בסיס הנתונים מחובר (encoding=%s, timezone=%s)", encoding, timezone)
     except Exception:
-        # השרת עולה גם בלי DB, כדי ש-/api/health יוכל לדווח על התקלה
-        # במקום שהתהליך פשוט ימות ו-Render יראה קריסה בלי סיבה.
+        # תקלת חיבור היא זמנית: השרת עולה בכל זאת כדי ש-/api/health יוכל
+        # לדווח עליה, במקום שהתהליך ימות ו-Render יראה קריסה בלי סיבה.
         logger.exception("החיבור לבסיס הנתונים נכשל בעלייה")
+
+    # קידוד שגוי הוא סיפור אחר לגמרי: הוא לא חולף, הוא משחית כל טקסט עברי
+    # שנשמר, והתיקון דורש מיגרציית נתונים. מפילים את העלייה במקום להמשיך
+    # ולכתוב נתונים פגומים.
+    if encoding is not None and encoding.upper() != "UTF8":
+        raise RuntimeError(f"server_encoding הוא {encoding} ולא UTF8 — טקסט עברי יישמר משובש")
 
     try:
         async with SessionLocal() as session:
@@ -176,5 +184,6 @@ async def index() -> FileResponse:
     return FileResponse(INDEX_FILE)
 
 
-# נרשם אחרון כדי שכל נתיב /api ייתפס לפני שהמאונט הסטטי רואה אותו.
-app.mount("/", StaticFiles(directory=STATIC_ROOT, html=True), name="static")
+# מאונט על /assets בלבד. כל נתיב אחר שאינו /api ואינו / מקבל 404, ולכן
+# אין דרך להגיע לקוד או לקונפיגורציה דרך השרת.
+app.mount("/assets", StaticFiles(directory=ASSETS_DIR), name="assets")

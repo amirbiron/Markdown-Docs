@@ -44,6 +44,24 @@ async def load_project(
     raise HTTPException(status.HTTP_404_NOT_FOUND, NOT_FOUND)
 
 
+def _payload(project: Project, documents: list[Document]) -> dict:
+    """בונה את שדות התשובה משמות מפורשים.
+
+    project.__dict__ נראה קצר יותר, אבל הוא מחזיר את מצב ה-ORM הפנימי:
+    הוא כולל את _sa_instance_state, מדלג על attributes שלא נטענו, ומשתנה
+    בשקט לפי commit ו-expire. שמות מפורשים נשברים ברעש אם שדה משתנה.
+    """
+    return {
+        "slug": project.slug,
+        "name": project.name,
+        "description": project.description,
+        "visibility": project.visibility,
+        "created_at": project.created_at,
+        "updated_at": project.updated_at,
+        "documents": documents,
+    }
+
+
 def _ordered_documents(project: Project) -> list[Document]:
     """המיון נגמר ב-id (כלל 8).
 
@@ -72,7 +90,7 @@ async def list_projects(
 
     model = ProjectPrivate if viewer is not None else ProjectPublic
     return [
-        model.model_validate({**project.__dict__, "documents": _ordered_documents(project)})
+        model.model_validate(_payload(project, _ordered_documents(project)))
         for project in projects
     ]
 
@@ -86,7 +104,7 @@ async def create_project(
     try:
         slug = slugs.resolve(payload.slug, payload.name)
     except slugs.SlugError as error:
-        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, str(error)) from None
+        raise HTTPException(422, str(error)) from None
 
     project = Project(
         owner_id=user.id,
@@ -106,8 +124,8 @@ async def create_project(
         await session.rollback()
         raise HTTPException(status.HTTP_409_CONFLICT, "כבר קיים פרויקט עם המזהה הזה") from None
 
-    await session.refresh(project, attribute_names=["documents"])
-    return ProjectPrivate.model_validate({**project.__dict__, "documents": []})
+    await session.refresh(project)
+    return ProjectPrivate.model_validate(_payload(project, []))
 
 
 @router.get("/{slug}", response_model=ProjectPublic | ProjectPrivate)
@@ -119,7 +137,7 @@ async def get_project(
     project = await load_project(session, slug, viewer, with_documents=True)
     is_owner = viewer is not None and project.owner_id == viewer.id
     model = ProjectPrivate if is_owner else ProjectPublic
-    return model.model_validate({**project.__dict__, "documents": _ordered_documents(project)})
+    return model.model_validate(_payload(project, _ordered_documents(project)))
 
 
 @router.patch("/{slug}", response_model=ProjectPrivate)
@@ -144,7 +162,7 @@ async def update_project(
 
     await session.commit()
     await session.refresh(project, attribute_names=["documents"])
-    return ProjectPrivate.model_validate({**project.__dict__, "documents": _ordered_documents(project)})
+    return ProjectPrivate.model_validate(_payload(project, _ordered_documents(project)))
 
 
 @router.delete("/{slug}", status_code=status.HTTP_204_NO_CONTENT)
@@ -159,7 +177,10 @@ async def delete_project(
 
     # המסמכים, הגרסאות והקישורים נמחקים ב-CASCADE ברמת ה-DB, ולא בלולאה
     # בקוד שעלולה לקרוס באמצע ולהשאיר יתומים.
+    # ה-slug נשמר לפני ה-commit. אחריו האובייקט מחוק ו-attributes שלו
+    # פגי תוקף, וקריאה אליהם מנסה טעינה מחדש מהקשר סינכרוני (כלל 5).
+    deleted_slug = project.slug
     await session.delete(project)
     await session.commit()
-    logger.info("פרויקט נמחק (%s)", project.slug)
+    logger.info("פרויקט נמחק (%s)", deleted_slug)
     return Response(status_code=status.HTTP_204_NO_CONTENT)

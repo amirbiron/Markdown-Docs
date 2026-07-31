@@ -18,9 +18,7 @@ from app.main import app
 from app.seed import seed_admin
 from app.security import COOKIE_NAME, issue_token, login_limiter, read_token
 
-ORIGIN = sorted(get_settings().origin_allowlist)[0]
-EMAIL = "admin@example.com"
-PASSWORD = "correct-horse-battery"
+from tests.conftest import EMAIL, ORIGIN, PASSWORD, WRITE  # noqa: F401
 
 
 @pytest.fixture(scope="session", autouse=True)

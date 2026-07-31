@@ -1,4 +1,4 @@
-fastapi==0.115.6
+fastapi==0.118.3
 uvicorn[standard]==0.34.0
 sqlalchemy[asyncio]==2.0.36
 asyncpg==0.30.0
@@ -7,3 +7,9 @@ pydantic-settings==2.7.0
 email-validator==2.2.0
 bcrypt==4.2.1
 itsdangerous==2.2.0
+
+# רצפות לתלויות עקיפות. הן נמשכות ממילא על ידי fastapi, uvicorn ו-alembic,
+# אבל בלי רצפה מפורשת פותר התלויות רשאי לבחור גרסה ישנה ופגיעה.
+starlette>=0.47.2
+h11>=0.16.0
+mako>=1.2.2

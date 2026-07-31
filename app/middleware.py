@@ -91,10 +91,15 @@ class BodySizeLimit:
         declared = _headers(scope).get("content-length")
         if declared is not None:
             try:
-                if int(declared) > self.max_bytes:
-                    return await self._too_large(send, declared)
+                length = int(declared)
             except ValueError:
                 return await _send_error(send, 400, {"detail": "בקשה לא תקינה"})
+            # Content-Length שלילי אינו חוקי, ואילו הועבר הלאה הוא היה
+            # עובר את בדיקת הגבול ומגיע לאפליקציה כאילו הכול תקין.
+            if length < 0:
+                return await _send_error(send, 400, {"detail": "בקשה לא תקינה"})
+            if length > self.max_bytes:
+                return await self._too_large(send, declared)
             return await self.app(scope, receive, send)
 
         # אין Content-Length: קוראים בעצמנו עד הגבול, ומשמיעים מחדש
@@ -102,10 +107,14 @@ class BodySizeLimit:
         chunks: list[bytes] = []
         total = 0
         more = True
+        disconnected = False
         while more:
             message = await receive()
             if message["type"] != "http.request":
-                chunks.append(b"")
+                # הלקוח התנתק באמצע. שומרים את האירוע ומעבירים אותו
+                # הלאה — אפליקציה שממירה אותו לגוף ריק חושבת שהבקשה
+                # הושלמה כרגיל, ומעבדת חצי בקשה.
+                disconnected = True
                 break
             body = message.get("body", b"")
             total += len(body)
@@ -115,8 +124,18 @@ class BodySizeLimit:
             more = message.get("more_body", False)
 
         buffered = b"".join(chunks)
+        delivered = disconnected  # אם התנתק, אין גוף שלם להשמיע
 
         async def replay_receive():
+            """מוסר את הגוף פעם אחת, ואז מדווח על ניתוק.
+
+            החזרת אותו גוף שוב ושוב הופכת כל קריאה נוספת ל-receive ללולאה
+            אינסופית מבחינת מי שקורא — הוא לעולם לא רואה את סוף הזרם.
+            """
+            nonlocal delivered
+            if delivered:
+                return {"type": "http.disconnect"}
+            delivered = True
             return {"type": "http.request", "body": buffered, "more_body": False}
 
         return await self.app(scope, replay_receive, send)

@@ -16,7 +16,11 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import get_settings
-from app.db import engine, get_session
+from app.security import PasswordPolicyError
+from app.db import SessionLocal, engine, get_session
+from app.middleware import BodySizeLimit, OriginGuard
+from app.routers import auth as auth_router
+from app.seed import seed_admin
 
 # בלי הגדרת רמה מפורשת, logger.info לא מגיע לפלט של uvicorn — ובדיקת
 # הקידוד בעלייה הייתה רצה ולא מדווחת כלום, כלומר לא שווה כלום.
@@ -80,6 +84,16 @@ async def lifespan(app: FastAPI):
         # השרת עולה גם בלי DB, כדי ש-/api/health יוכל לדווח על התקלה
         # במקום שהתהליך פשוט ימות ו-Render יראה קריסה בלי סיבה.
         logger.exception("החיבור לבסיס הנתונים נכשל בעלייה")
+
+    try:
+        async with SessionLocal() as session:
+            await seed_admin(session)
+    except PasswordPolicyError:
+        # מדיניות סיסמה שנכשלה היא שגיאת קונפיגורציה, לא תקלה חולפת.
+        # מפילים את העלייה במקום להמשיך בלי משתמש.
+        raise
+    except Exception:
+        logger.exception("יצירת המשתמש הראשוני נכשלה")
     yield
     await engine.dispose()
 
@@ -120,7 +134,14 @@ async def health_db(session: AsyncSession = Depends(get_session)) -> Response:
     return JSONResponse({"status": "ok", "database": "ok"})
 
 
+api.include_router(auth_router.router)
 app.include_router(api)
+
+# הסדר כאן הוא מה שקובע מה רץ קודם: מה שנוסף אחרון עוטף את הכול.
+# OriginGuard חייב לרוץ לפני BodySizeLimit — אחרת בקשה עוינת עם גוף של
+# מגה־בייט הייתה נקראת במלואה לפני שנגלה שהמקור שלה פסול.
+app.add_middleware(BodySizeLimit, max_bytes=settings.max_body_bytes)
+app.add_middleware(OriginGuard, allowlist=settings.origin_allowlist)
 
 
 @app.get("/", include_in_schema=False)

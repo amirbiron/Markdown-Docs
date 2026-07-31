@@ -36,6 +36,23 @@ services:
       - key: PYTHON_VERSION
         value: "3.11.11"
 
+      # המשתמש היחיד. ה-seed בעלייה יוצר אותו אם אינו קיים, ולא נוגע בו
+      # אם כן — כלומר שינוי הסיסמה כאן אחרי היצירה לא מחליף אותה.
+      # sync: false => Render מבקש את הערך בפריסה ולא שומר אותו בריפו.
+      - key: ADMIN_EMAIL
+        sync: false
+      - key: ADMIN_PASSWORD
+        sync: false
+
+      # מספר הפרוקסים המהימנים בין הלקוח לשרת. ב-Render יש אחד, והערך
+      # הזה קובע מאיזה סוף של X-Forwarded-For נקראת כתובת הלקוח. ערך
+      # שגוי כאן הופך את הגבלת הקצב לעקיפה בהחלפת מחרוזת.
+      - key: TRUSTED_PROXY_HOPS
+        value: "1"
+
+      # RENDER_EXTERNAL_URL מוזרק אוטומטית על ידי Render ומשמש כברירת
+      # מחדל ל-allowlist של Origin. ALLOWED_ORIGINS גובר עליו אם הוגדר.
+
 # כותרות האבטחה עברו לאפליקציה (app/main.py, SECURITY_HEADERS).
 # בלוק headers ב-render.yaml חל על אתרים סטטיים בלבד — אילו היה נשאר
 # כאן, הוא היה מתעלם בשקט וה-CSP היה נעלם בלי שאף אחד ישים לב.

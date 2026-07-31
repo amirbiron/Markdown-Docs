@@ -1,0 +1,761 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="crossorigin" />
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Heebo:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap" />
+<style>
+html { direction: rtl; scroll-behavior: smooth; }
+body { margin: 0; background: #0e1022; color: #e9edf7; font-family: 'Heebo', 'Assistant', 'Noto Sans Hebrew', sans-serif; line-height: 1.8; word-spacing: 0.02em; -webkit-font-smoothing: antialiased; }
+a { color: #45b6ec; text-decoration: none; }
+a:hover { color: #8ad3f7; }
+::selection { background: rgba(0,136,204,0.35); }
+summary { list-style: none; cursor: pointer; }
+summary::-webkit-details-marker { display: none; }
+* { scrollbar-width: thin; scrollbar-color: #2a3860 transparent; }
+input { font-family: inherit; }
+</style>
+</helmet>
+<div dir="rtl" style="min-height:100vh;background:#0e1022">
+
+<div style="position:sticky;top:0;z-index:30;display:flex;align-items:center;justify-content:space-between;gap:24px;height:56px;padding:0 22px;background:rgba(11,13,28,0.88);backdrop-filter:blur(12px);border-bottom:1px solid #1e2745">
+  <div style="display:flex;align-items:center;gap:10px;font-size:13.5px;color:#93a0c2;min-width:0">
+    <sc-if value="{{ sidebarHidden }}" hint-placeholder-val="{{ false }}">
+    <span style="flex:none;display:grid;place-items:center;width:26px;height:26px;border-radius:7px;background:#0088cc;color:#04121c;font-family:'JetBrains Mono',monospace;font-weight:700;font-size:14px">N</span>
+    </sc-if>
+    <span>תיעוד</span>
+    <span style="color:#3d4a70">/</span>
+    <span>עיצוב ותיעוד</span>
+    <span style="color:#3d4a70">/</span>
+    <span style="color:#e9edf7;font-weight:500">רכיבי Markdown</span>
+  </div>
+  <div style="display:flex;align-items:center;gap:10px">
+    <span style="font-family:'JetBrains Mono',monospace;font-size:11px;letter-spacing:0.08em;color:#6a779b">UPDATED <span dir="ltr">12.07.2026</span></span>
+    <a href="#top" style="display:flex;align-items:center;gap:7px;padding:6px 12px;border:1px solid #2b3660;border-radius:7px;font-size:13px;color:#c9d3ea" style-hover="background:#1a2340;border-color:#3d5a80">עריכה ב‑GitHub</a>
+  </div>
+</div>
+
+<div style="display:grid;grid-template-columns:auto minmax(0,1fr) auto;align-items:start;max-width:1560px;margin:0 auto">
+
+  <sc-if value="{{ sidebarVisible }}" hint-placeholder-val="{{ true }}">
+  <aside style="position:sticky;top:56px;width:272px;box-sizing:border-box;height:calc(100vh - 56px);overflow-y:auto;padding:26px 18px 40px;border-inline-end:1px solid #1e2745;background:#0b0d1c">
+    <div style="display:flex;align-items:center;gap:11px;margin:0 0 22px">
+      <span style="flex:none;display:grid;place-items:center;width:34px;height:34px;border-radius:9px;background:#0088cc;color:#04121c;font-family:'JetBrains Mono',monospace;font-weight:700;font-size:17px">N</span>
+      <span style="display:block">
+        <span style="display:block;font-size:15.5px;font-weight:700;color:#e9edf7">Nimbus Docs</span>
+        <span style="display:block;font-family:'JetBrains Mono',monospace;font-size:11px;color:#6a779b">v3.2 · he‑IL · rtl</span>
+      </span>
+    </div>
+
+    <div style="position:relative;margin:0 0 22px">
+      <input dir="auto" placeholder="חיפוש בתיעוד…" style="width:100%;box-sizing:border-box;padding:9px 12px;padding-inline-end:52px;background:#12172c;border:1px solid #253156;border-radius:8px;color:#e9edf7;font-size:14px;outline:none" style-focus="border-color:#0088cc;background:#141a33" />
+      <span style="position:absolute;inset-inline-end:9px;top:50%;transform:translateY(-50%);font-family:'JetBrains Mono',monospace;font-size:11px;color:#6a779b;pointer-events:none"><span dir="ltr">⌘K</span></span>
+    </div>
+
+    <div style="margin:0 0 20px">
+      <button onClick="{{ toggle.start }}" style="display:flex;align-items:center;justify-content:space-between;width:100%;padding:0 4px 8px;background:none;border:none;cursor:pointer;font-family:'JetBrains Mono',monospace;font-size:11px;font-weight:500;letter-spacing:0.1em;text-transform:uppercase;color:#6a779b">
+        <span>התחלה</span>
+        <sc-if value="{{ open.start }}" hint-placeholder-val="{{ true }}"><span>▾</span></sc-if>
+        <sc-if value="{{ closed.start }}" hint-placeholder-val="{{ false }}"><span>▸</span></sc-if>
+      </button>
+      <sc-if value="{{ open.start }}" hint-placeholder-val="{{ true }}">
+      <div style="display:flex;flex-direction:column;gap:1px">
+        <a href="#top" style="padding:7px 12px;border-radius:7px;font-size:14px;color:#a8b4d2" style-hover="background:rgba(255,255,255,0.04);color:#e9edf7">מבוא ל‑Nimbus</a>
+        <a href="#top" style="padding:7px 12px;border-radius:7px;font-size:14px;color:#a8b4d2" style-hover="background:rgba(255,255,255,0.04);color:#e9edf7">התקנה</a>
+        <a href="#top" style="display:flex;align-items:center;justify-content:space-between;padding:7px 12px;border-radius:7px;font-size:14px;color:#a8b4d2" style-hover="background:rgba(255,255,255,0.04);color:#e9edf7">
+          <span>הרצה ראשונה</span>
+          <span style="font-family:'JetBrains Mono',monospace;font-size:10px;padding:1px 6px;border-radius:20px;background:#1b2440;color:#6a779b">טיוטה</span>
+        </a>
+      </div>
+      </sc-if>
+    </div>
+
+    <div style="margin:0 0 20px">
+      <button onClick="{{ toggle.guides }}" style="display:flex;align-items:center;justify-content:space-between;width:100%;padding:0 4px 8px;background:none;border:none;cursor:pointer;font-family:'JetBrains Mono',monospace;font-size:11px;font-weight:500;letter-spacing:0.1em;text-transform:uppercase;color:#6a779b">
+        <span>מדריכים</span>
+        <sc-if value="{{ open.guides }}" hint-placeholder-val="{{ true }}"><span>▾</span></sc-if>
+        <sc-if value="{{ closed.guides }}" hint-placeholder-val="{{ false }}"><span>▸</span></sc-if>
+      </button>
+      <sc-if value="{{ open.guides }}" hint-placeholder-val="{{ true }}">
+      <div style="display:flex;flex-direction:column;gap:1px">
+        <a href="#top" style="padding:7px 12px;border-radius:7px;font-size:14px;color:#a8b4d2" style-hover="background:rgba(255,255,255,0.04);color:#e9edf7">אימות ומפתחות</a>
+        <a href="#top" style="padding:7px 12px;border-radius:7px;font-size:14px;color:#a8b4d2" style-hover="background:rgba(255,255,255,0.04);color:#e9edf7">Webhooks</a>
+        <a href="#top" style="display:flex;align-items:center;justify-content:space-between;padding:7px 12px;border-radius:7px;font-size:14px;color:#a8b4d2" style-hover="background:rgba(255,255,255,0.04);color:#e9edf7">
+          <span>מגבלות קריאה</span>
+          <span style="font-family:'JetBrains Mono',monospace;font-size:10px;padding:1px 6px;border-radius:20px;background:rgba(46,204,113,0.16);color:#2ecc71">חדש</span>
+        </a>
+      </div>
+      </sc-if>
+    </div>
+
+    <div style="margin:0 0 20px">
+      <div style="padding:0 4px 8px;font-family:'JetBrains Mono',monospace;font-size:11px;font-weight:500;letter-spacing:0.1em;text-transform:uppercase;color:#6a779b">עיצוב ותיעוד</div>
+      <div style="display:flex;flex-direction:column;gap:1px">
+        <a href="#top" onClick="{{ goTop }}" style="display:block;padding:7px 12px;border-radius:7px;background:rgba(0,136,204,0.14);border-inline-start:2px solid #0088cc;font-size:14px;font-weight:600;color:#8ad3f7">רכיבי Markdown</a>
+        <div style="display:flex;flex-direction:column;gap:1px;padding:4px 0 4px 0;margin-inline-start:12px;border-inline-start:1px solid #253156">
+          <a href="#sec-01" onClick="{{ nav.s0 }}" style="padding:4px 12px;font-size:13px;color:#8f9dc0" style-hover="color:#e9edf7">טיפוגרפיה</a>
+          <a href="#sec-04" onClick="{{ nav.s3 }}" style="padding:4px 12px;font-size:13px;color:#8f9dc0" style-hover="color:#e9edf7">בלוקי קוד</a>
+          <a href="#sec-06" onClick="{{ nav.s5 }}" style="padding:4px 12px;font-size:13px;color:#8f9dc0" style-hover="color:#e9edf7">רפרנס API</a>
+        </div>
+        <a href="#top" style="padding:7px 12px;border-radius:7px;font-size:14px;color:#a8b4d2" style-hover="background:rgba(255,255,255,0.04);color:#e9edf7">סגנון כתיבה</a>
+      </div>
+    </div>
+
+    <div style="margin:0 0 24px">
+      <button onClick="{{ toggle.api }}" style="display:flex;align-items:center;justify-content:space-between;width:100%;padding:0 4px 8px;background:none;border:none;cursor:pointer;font-family:'JetBrains Mono',monospace;font-size:11px;font-weight:500;letter-spacing:0.1em;text-transform:uppercase;color:#6a779b">
+        <span>רפרנס API</span>
+        <sc-if value="{{ open.api }}" hint-placeholder-val="{{ false }}"><span>▾</span></sc-if>
+        <sc-if value="{{ closed.api }}" hint-placeholder-val="{{ true }}"><span>▸</span></sc-if>
+      </button>
+      <sc-if value="{{ open.api }}" hint-placeholder-val="{{ false }}">
+      <div style="display:flex;flex-direction:column;gap:1px">
+        <a href="#top" style="padding:7px 12px;border-radius:7px;font-family:'JetBrains Mono',monospace;font-size:13px;color:#a8b4d2" style-hover="background:rgba(255,255,255,0.04);color:#e9edf7" dir="ltr">/v3/docs</a>
+        <a href="#top" style="padding:7px 12px;border-radius:7px;font-family:'JetBrains Mono',monospace;font-size:13px;color:#a8b4d2" style-hover="background:rgba(255,255,255,0.04);color:#e9edf7" dir="ltr">/v3/blocks</a>
+        <a href="#top" style="padding:7px 12px;border-radius:7px;font-family:'JetBrains Mono',monospace;font-size:13px;color:#a8b4d2" style-hover="background:rgba(255,255,255,0.04);color:#e9edf7" dir="ltr">/v3/search</a>
+      </div>
+      </sc-if>
+    </div>
+
+    <div style="padding-top:18px;border-top:1px solid #1e2745;font-size:12.5px;color:#6a779b;line-height:1.7">
+      3 מתוך 24 עמודים נכתבו.<br />
+      התחלה של ספריית תיעוד.
+    </div>
+  </aside>
+  </sc-if>
+
+  <main id="top" style="min-width:0;padding:44px 40px 80px;max-width:880px">
+
+    <header style="margin:0 0 34px">
+      <div style="display:flex;align-items:center;gap:8px;margin:0 0 14px">
+        <span style="font-family:'JetBrains Mono',monospace;font-size:11px;font-weight:500;letter-spacing:0.1em;padding:4px 10px;border-radius:20px;background:rgba(0,136,204,0.14);color:#45b6ec">REFERENCE</span>
+        <span style="font-family:'JetBrains Mono',monospace;font-size:11px;font-weight:500;letter-spacing:0.1em;padding:4px 10px;border-radius:20px;background:rgba(155,89,182,0.16);color:#c39bd8">RTL READY</span>
+      </div>
+      <h1 style="margin:0 0 14px;font-size:46px;font-weight:800;line-height:1.15;letter-spacing:normal;color:#fff;text-wrap:balance">רכיבי Markdown</h1>
+      <p style="margin:0 0 22px;font-size:19px;line-height:1.7;color:#a8b4d2;max-width:62ch;text-wrap:pretty">כל רכיב שהתיעוד יודע להציג, עם הסינטקס שמייצר אותו. הדף הזה הוא גם הרפרנס וגם בדיקת השפיות של העיצוב — אם רכיב נראה נכון כאן, הוא ייראה נכון בכל מסמך.</p>
+      <div style="display:flex;flex-wrap:wrap;align-items:center;gap:10px">
+        <button onClick="{{ toggleRaw }}" style="display:flex;align-items:center;gap:8px;padding:9px 15px;border:none;border-radius:8px;background:#0088cc;color:#02131f;font-family:inherit;font-size:14px;font-weight:600;cursor:pointer" style-hover="background:#0f9bdf">
+          <span style="font-family:'JetBrains Mono',monospace;font-size:13px">&lt;/&gt;</span>
+          <sc-if value="{{ rawOff }}" hint-placeholder-val="{{ true }}"><span>הצג מקור Markdown</span></sc-if>
+          <sc-if value="{{ rawOn }}" hint-placeholder-val="{{ false }}"><span>הסתר מקור Markdown</span></sc-if>
+        </button>
+        <button onClick="{{ copyPage }}" style="display:flex;align-items:center;gap:8px;padding:9px 15px;border:1px solid #2b3660;border-radius:8px;background:none;color:#c9d3ea;font-family:inherit;font-size:14px;cursor:pointer" style-hover="background:#1a2340;border-color:#3d5a80">
+          <sc-if value="{{ copiedPage }}" hint-placeholder-val="{{ false }}"><span style="color:#2ecc71">הועתק ✓</span></sc-if>
+          <sc-if value="{{ notCopiedPage }}" hint-placeholder-val="{{ true }}"><span>העתקה כ‑Markdown</span></sc-if>
+        </button>
+        <span style="font-size:13px;color:#6a779b">7 דקות קריאה · 9 רכיבים</span>
+      </div>
+    </header>
+
+    <sc-if value="{{ rawOn }}" hint-placeholder-val="{{ false }}">
+    <div style="margin:0 0 30px;border:1px solid #253156;border-radius:12px;overflow:hidden;background:#0a0c1a">
+      <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 16px;background:#12172c;border-bottom:1px solid #253156">
+        <span style="font-family:'JetBrains Mono',monospace;font-size:12px;color:#93a0c2" dir="ltr">docs/he/markdown-components.md</span>
+        <span style="font-family:'JetBrains Mono',monospace;font-size:11px;color:#6a779b">מקור</span>
+      </div>
+      <pre style="margin:0;padding:18px 20px;font-family:'JetBrains Mono',monospace;font-size:13px;line-height:1.85;color:#c3cee3;overflow-x:auto;white-space:pre-wrap">---
+title: רכיבי Markdown
+slug: markdown-components
+locale: he
+dir: rtl
+---
+
+# רכיבי Markdown
+
+&gt; כל רכיב שהתיעוד יודע להציג.
+
+## 01 · טיפוגרפיה
+
+**מודגש**, *נטוי*, ~~מחוק~~, `inline code`, [קישור](/api/auth)
+
+- רשימה
+  - רשימה מקוננת
+- [x] משימה שהושלמה
+
+::: info כללי RTL
+בלוקי קוד נשארים LTR גם בתוך מסמך עברי.
+:::
+
+| רכיב | סינטקס |
+| --- | --- |
+| כותרת | `## כותרת` |</pre>
+    </div>
+    </sc-if>
+
+    <section id="sec-01" data-sec="01" style="background:#151c36;border:1px solid #253156;border-radius:12px;padding:32px;margin:0 0 22px;box-shadow:0 6px 30px rgba(0,0,0,0.25)">
+      <h2 style="display:flex;align-items:baseline;gap:12px;margin:0 0 20px;padding-bottom:14px;border-bottom:1px solid #253156;font-size:27px;font-weight:700;color:#e9edf7">
+        <span style="font-family:'JetBrains Mono',monospace;font-size:14px;font-weight:500;color:#45b6ec">01</span>
+        טיפוגרפיה וכותרות
+      </h2>
+      <p style="margin:0 0 18px;font-size:16.5px;line-height:1.85;color:#c9d3ea;text-wrap:pretty">היררכיית הכותרות היא ההסכם היחיד בין הכותב לקורא. <strong style="color:#fff;font-weight:700">H2 פותח נושא</strong>, <em style="color:#e9edf7">H3 מחלק אותו</em>, ו‑H4 הוא הגבול — מעבר לזה כבר צריך עמוד נפרד. טקסט <del style="color:#6a779b">שאינו רלוונטי</del> מסומן ולא נמחק, ושמות ערכים נכתבים כ‑<code style="font-family:'JetBrains Mono',monospace;font-size:0.88em;background:#0a0c1a;border:1px solid #222c4d;border-radius:5px;padding:2px 6px;color:#7fdbca">inline code</code>. קישורים כמו <a href="#sec-06">רפרנס ה‑API</a> תמיד מקבלים טקסט שמתאר את היעד.<sup style="font-size:11px"><a href="#footnotes" style="padding-inline-start:2px">1</a></sup></p>
+      <h3 style="margin:26px 0 12px;font-size:20px;font-weight:700;color:#2ecc71">H3 — כותרת משנית</h3>
+      <p style="margin:0 0 18px;font-size:16.5px;line-height:1.85;color:#c9d3ea;text-wrap:pretty">ברמה הזאת נכנסים לפרטים: מה קורה בפועל, מה נכשל, ואיך מזהים את זה. פסקה אחת לרעיון אחד.</p>
+      <h4 style="margin:22px 0 10px;font-size:16px;font-weight:700;color:#f39c12">H4 — מקרה קצה</h4>
+      <p style="margin:0 0 18px;font-size:16.5px;line-height:1.85;color:#c9d3ea;text-wrap:pretty">שמור ל‑<em>אבל</em> אחד: התנהגות חריגה, גרסה ישנה, דגל שצריך לכבות.</p>
+      <div style="display:grid;gap:12px;padding:18px 20px;background:#0a0c1a;border:1px solid #222c4d;border-radius:10px">
+        <div style="display:flex;align-items:baseline;gap:14px"><span style="flex:none;width:74px;font-family:'JetBrains Mono',monospace;font-size:11px;color:#6a779b">DISPLAY</span><span style="font-size:34px;font-weight:800;color:#fff;line-height:1.2">כותרת ראשית</span></div>
+        <div style="display:flex;align-items:baseline;gap:14px"><span style="flex:none;width:74px;font-family:'JetBrains Mono',monospace;font-size:11px;color:#6a779b">LEAD</span><span style="font-size:19px;color:#a8b4d2">פסקת פתיחה מובילה</span></div>
+        <div style="display:flex;align-items:baseline;gap:14px"><span style="flex:none;width:74px;font-family:'JetBrains Mono',monospace;font-size:11px;color:#6a779b">BODY</span><span style="font-size:16.5px;color:#c9d3ea">גוף הטקסט, 16.5px / 1.85</span></div>
+        <div style="display:flex;align-items:baseline;gap:14px"><span style="flex:none;width:74px;font-family:'JetBrains Mono',monospace;font-size:11px;color:#6a779b">CAPTION</span><span style="font-size:13px;color:#93a0c2">כיתוב, הערות ומטא‑דאטה</span></div>
+      </div>
+    </section>
+
+    <section id="sec-02" data-sec="02" style="background:#151c36;border:1px solid #253156;border-radius:12px;padding:32px;margin:0 0 22px;box-shadow:0 6px 30px rgba(0,0,0,0.25)">
+      <h2 style="display:flex;align-items:baseline;gap:12px;margin:0 0 20px;padding-bottom:14px;border-bottom:1px solid #253156;font-size:27px;font-weight:700;color:#e9edf7">
+        <span style="font-family:'JetBrains Mono',monospace;font-size:14px;font-weight:500;color:#45b6ec">02</span>
+        רשימות ומשימות
+      </h2>
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:22px">
+        <div>
+          <div style="margin:0 0 10px;font-family:'JetBrains Mono',monospace;font-size:11px;letter-spacing:0.1em;text-transform:uppercase;color:#6a779b">רשימה לא ממוספרת</div>
+          <ul style="margin:0;padding-inline-start:20px;font-size:16px;line-height:1.9;color:#c9d3ea">
+            <li>שכבת ניתוח שממירה <code style="font-family:'JetBrains Mono',monospace;font-size:0.88em;background:#0a0c1a;border:1px solid #222c4d;border-radius:5px;padding:2px 6px;color:#7fdbca">.md</code> לעץ בלוקים</li>
+            <li>שכבת רינדור
+              <ul style="margin:6px 0 0;padding-inline-start:20px;color:#a8b4d2">
+                <li>תבניות RTL</li>
+                <li>הדגשת סינטקס</li>
+              </ul>
+            </li>
+            <li>שכבת חיפוש</li>
+          </ul>
+        </div>
+        <div>
+          <div style="margin:0 0 10px;font-family:'JetBrains Mono',monospace;font-size:11px;letter-spacing:0.1em;text-transform:uppercase;color:#6a779b">רשימה ממוספרת</div>
+          <ol style="margin:0;padding-inline-start:22px;font-size:16px;line-height:1.9;color:#c9d3ea">
+            <li>התקנת ה‑CLI</li>
+            <li>הגדרת <code style="font-family:'JetBrains Mono',monospace;font-size:0.88em;background:#0a0c1a;border:1px solid #222c4d;border-radius:5px;padding:2px 6px;color:#7fdbca">locale: he</code></li>
+            <li>בנייה ופרסום</li>
+          </ol>
+        </div>
+      </div>
+      <div style="margin:24px 0 0;padding:18px 20px;background:#0a0c1a;border:1px solid #222c4d;border-radius:10px">
+        <div style="margin:0 0 12px;font-family:'JetBrains Mono',monospace;font-size:11px;letter-spacing:0.1em;text-transform:uppercase;color:#6a779b">רשימת משימות</div>
+        <div style="display:flex;flex-direction:column;gap:10px">
+          <div onClick="{{ task.t0 }}" style="display:flex;align-items:center;gap:11px;cursor:pointer;font-size:16px;color:#8f9dc0">
+            <span style="flex:none;display:grid;place-items:center;width:19px;height:19px;border-radius:5px;background:#2ecc71;color:#06210f;font-size:12px;font-weight:700"><sc-if value="{{ tasks.t0 }}" hint-placeholder-val="{{ true }}"><span>✓</span></sc-if></span>
+            <span style="text-decoration:line-through">הגדרת <span dir="ltr">dir="rtl"</span> על שורש המסמך</span>
+          </div>
+          <div onClick="{{ task.t1 }}" style="display:flex;align-items:center;gap:11px;cursor:pointer;font-size:16px;color:#8f9dc0">
+            <span style="flex:none;display:grid;place-items:center;width:19px;height:19px;border-radius:5px;background:#2ecc71;color:#06210f;font-size:12px;font-weight:700"><sc-if value="{{ tasks.t1 }}" hint-placeholder-val="{{ true }}"><span>✓</span></sc-if></span>
+            <span style="text-decoration:line-through">מעבר לתכונות לוגיות בכל הפריסה</span>
+          </div>
+          <div onClick="{{ task.t2 }}" style="display:flex;align-items:center;gap:11px;cursor:pointer;font-size:16px;color:#c9d3ea">
+            <span style="flex:none;display:grid;place-items:center;width:19px;height:19px;border-radius:5px;border:1.5px solid #3d5a80;box-sizing:border-box;color:#2ecc71;font-size:12px;font-weight:700"><sc-if value="{{ tasks.t2 }}" hint-placeholder-val="{{ false }}"><span>✓</span></sc-if></span>
+            <span>שיקוף אייקוני ניווט בכיוון RTL</span>
+          </div>
+        </div>
+      </div>
+      <div style="margin:24px 0 0">
+        <div style="margin:0 0 12px;font-family:'JetBrains Mono',monospace;font-size:11px;letter-spacing:0.1em;text-transform:uppercase;color:#6a779b">רשימת הגדרות</div>
+        <dl style="margin:0;display:grid;gap:14px">
+          <div style="padding-inline-start:14px;border-inline-start:2px solid #0088cc">
+            <dt style="font-weight:700;color:#e9edf7;font-size:15.5px">בלוק</dt>
+            <dd style="margin:2px 0 0;font-size:15.5px;color:#a8b4d2">יחידת התוכן הקטנה ביותר שהתיעוד מרנדר בנפרד.</dd>
+          </div>
+          <div style="padding-inline-start:14px;border-inline-start:2px solid #2ecc71">
+            <dt style="font-weight:700;color:#e9edf7;font-size:15.5px">קטע</dt>
+            <dd style="margin:2px 0 0;font-size:15.5px;color:#a8b4d2">אוסף בלוקים תחת כותרת H2 אחת, עם עוגן משלו.</dd>
+          </div>
+        </dl>
+      </div>
+    </section>
+
+    <section id="sec-03" data-sec="03" style="background:#151c36;border:1px solid #253156;border-radius:12px;padding:32px;margin:0 0 22px;box-shadow:0 6px 30px rgba(0,0,0,0.25)">
+      <h2 style="display:flex;align-items:baseline;gap:12px;margin:0 0 20px;padding-bottom:14px;border-bottom:1px solid #253156;font-size:27px;font-weight:700;color:#e9edf7">
+        <span style="font-family:'JetBrains Mono',monospace;font-size:14px;font-weight:500;color:#45b6ec">03</span>
+        ציטוטים והתראות
+      </h2>
+      <blockquote style="margin:0 0 22px;padding:18px 22px;background:#0a0c1a;border-inline-start:3px solid #3d5a80;border-radius:0 10px 10px 0;font-size:17px;line-height:1.8;color:#c9d3ea">
+        תיעוד טוב לא מסביר מה הקוד עושה. הוא מסביר למה החלטנו שזה מה שהוא צריך לעשות.
+        <footer style="margin-top:10px;font-size:13px;color:#6a779b">— מתוך מדריך הסגנון הפנימי</footer>
+      </blockquote>
+      <div style="display:flex;gap:14px;padding:16px 18px;border-radius:10px;background:rgba(0,136,204,0.12);border:1px solid rgba(0,136,204,0.28);border-inline-start:3px solid #0088cc;margin:0 0 12px">
+        <span style="flex:none;display:grid;place-items:center;width:22px;height:22px;border-radius:50%;background:#0088cc;color:#02131f;font-family:'JetBrains Mono',monospace;font-size:13px;font-weight:700">i</span>
+        <div style="font-size:15.5px;line-height:1.75;color:#d6dff2"><strong style="color:#fff">מידע.</strong> בלוקי קוד נשארים <span dir="ltr">LTR</span> גם בתוך מסמך עברי — הכיוון נקבע על הבלוק, לא על העמוד.</div>
+      </div>
+      <div style="display:flex;gap:14px;padding:16px 18px;border-radius:10px;background:rgba(46,204,113,0.12);border:1px solid rgba(46,204,113,0.28);border-inline-start:3px solid #2ecc71;margin:0 0 12px">
+        <span style="flex:none;display:grid;place-items:center;width:22px;height:22px;border-radius:50%;background:#2ecc71;color:#06210f;font-size:13px;font-weight:700">✓</span>
+        <div style="font-size:15.5px;line-height:1.75;color:#d6dff2"><strong style="color:#fff">הצלחה.</strong> העמוד עבר בדיקת RTL: אין תכונה פיזית אחת בפריסה.</div>
+      </div>
+      <div style="display:flex;gap:14px;padding:16px 18px;border-radius:10px;background:rgba(243,156,18,0.12);border:1px solid rgba(243,156,18,0.28);border-inline-start:3px solid #f39c12;margin:0 0 12px">
+        <span style="flex:none;display:grid;place-items:center;width:22px;height:22px;border-radius:50%;background:#f39c12;color:#241300;font-size:13px;font-weight:700">!</span>
+        <div style="font-size:15.5px;line-height:1.75;color:#d6dff2"><strong style="color:#fff">אזהרה.</strong> צלליות וגרדיאנטים לא מתהפכים לבד. אם יש להם משמעות כיוונית, הפוך אותם במפורש.</div>
+      </div>
+      <div style="display:flex;gap:14px;padding:16px 18px;border-radius:10px;background:rgba(231,76,60,0.12);border:1px solid rgba(231,76,60,0.28);border-inline-start:3px solid #e74c3c;margin:0 0 12px">
+        <span style="flex:none;display:grid;place-items:center;width:22px;height:22px;border-radius:50%;background:#e74c3c;color:#2b0703;font-size:13px;font-weight:700">✕</span>
+        <div style="font-size:15.5px;line-height:1.75;color:#d6dff2"><strong style="color:#fff">שגיאה.</strong> <code style="font-family:'JetBrains Mono',monospace;font-size:0.88em;background:rgba(0,0,0,0.35);border-radius:5px;padding:2px 6px;color:#ffb3aa" dir="ltr">flex-direction: row-reverse</code> בתוך הקשר RTL מחזיר את הסדר ל‑LTR. אל תשתמש בו כדי "ליצור" RTL.</div>
+      </div>
+      <div style="display:flex;gap:14px;padding:16px 18px;border-radius:10px;background:rgba(155,89,182,0.12);border:1px solid rgba(155,89,182,0.28);border-inline-start:3px solid #9b59b6">
+        <span style="flex:none;display:grid;place-items:center;width:22px;height:22px;border-radius:50%;background:#9b59b6;color:#160521;font-size:13px;font-weight:700">?</span>
+        <div style="font-size:15.5px;line-height:1.75;color:#d6dff2"><strong style="color:#fff">הערה.</strong> שדות טופס מקבלים <code style="font-family:'JetBrains Mono',monospace;font-size:0.88em;background:rgba(0,0,0,0.35);border-radius:5px;padding:2px 6px;color:#dcb6ee" dir="ltr">dir="auto"</code> כדי שכל ערך יזהה את הכיוון של עצמו.</div>
+      </div>
+    </section>
+
+    <section id="sec-04" data-sec="04" style="background:#151c36;border:1px solid #253156;border-radius:12px;padding:32px;margin:0 0 22px;box-shadow:0 6px 30px rgba(0,0,0,0.25)">
+      <h2 style="display:flex;align-items:baseline;gap:12px;margin:0 0 20px;padding-bottom:14px;border-bottom:1px solid #253156;font-size:27px;font-weight:700;color:#e9edf7">
+        <span style="font-family:'JetBrains Mono',monospace;font-size:14px;font-weight:500;color:#45b6ec">04</span>
+        בלוקי קוד
+      </h2>
+      <div style="border:1px solid #253156;border-radius:10px;overflow:hidden;background:#0a0c1a;margin:0 0 20px">
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:0 14px;background:#12172c;border-bottom:1px solid #253156">
+          <div style="display:flex;gap:2px">
+            <button onClick="{{ tab.js }}" style="padding:11px 14px;background:none;border:none;border-bottom:2px solid;font-family:'JetBrains Mono',monospace;font-size:12.5px;cursor:pointer;border-color:{{ tabLine.js }};color:{{ tabFg.js }}">JavaScript</button>
+            <button onClick="{{ tab.py }}" style="padding:11px 14px;background:none;border:none;border-bottom:2px solid;font-family:'JetBrains Mono',monospace;font-size:12.5px;cursor:pointer;border-color:{{ tabLine.py }};color:{{ tabFg.py }}">Python</button>
+            <button onClick="{{ tab.curl }}" style="padding:11px 14px;background:none;border:none;border-bottom:2px solid;font-family:'JetBrains Mono',monospace;font-size:12.5px;cursor:pointer;border-color:{{ tabLine.curl }};color:{{ tabFg.curl }}">cURL</button>
+          </div>
+          <button onClick="{{ copyCode }}" style="flex:none;padding:5px 11px;background:none;border:1px solid #2b3660;border-radius:6px;font-family:inherit;font-size:12px;color:#93a0c2;cursor:pointer" style-hover="background:#1a2340;color:#e9edf7">
+            <sc-if value="{{ copiedCode }}" hint-placeholder-val="{{ false }}"><span style="color:#2ecc71">הועתק ✓</span></sc-if>
+            <sc-if value="{{ notCopiedCode }}" hint-placeholder-val="{{ true }}"><span>העתק</span></sc-if>
+          </button>
+        </div>
+        <sc-if value="{{ isJs }}" hint-placeholder-val="{{ true }}">
+        <pre dir="ltr" style="margin:0;padding:20px;font-family:'JetBrains Mono',monospace;font-size:13.5px;line-height:1.75;color:#c3cee3;text-align:left;overflow-x:auto"><span style="color:#c586c0">import</span> { Nimbus } <span style="color:#c586c0">from</span> <span style="color:#ce9178">"@nimbus/sdk"</span>;
+
+<span style="color:#569cd6">const</span> <span style="color:#9cdcfe">client</span> = <span style="color:#c586c0">new</span> <span style="color:#4ec9b0">Nimbus</span>({ <span style="color:#9cdcfe">apiKey</span>: process.env.<span style="color:#9cdcfe">NIMBUS_KEY</span> });
+
+<span style="color:#6a9955">// create a Hebrew, right-to-left document
+</span><span style="color:#569cd6">const</span> <span style="color:#9cdcfe">doc</span> = <span style="color:#c586c0">await</span> client.docs.<span style="color:#dcdcaa">create</span>({
+  <span style="color:#9cdcfe">slug</span>: <span style="color:#ce9178">"markdown-components"</span>,
+  <span style="color:#9cdcfe">locale</span>: <span style="color:#ce9178">"he"</span>,
+  <span style="color:#9cdcfe">direction</span>: <span style="color:#ce9178">"rtl"</span>,
+  <span style="color:#9cdcfe">blocks</span>: <span style="color:#b5cea8">9</span>,
+});
+
+console.<span style="color:#dcdcaa">log</span>(doc.<span style="color:#9cdcfe">url</span>);</pre>
+        </sc-if>
+        <sc-if value="{{ isPy }}" hint-placeholder-val="{{ false }}">
+        <pre dir="ltr" style="margin:0;padding:20px;font-family:'JetBrains Mono',monospace;font-size:13.5px;line-height:1.75;color:#c3cee3;text-align:left;overflow-x:auto"><span style="color:#c586c0">import</span> os
+<span style="color:#c586c0">from</span> nimbus <span style="color:#c586c0">import</span> Nimbus
+
+<span style="color:#9cdcfe">client</span> = <span style="color:#4ec9b0">Nimbus</span>(api_key=os.environ[<span style="color:#ce9178">"NIMBUS_KEY"</span>])
+
+<span style="color:#6a9955"># create a Hebrew, right-to-left document
+</span><span style="color:#9cdcfe">doc</span> = client.docs.<span style="color:#dcdcaa">create</span>(
+    slug=<span style="color:#ce9178">"markdown-components"</span>,
+    locale=<span style="color:#ce9178">"he"</span>,
+    direction=<span style="color:#ce9178">"rtl"</span>,
+    blocks=<span style="color:#b5cea8">9</span>,
+)
+
+<span style="color:#dcdcaa">print</span>(doc.url)</pre>
+        </sc-if>
+        <sc-if value="{{ isCurl }}" hint-placeholder-val="{{ false }}">
+        <pre dir="ltr" style="margin:0;padding:20px;font-family:'JetBrains Mono',monospace;font-size:13.5px;line-height:1.75;color:#c3cee3;text-align:left;overflow-x:auto"><span style="color:#dcdcaa">curl</span> -X POST https://api.nimbus.dev/v3/docs \
+  -H <span style="color:#ce9178">"Authorization: Bearer $NIMBUS_KEY"</span> \
+  -H <span style="color:#ce9178">"Content-Type: application/json"</span> \
+  -d <span style="color:#ce9178">'{"slug":"markdown-components","locale":"he","direction":"rtl"}'</span></pre>
+        </sc-if>
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:16px">
+        <div>
+          <div style="margin:0 0 8px;font-family:'JetBrains Mono',monospace;font-size:11px;letter-spacing:0.1em;text-transform:uppercase;color:#6a779b">בלוק שינויים</div>
+          <pre dir="ltr" style="margin:0;padding:16px 18px;background:#0a0c1a;border:1px solid #222c4d;border-radius:10px;font-family:'JetBrains Mono',monospace;font-size:13px;line-height:1.8;text-align:left;overflow-x:auto"><span style="display:block;background:rgba(231,76,60,0.12);color:#f0918a">- direction: "ltr"</span><span style="display:block;background:rgba(46,204,113,0.12);color:#88e0ab">+ direction: "rtl"</span><span style="color:#c3cee3">  locale: "he"</span></pre>
+        </div>
+        <div>
+          <div style="margin:0 0 8px;font-family:'JetBrains Mono',monospace;font-size:11px;letter-spacing:0.1em;text-transform:uppercase;color:#6a779b">טרמינל</div>
+          <pre dir="ltr" style="margin:0;padding:16px 18px;background:#0a0c1a;border:1px solid #222c4d;border-radius:10px;font-family:'JetBrains Mono',monospace;font-size:13px;line-height:1.8;text-align:left;overflow-x:auto"><span style="color:#6a779b">$</span> npx nimbus build --locale he
+<span style="color:#2ecc71">✔</span> <span style="color:#c3cee3">24 documents compiled in 1.8s
+</span><span style="color:#f39c12">!</span> <span style="color:#c3cee3">2 drafts skipped</span></pre>
+        </div>
+      </div>
+    </section>
+
+    <section id="sec-05" data-sec="05" style="background:#151c36;border:1px solid #253156;border-radius:12px;padding:32px;margin:0 0 22px;box-shadow:0 6px 30px rgba(0,0,0,0.25)">
+      <h2 style="display:flex;align-items:baseline;gap:12px;margin:0 0 20px;padding-bottom:14px;border-bottom:1px solid #253156;font-size:27px;font-weight:700;color:#e9edf7">
+        <span style="font-family:'JetBrains Mono',monospace;font-size:14px;font-weight:500;color:#45b6ec">05</span>
+        טבלאות
+      </h2>
+      <div style="border:1px solid #253156;border-radius:10px;overflow:hidden;margin:0 0 24px">
+        <table style="width:100%;border-collapse:collapse;background:#0a0c1a;font-size:15px">
+          <thead>
+            <tr style="background:#0088cc">
+              <th style="padding:13px 16px;text-align:start;font-weight:600;color:#fff">רכיב</th>
+              <th style="padding:13px 16px;text-align:start;font-weight:600;color:#fff">סינטקס</th>
+              <th style="padding:13px 16px;text-align:start;font-weight:600;color:#fff">שימוש</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr style="border-bottom:1px solid #1e2745" style-hover="background:rgba(0,136,204,0.07)">
+              <td style="padding:13px 16px;color:#e9edf7">כותרת קטע</td>
+              <td style="padding:13px 16px"><code dir="ltr" style="font-family:'JetBrains Mono',monospace;font-size:12.5px;color:#7fdbca">## כותרת</code></td>
+              <td style="padding:13px 16px;color:#93a0c2">פותח נושא חדש</td>
+            </tr>
+            <tr style="border-bottom:1px solid #1e2745" style-hover="background:rgba(0,136,204,0.07)">
+              <td style="padding:13px 16px;color:#e9edf7">התראה</td>
+              <td style="padding:13px 16px"><code dir="ltr" style="font-family:'JetBrains Mono',monospace;font-size:12.5px;color:#7fdbca">::: warning</code></td>
+              <td style="padding:13px 16px;color:#93a0c2">אזהרה בתוך הזרימה</td>
+            </tr>
+            <tr style="border-bottom:1px solid #1e2745" style-hover="background:rgba(0,136,204,0.07)">
+              <td style="padding:13px 16px;color:#e9edf7">בלוק קוד</td>
+              <td style="padding:13px 16px"><code dir="ltr" style="font-family:'JetBrains Mono',monospace;font-size:12.5px;color:#7fdbca">```js title=…</code></td>
+              <td style="padding:13px 16px;color:#93a0c2">דוגמה שאפשר להריץ</td>
+            </tr>
+            <tr style-hover="background:rgba(0,136,204,0.07)">
+              <td style="padding:13px 16px;color:#e9edf7">תג</td>
+              <td style="padding:13px 16px"><code dir="ltr" style="font-family:'JetBrains Mono',monospace;font-size:12.5px;color:#7fdbca">{badge:new}</code></td>
+              <td style="padding:13px 16px;color:#93a0c2">סטטוס של ערך</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <div style="margin:0 0 10px;font-family:'JetBrains Mono',monospace;font-size:11px;letter-spacing:0.1em;text-transform:uppercase;color:#6a779b">מספרים נשארים LTR</div>
+      <div style="border:1px solid #253156;border-radius:10px;overflow:hidden">
+        <table style="width:100%;border-collapse:collapse;background:#0a0c1a;font-size:15px">
+          <thead>
+            <tr style="background:#12172c">
+              <th style="padding:12px 16px;text-align:start;font-weight:600;color:#c9d3ea;border-bottom:1px solid #253156">מסמך</th>
+              <th style="padding:12px 16px;text-align:start;font-weight:600;color:#c9d3ea;border-bottom:1px solid #253156">סטטוס</th>
+              <th dir="ltr" style="padding:12px 16px;text-align:end;font-weight:600;color:#c9d3ea;border-bottom:1px solid #253156">מילים</th>
+              <th dir="ltr" style="padding:12px 16px;text-align:end;font-weight:600;color:#c9d3ea;border-bottom:1px solid #253156">עודכן</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr style="border-bottom:1px solid #1e2745" style-hover="background:rgba(0,136,204,0.07)">
+              <td style="padding:12px 16px;color:#e9edf7">רכיבי Markdown</td>
+              <td style="padding:12px 16px"><span style="display:inline-block;padding:3px 11px;border-radius:20px;background:#2ecc71;color:#06210f;font-size:12px;font-weight:700">פורסם</span></td>
+              <td dir="ltr" style="padding:12px 16px;text-align:end;font-family:'JetBrains Mono',monospace;color:#c9d3ea">1,428</td>
+              <td dir="ltr" style="padding:12px 16px;text-align:end;font-family:'JetBrains Mono',monospace;color:#93a0c2">12.07.2026</td>
+            </tr>
+            <tr style="border-bottom:1px solid #1e2745" style-hover="background:rgba(0,136,204,0.07)">
+              <td style="padding:12px 16px;color:#e9edf7">אימות ומפתחות</td>
+              <td style="padding:12px 16px"><span style="display:inline-block;padding:3px 11px;border-radius:20px;background:#f39c12;color:#241300;font-size:12px;font-weight:700">בבדיקה</span></td>
+              <td dir="ltr" style="padding:12px 16px;text-align:end;font-family:'JetBrains Mono',monospace;color:#c9d3ea">960</td>
+              <td dir="ltr" style="padding:12px 16px;text-align:end;font-family:'JetBrains Mono',monospace;color:#93a0c2">28.06.2026</td>
+            </tr>
+            <tr style-hover="background:rgba(0,136,204,0.07)">
+              <td style="padding:12px 16px;color:#e9edf7">מגבלות קריאה</td>
+              <td style="padding:12px 16px"><span style="display:inline-block;padding:3px 11px;border-radius:20px;background:#1b2440;color:#93a0c2;font-size:12px;font-weight:700">טיוטה</span></td>
+              <td dir="ltr" style="padding:12px 16px;text-align:end;font-family:'JetBrains Mono',monospace;color:#c9d3ea">204</td>
+              <td dir="ltr" style="padding:12px 16px;text-align:end;font-family:'JetBrains Mono',monospace;color:#93a0c2">03.07.2026</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section id="sec-06" data-sec="06" style="background:#151c36;border:1px solid #253156;border-radius:12px;padding:32px;margin:0 0 22px;box-shadow:0 6px 30px rgba(0,0,0,0.25)">
+      <h2 style="display:flex;align-items:baseline;gap:12px;margin:0 0 20px;padding-bottom:14px;border-bottom:1px solid #253156;font-size:27px;font-weight:700;color:#e9edf7">
+        <span style="font-family:'JetBrains Mono',monospace;font-size:14px;font-weight:500;color:#45b6ec">06</span>
+        רפרנס API
+      </h2>
+      <div style="border:1px solid #253156;border-radius:10px;overflow:hidden;background:#0a0c1a;margin:0 0 14px">
+        <div style="display:flex;align-items:center;gap:14px;padding:14px 18px;background:rgba(0,136,204,0.08);border-bottom:1px solid #253156">
+          <span style="flex:none;padding:4px 11px;border-radius:6px;background:#2ecc71;color:#06210f;font-family:'JetBrains Mono',monospace;font-size:12px;font-weight:700">GET</span>
+          <span dir="ltr" style="font-family:'JetBrains Mono',monospace;font-size:14px;color:#e9edf7">/v3/docs/{slug}</span>
+          <span style="margin-inline-start:auto;font-size:13.5px;color:#93a0c2">שליפת מסמך בודד</span>
+        </div>
+        <div style="padding:18px">
+          <p style="margin:0 0 16px;font-size:15.5px;line-height:1.8;color:#c9d3ea">מחזיר את עץ הבלוקים המרונדר יחד עם המטא‑דאטה. אם המסמך טיוטה, נדרש מפתח עם הרשאת <code style="font-family:'JetBrains Mono',monospace;font-size:0.88em;background:#12172c;border-radius:5px;padding:2px 6px;color:#7fdbca" dir="ltr">docs:read_draft</code>.</p>
+          <table style="width:100%;border-collapse:collapse;font-size:14.5px">
+            <thead>
+              <tr>
+                <th style="padding:9px 12px;text-align:start;font-family:'JetBrains Mono',monospace;font-size:11px;letter-spacing:0.08em;text-transform:uppercase;color:#6a779b;border-bottom:1px solid #253156">פרמטר</th>
+                <th style="padding:9px 12px;text-align:start;font-family:'JetBrains Mono',monospace;font-size:11px;letter-spacing:0.08em;text-transform:uppercase;color:#6a779b;border-bottom:1px solid #253156">טיפוס</th>
+                <th style="padding:9px 12px;text-align:start;font-family:'JetBrains Mono',monospace;font-size:11px;letter-spacing:0.08em;text-transform:uppercase;color:#6a779b;border-bottom:1px solid #253156">תיאור</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr style="border-bottom:1px solid #1a2340">
+                <td style="padding:11px 12px"><code dir="ltr" style="font-family:'JetBrains Mono',monospace;color:#7fdbca">slug</code> <span style="font-size:11px;color:#e74c3c">חובה</span></td>
+                <td style="padding:11px 12px;font-family:'JetBrains Mono',monospace;color:#93a0c2">string</td>
+                <td style="padding:11px 12px;color:#c9d3ea">מזהה המסמך בכתובת</td>
+              </tr>
+              <tr>
+                <td style="padding:11px 12px"><code dir="ltr" style="font-family:'JetBrains Mono',monospace;color:#7fdbca">locale</code></td>
+                <td style="padding:11px 12px;font-family:'JetBrains Mono',monospace;color:#93a0c2">"he" | "en"</td>
+                <td style="padding:11px 12px;color:#c9d3ea">ברירת המחדל היא שפת הפרויקט</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+      <div style="display:flex;align-items:center;gap:14px;padding:14px 18px;border:1px solid #253156;border-radius:10px;background:#0a0c1a;margin:0 0 10px">
+        <span style="flex:none;padding:4px 11px;border-radius:6px;background:#0088cc;color:#02131f;font-family:'JetBrains Mono',monospace;font-size:12px;font-weight:700">POST</span>
+        <span dir="ltr" style="font-family:'JetBrains Mono',monospace;font-size:14px;color:#e9edf7">/v3/docs</span>
+        <span style="margin-inline-start:auto;font-size:13.5px;color:#93a0c2">יצירת מסמך</span>
+      </div>
+      <div style="display:flex;align-items:center;gap:14px;padding:14px 18px;border:1px solid #253156;border-radius:10px;background:#0a0c1a">
+        <span style="flex:none;padding:4px 11px;border-radius:6px;background:#e74c3c;color:#2b0703;font-family:'JetBrains Mono',monospace;font-size:12px;font-weight:700">DEL</span>
+        <span dir="ltr" style="font-family:'JetBrains Mono',monospace;font-size:14px;color:#e9edf7">/v3/docs/{slug}</span>
+        <span style="margin-inline-start:auto;font-size:13.5px;color:#93a0c2">מחיקה רכה</span>
+      </div>
+    </section>
+
+    <section id="sec-07" data-sec="07" style="background:#151c36;border:1px solid #253156;border-radius:12px;padding:32px;margin:0 0 22px;box-shadow:0 6px 30px rgba(0,0,0,0.25)">
+      <h2 style="display:flex;align-items:baseline;gap:12px;margin:0 0 20px;padding-bottom:14px;border-bottom:1px solid #253156;font-size:27px;font-weight:700;color:#e9edf7">
+        <span style="font-family:'JetBrains Mono',monospace;font-size:14px;font-weight:500;color:#45b6ec">07</span>
+        מדיה, עצים ותרשימים
+      </h2>
+      <figure style="margin:0 0 24px">
+        <div style="height:230px;border-radius:10px;border:1px solid #253156;background-color:#0a0c1a;background-image:repeating-linear-gradient(135deg,rgba(61,90,128,0.16) 0 10px,transparent 10px 20px);display:grid;place-items:center">
+          <span style="font-family:'JetBrains Mono',monospace;font-size:12px;letter-spacing:0.08em;color:#6a779b" dir="ltr">screenshot · docs dashboard · 1600×900</span>
+        </div>
+        <figcaption style="margin-top:10px;font-size:13.5px;color:#93a0c2">לוח הבקרה של התיעוד. לכל צילום מסך יש כיתוב שמסביר מה מסתכלים עליו.</figcaption>
+      </figure>
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(290px,1fr));gap:16px">
+        <div>
+          <div style="margin:0 0 8px;font-family:'JetBrains Mono',monospace;font-size:11px;letter-spacing:0.1em;text-transform:uppercase;color:#6a779b">עץ קבצים</div>
+          <pre dir="ltr" style="margin:0;padding:18px;background:#0a0c1a;border:1px solid #222c4d;border-radius:10px;font-family:'JetBrains Mono',monospace;font-size:12.5px;line-height:1.85;text-align:left;overflow-x:auto"><span style="color:#f39c12">docs/</span>
+├─ <span style="color:#f39c12">he/</span>
+│  ├─ <span style="color:#45b6ec">index.md</span>
+│  ├─ <span style="color:#45b6ec">markdown-components.md</span>
+│  └─ <span style="color:#f39c12">api/</span>
+│     ├─ <span style="color:#45b6ec">auth.md</span>
+│     └─ <span style="color:#45b6ec">webhooks.md</span>
+├─ <span style="color:#45b6ec">nimbus.config.ts</span>
+└─ <span style="color:#f39c12">theme/</span>
+   └─ <span style="color:#45b6ec">rtl.css</span></pre>
+        </div>
+        <div>
+          <div style="margin:0 0 8px;font-family:'JetBrains Mono',monospace;font-size:11px;letter-spacing:0.1em;text-transform:uppercase;color:#6a779b">תרשים זרימה</div>
+          <pre dir="ltr" style="margin:0;padding:18px;background:#0a0c1a;border:1px solid #222c4d;border-radius:10px;font-family:'JetBrains Mono',monospace;font-size:12.5px;line-height:1.6;text-align:center;color:#c3cee3;overflow-x:auto">┌────────┐   ┌────────┐   ┌────────┐
+│  .md   │ → │ parser │ → │ blocks │
+└────────┘   └────────┘   └────────┘
+                              ↓
+                        ┌──────────┐
+                        │ RTL view │
+                        └──────────┘</pre>
+        </div>
+      </div>
+    </section>
+
+    <section id="sec-08" data-sec="08" style="background:#151c36;border:1px solid #253156;border-radius:12px;padding:32px;margin:0 0 22px;box-shadow:0 6px 30px rgba(0,0,0,0.25)">
+      <h2 style="display:flex;align-items:baseline;gap:12px;margin:0 0 20px;padding-bottom:14px;border-bottom:1px solid #253156;font-size:27px;font-weight:700;color:#e9edf7">
+        <span style="font-family:'JetBrains Mono',monospace;font-size:14px;font-weight:500;color:#45b6ec">08</span>
+        רכיבי ממשק
+      </h2>
+      <div style="margin:0 0 22px">
+        <div style="margin:0 0 10px;font-family:'JetBrains Mono',monospace;font-size:11px;letter-spacing:0.1em;text-transform:uppercase;color:#6a779b">תגים</div>
+        <div style="display:flex;flex-wrap:wrap;gap:8px">
+          <span style="padding:4px 13px;border-radius:20px;background:#0088cc;color:#02131f;font-size:12.5px;font-weight:700">ראשי</span>
+          <span style="padding:4px 13px;border-radius:20px;background:#2ecc71;color:#06210f;font-size:12.5px;font-weight:700">פורסם</span>
+          <span style="padding:4px 13px;border-radius:20px;background:#f39c12;color:#241300;font-size:12.5px;font-weight:700">בטא</span>
+          <span style="padding:4px 13px;border-radius:20px;background:#e74c3c;color:#2b0703;font-size:12.5px;font-weight:700">הוצא משימוש</span>
+          <span style="padding:4px 13px;border-radius:20px;background:#9b59b6;color:#160521;font-size:12.5px;font-weight:700">ניסיוני</span>
+          <span style="padding:4px 13px;border-radius:20px;border:1px solid #3d5a80;color:#93a0c2;font-size:12.5px;font-weight:700">טיוטה</span>
+        </div>
+      </div>
+      <div style="margin:0 0 22px">
+        <div style="margin:0 0 10px;font-family:'JetBrains Mono',monospace;font-size:11px;letter-spacing:0.1em;text-transform:uppercase;color:#6a779b">כפתורים וקיצורי מקלדת</div>
+        <div style="display:flex;flex-wrap:wrap;align-items:center;gap:10px">
+          <button style="padding:9px 18px;border:none;border-radius:8px;background:#0088cc;color:#02131f;font-family:inherit;font-size:14px;font-weight:600;cursor:pointer" style-hover="background:#0f9bdf">פעולה ראשית</button>
+          <button style="padding:9px 18px;border:1px solid #2b3660;border-radius:8px;background:none;color:#c9d3ea;font-family:inherit;font-size:14px;cursor:pointer" style-hover="background:#1a2340;border-color:#3d5a80">משנית</button>
+          <button style="padding:9px 14px;border:none;border-radius:8px;background:none;color:#93a0c2;font-family:inherit;font-size:14px;cursor:pointer" style-hover="color:#e9edf7">שקופה</button>
+          <span style="display:flex;align-items:center;gap:5px;margin-inline-start:8px;font-size:13px;color:#93a0c2">
+            <kbd style="font-family:'JetBrains Mono',monospace;font-size:12px;padding:3px 8px;border-radius:6px;background:#1b2440;border:1px solid #34406a;border-bottom-width:2px;color:#d6dff2">⌘</kbd>
+            <kbd style="font-family:'JetBrains Mono',monospace;font-size:12px;padding:3px 8px;border-radius:6px;background:#1b2440;border:1px solid #34406a;border-bottom-width:2px;color:#d6dff2">K</kbd>
+            <span>לחיפוש</span>
+          </span>
+        </div>
+      </div>
+      <div style="margin:0 0 22px">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin:0 0 8px">
+          <span style="font-family:'JetBrains Mono',monospace;font-size:11px;letter-spacing:0.1em;text-transform:uppercase;color:#6a779b">התקדמות תרגום</span>
+          <span style="font-family:'JetBrains Mono',monospace;font-size:12.5px;color:#45b6ec" dir="ltr">64%</span>
+        </div>
+        <div style="height:7px;border-radius:20px;background:#0a0c1a;overflow:hidden">
+          <div style="width:64%;height:100%;border-radius:20px;background:#0088cc"></div>
+        </div>
+      </div>
+      <div style="margin:0 0 22px">
+        <div style="margin:0 0 12px;font-family:'JetBrains Mono',monospace;font-size:11px;letter-spacing:0.1em;text-transform:uppercase;color:#6a779b">שלבים</div>
+        <div style="display:grid;gap:0">
+          <div style="display:flex;gap:14px">
+            <div style="display:flex;flex-direction:column;align-items:center;flex:none"><span style="display:grid;place-items:center;width:28px;height:28px;border-radius:50%;background:#0088cc;color:#02131f;font-family:'JetBrains Mono',monospace;font-size:13px;font-weight:700">1</span><span style="flex:1;width:1px;background:#253156"></span></div>
+            <div style="padding-bottom:18px"><div style="font-size:16px;font-weight:600;color:#e9edf7">כתיבת הקובץ</div><div style="font-size:14.5px;color:#93a0c2">מסמך <span dir="ltr">Markdown</span> אחד עם front‑matter.</div></div>
+          </div>
+          <div style="display:flex;gap:14px">
+            <div style="display:flex;flex-direction:column;align-items:center;flex:none"><span style="display:grid;place-items:center;width:28px;height:28px;border-radius:50%;background:#0088cc;color:#02131f;font-family:'JetBrains Mono',monospace;font-size:13px;font-weight:700">2</span><span style="flex:1;width:1px;background:#253156"></span></div>
+            <div style="padding-bottom:18px"><div style="font-size:16px;font-weight:600;color:#e9edf7">בנייה מקומית</div><div style="font-size:14.5px;color:#93a0c2">בדיקת RTL, קישורים שבורים וכותרות חסרות.</div></div>
+          </div>
+          <div style="display:flex;gap:14px">
+            <div style="flex:none"><span style="display:grid;place-items:center;width:28px;height:28px;border-radius:50%;border:1.5px solid #3d5a80;box-sizing:border-box;color:#93a0c2;font-family:'JetBrains Mono',monospace;font-size:13px;font-weight:700">3</span></div>
+            <div><div style="font-size:16px;font-weight:600;color:#e9edf7">פרסום</div><div style="font-size:14.5px;color:#93a0c2">מיזוג ל‑<span dir="ltr">main</span> מפרסם אוטומטית.</div></div>
+          </div>
+        </div>
+      </div>
+      <div>
+        <div style="margin:0 0 12px;font-family:'JetBrains Mono',monospace;font-size:11px;letter-spacing:0.1em;text-transform:uppercase;color:#6a779b">אקורדיון</div>
+        <details style="border:1px solid #253156;border-radius:10px;background:#0a0c1a;margin:0 0 8px">
+          <summary style="display:flex;align-items:center;justify-content:space-between;padding:14px 18px;font-size:15.5px;font-weight:600;color:#e9edf7">
+            <span>איך מוסיפים רכיב חדש לספרייה?</span>
+            <span style="color:#6a779b;font-size:13px">▾</span>
+          </summary>
+          <div style="padding:0 18px 16px;font-size:15.5px;line-height:1.8;color:#c9d3ea">מגדירים אותו כ‑directive בקובץ התצורה, מוסיפים דוגמה לדף הזה, ומריצים את בדיקת הרכיבים. רכיב שאין לו דוגמה כאן נחשב לא מתועד.</div>
+        </details>
+        <details style="border:1px solid #253156;border-radius:10px;background:#0a0c1a">
+          <summary style="display:flex;align-items:center;justify-content:space-between;padding:14px 18px;font-size:15.5px;font-weight:600;color:#e9edf7">
+            <span>מה קורה לתוכן באנגלית בתוך פסקה עברית?</span>
+            <span style="color:#6a779b;font-size:13px">▾</span>
+          </summary>
+          <div style="padding:0 18px 16px;font-size:15.5px;line-height:1.8;color:#c9d3ea">המעבד עוטף אותו בבידוד כיוון, כך שמספרים, כתובות ומזהים כמו <span dir="ltr">050-1234567</span> או <span dir="ltr">api.nimbus.dev/v3</span> לא מתהפכים.</div>
+        </details>
+      </div>
+    </section>
+
+    <div id="footnotes" style="padding:22px 26px;background:#12172c;border:1px solid #1e2745;border-radius:12px;margin:0 0 26px">
+      <div style="margin:0 0 10px;font-family:'JetBrains Mono',monospace;font-size:11px;letter-spacing:0.1em;text-transform:uppercase;color:#6a779b">הערות שוליים</div>
+      <div style="display:flex;gap:10px;font-size:14.5px;line-height:1.8;color:#a8b4d2">
+        <span style="flex:none;font-family:'JetBrains Mono',monospace;color:#45b6ec">1.</span>
+        <span>"לחץ כאן" הוא לא טקסט קישור. הקישור צריך לתאר את היעד גם כשקוראים אותו לבד, למשל בקורא מסך.</span>
+      </div>
+    </div>
+
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:14px;margin:0 0 26px">
+      <a href="#top" style="display:block;padding:18px 20px;border:1px solid #253156;border-radius:12px;background:#12172c" style-hover="border-color:#3d5a80;background:#161d38">
+        <div style="font-size:12.5px;color:#6a779b;margin-bottom:5px">→ הקודם</div>
+        <div style="font-size:16px;font-weight:600;color:#e9edf7">סגנון כתיבה</div>
+      </a>
+      <a href="#top" style="display:block;padding:18px 20px;border:1px solid #253156;border-radius:12px;background:#12172c;text-align:end" style-hover="border-color:#3d5a80;background:#161d38">
+        <div style="font-size:12.5px;color:#6a779b;margin-bottom:5px">הבא ←</div>
+        <div style="font-size:16px;font-weight:600;color:#e9edf7">אימות ומפתחות</div>
+      </a>
+    </div>
+
+    <div style="display:flex;flex-wrap:wrap;align-items:center;gap:12px;padding:16px 20px;border:1px dashed #2b3660;border-radius:12px">
+      <span style="font-size:14.5px;color:#c9d3ea">העמוד הזה עזר?</span>
+      <button onClick="{{ voteYes }}" style="padding:7px 16px;border:1px solid #2b3660;border-radius:20px;background:none;color:#c9d3ea;font-family:inherit;font-size:13.5px;cursor:pointer" style-hover="border-color:#2ecc71;color:#2ecc71">כן</button>
+      <button onClick="{{ voteNo }}" style="padding:7px 16px;border:1px solid #2b3660;border-radius:20px;background:none;color:#c9d3ea;font-family:inherit;font-size:13.5px;cursor:pointer" style-hover="border-color:#e74c3c;color:#e74c3c">לא ממש</button>
+      <sc-if value="{{ voted }}" hint-placeholder-val="{{ false }}"><span style="font-size:13.5px;color:#2ecc71">תודה — נרשם.</span></sc-if>
+    </div>
+  </main>
+
+  <sc-if value="{{ tocVisible }}" hint-placeholder-val="{{ true }}">
+  <aside style="position:sticky;top:56px;width:244px;height:calc(100vh - 56px);overflow-y:auto;padding:44px 20px 40px;border-inline-start:1px solid #1e2745">
+    <div style="margin:0 0 14px;font-family:'JetBrains Mono',monospace;font-size:11px;letter-spacing:0.1em;text-transform:uppercase;color:#6a779b">בעמוד הזה</div>
+    <div style="position:relative;padding-inline-start:12px">
+      <span style="position:absolute;inset-inline-start:0;top:0;width:2px;height:20px;border-radius:2px;background:#0088cc;transition:transform 0.25s cubic-bezier(0.4,0,0.2,1);transform:translateY({{ tocY }}px)"></span>
+      <span style="position:absolute;inset-inline-start:0;top:0;bottom:0;width:1px;background:#1e2745"></span>
+      <div style="display:flex;flex-direction:column">
+        <a href="#sec-01" onClick="{{ nav.s0 }}" style="display:block;height:32px;line-height:20px;padding:6px 8px;box-sizing:border-box;font-size:13.5px;color:#8f9dc0" style-hover="color:#e9edf7">טיפוגרפיה וכותרות</a>
+        <a href="#sec-02" onClick="{{ nav.s1 }}" style="display:block;height:32px;line-height:20px;padding:6px 8px;box-sizing:border-box;font-size:13.5px;color:#8f9dc0" style-hover="color:#e9edf7">רשימות ומשימות</a>
+        <a href="#sec-03" onClick="{{ nav.s2 }}" style="display:block;height:32px;line-height:20px;padding:6px 8px;box-sizing:border-box;font-size:13.5px;color:#8f9dc0" style-hover="color:#e9edf7">ציטוטים והתראות</a>
+        <a href="#sec-04" onClick="{{ nav.s3 }}" style="display:block;height:32px;line-height:20px;padding:6px 8px;box-sizing:border-box;font-size:13.5px;color:#8f9dc0" style-hover="color:#e9edf7">בלוקי קוד</a>
+        <a href="#sec-05" onClick="{{ nav.s4 }}" style="display:block;height:32px;line-height:20px;padding:6px 8px;box-sizing:border-box;font-size:13.5px;color:#8f9dc0" style-hover="color:#e9edf7">טבלאות</a>
+        <a href="#sec-06" onClick="{{ nav.s5 }}" style="display:block;height:32px;line-height:20px;padding:6px 8px;box-sizing:border-box;font-size:13.5px;color:#8f9dc0" style-hover="color:#e9edf7">רפרנס API</a>
+        <a href="#sec-07" onClick="{{ nav.s6 }}" style="display:block;height:32px;line-height:20px;padding:6px 8px;box-sizing:border-box;font-size:13.5px;color:#8f9dc0" style-hover="color:#e9edf7">מדיה ותרשימים</a>
+        <a href="#sec-08" onClick="{{ nav.s7 }}" style="display:block;height:32px;line-height:20px;padding:6px 8px;box-sizing:border-box;font-size:13.5px;color:#8f9dc0" style-hover="color:#e9edf7">רכיבי ממשק</a>
+      </div>
+    </div>
+    <div style="margin-top:26px;padding-top:18px;border-top:1px solid #1e2745;display:flex;flex-direction:column;gap:8px">
+      <a href="#top" style="font-size:13px;color:#93a0c2" style-hover="color:#45b6ec">דיווח על טעות</a>
+      <a href="#top" style="font-size:13px;color:#93a0c2" style-hover="color:#45b6ec">היסטוריית שינויים</a>
+    </div>
+  </aside>
+  </sc-if>
+
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;showToc&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:true,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;פריסה&quot;},&quot;showRawMarkdown&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:false,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;תוכן&quot;},&quot;defaultCodeTab&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;javascript&quot;,&quot;python&quot;,&quot;curl&quot;],&quot;default&quot;:&quot;javascript&quot;,&quot;tsType&quot;:&quot;'javascript' | 'python' | 'curl'&quot;,&quot;section&quot;:&quot;תוכן&quot;}}">
+class Component extends DCLogic {
+  state = { tab: null, active: 0, copied: "", raw: null, tasks: { t0: true, t1: true, t2: false }, groups: { start: true, guides: true, api: false }, voted: false, narrow: false, mobile: false };
+
+  componentDidMount() {
+    this.onScroll = () => {
+      const nodes = Array.from(document.querySelectorAll("[data-sec]"));
+      if (!nodes.length) return;
+      let i = 0;
+      nodes.forEach((n, idx) => { if (n.getBoundingClientRect().top < 160) i = idx; });
+      if (i !== this.state.active) this.setState({ active: i });
+    };
+    window.addEventListener("scroll", this.onScroll, { passive: true });
+    this.onScroll();
+
+    this.mqNarrow = window.matchMedia("(max-width: 1180px)");
+    this.mqMobile = window.matchMedia("(max-width: 880px)");
+    this.onMq = () => this.setState({ narrow: this.mqNarrow.matches, mobile: this.mqMobile.matches });
+    this.mqNarrow.addEventListener("change", this.onMq);
+    this.mqMobile.addEventListener("change", this.onMq);
+    this.onMq();
+  }
+
+  componentWillUnmount() {
+    window.removeEventListener("scroll", this.onScroll);
+    if (this.mqNarrow) this.mqNarrow.removeEventListener("change", this.onMq);
+    if (this.mqMobile) this.mqMobile.removeEventListener("change", this.onMq);
+    clearTimeout(this.timer);
+  }
+
+  scrollTo(id) {
+    return (e) => {
+      if (e) e.preventDefault();
+      const el = document.getElementById(id);
+      if (!el) return;
+      window.scrollTo({ top: el.getBoundingClientRect().top + window.pageYOffset - 84, behavior: "smooth" });
+    };
+  }
+
+  flash(key, text) {
+    return async () => {
+      try { if (navigator.clipboard && text) await navigator.clipboard.writeText(text); } catch (err) { /* clipboard blocked */ }
+      this.setState({ copied: key });
+      clearTimeout(this.timer);
+      this.timer = setTimeout(() => this.setState({ copied: "" }), 1800);
+    };
+  }
+
+  toggleGroup(key) {
+    return () => this.setState((s) => ({ groups: Object.assign({}, s.groups, { [key]: !s.groups[key] }) }));
+  }
+
+  toggleTask(key) {
+    return () => this.setState((s) => ({ tasks: Object.assign({}, s.tasks, { [key]: !s.tasks[key] }) }));
+  }
+
+  code(tab) {
+    if (tab === "python") return 'from nimbus import Nimbus\n\nclient = Nimbus(api_key=os.environ["NIMBUS_KEY"])\n\ndoc = client.docs.create(\n    slug="markdown-components",\n    locale="he",\n    direction="rtl",\n    blocks=9,\n)\nprint(doc.url)';
+    if (tab === "curl") return 'curl -X POST https://api.nimbus.dev/v3/docs \\\n  -H "Authorization: Bearer $NIMBUS_KEY" \\\n  -H "Content-Type: application/json" \\\n  -d \'{"slug":"markdown-components","locale":"he","direction":"rtl"}\'';
+    return 'import { Nimbus } from "@nimbus/sdk";\n\nconst client = new Nimbus({ apiKey: process.env.NIMBUS_KEY });\n\nconst doc = await client.docs.create({\n  slug: "markdown-components",\n  locale: "he",\n  direction: "rtl",\n  blocks: 9,\n});\n\nconsole.log(doc.url);';
+  }
+
+  renderVals() {
+    const tab = this.state.tab || this.props.defaultCodeTab || "javascript";
+    const raw = this.state.raw === null ? (this.props.showRawMarkdown ?? false) : this.state.raw;
+    const g = this.state.groups;
+    const on = "#e9edf7", off = "#8f9dc0", line = "#0088cc", none = "transparent";
+    return {
+      tocVisible: (this.props.showToc ?? true) && !this.state.narrow,
+      sidebarVisible: !this.state.mobile,
+      sidebarHidden: this.state.mobile,
+      tocY: this.state.active * 32 + 6,
+      nav: {
+        s0: this.scrollTo("sec-01"), s1: this.scrollTo("sec-02"), s2: this.scrollTo("sec-03"), s3: this.scrollTo("sec-04"),
+        s4: this.scrollTo("sec-05"), s5: this.scrollTo("sec-06"), s6: this.scrollTo("sec-07"), s7: this.scrollTo("sec-08")
+      },
+      goTop: this.scrollTo("top"),
+      open: g,
+      closed: { start: !g.start, guides: !g.guides, api: !g.api },
+      toggle: { start: this.toggleGroup("start"), guides: this.toggleGroup("guides"), api: this.toggleGroup("api") },
+      rawOn: raw,
+      rawOff: !raw,
+      toggleRaw: () => this.setState({ raw: !raw }),
+      isJs: tab === "javascript",
+      isPy: tab === "python",
+      isCurl: tab === "curl",
+      tab: { js: () => this.setState({ tab: "javascript" }), py: () => this.setState({ tab: "python" }), curl: () => this.setState({ tab: "curl" }) },
+      tabFg: { js: tab === "javascript" ? on : off, py: tab === "python" ? on : off, curl: tab === "curl" ? on : off },
+      tabLine: { js: tab === "javascript" ? line : none, py: tab === "python" ? line : none, curl: tab === "curl" ? line : none },
+      copyCode: this.flash("code", this.code(tab)),
+      copiedCode: this.state.copied === "code",
+      notCopiedCode: this.state.copied !== "code",
+      copyPage: this.flash("page", "# רכיבי Markdown\n\nכל רכיב שהתיעוד יודע להציג, עם הסינטקס שמייצר אותו."),
+      copiedPage: this.state.copied === "page",
+      notCopiedPage: this.state.copied !== "page",
+      tasks: this.state.tasks,
+      task: { t0: this.toggleTask("t0"), t1: this.toggleTask("t1"), t2: this.toggleTask("t2") },
+      voted: this.state.voted,
+      voteYes: () => this.setState({ voted: true }),
+      voteNo: () => this.setState({ voted: true })
+    };
+  }
+}
+</script>
+</body>
+</html>

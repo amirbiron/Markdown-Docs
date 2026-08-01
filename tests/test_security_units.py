@@ -7,6 +7,7 @@ import time
 import pytest
 
 from app.config import Settings
+from app.middleware import OriginGuard, _is_loopback_origin
 from app.security import (
     BCRYPT_MAX_BYTES,
     LoginRateLimiter,
@@ -217,3 +218,79 @@ def test_pruning_evicts_oldest_when_everything_is_fresh():
         limiter.register_failure([f"ip:{i}"], now=1000.0 + i * 0.001)
     assert len(limiter._buckets) <= 21, f"המילון הגיע ל-{len(limiter._buckets)}"
     assert "ip:59" in limiter._buckets, "דווקא החדשה ביותר פונתה"
+
+
+# ── מקורות loopback ───────────────────────────────────────────────────
+
+
+@pytest.mark.parametrize(
+    "origin",
+    [
+        "http://localhost:8000",
+        "http://localhost:8070",
+        "http://127.0.0.1:9999",
+        "http://[::1]:8070",
+        "https://localhost:8443",
+        "http://LOCALHOST:3000",
+        "http://localhost",
+    ],
+)
+def test_loopback_origins_are_recognised(origin):
+    """כל פורט מקומי, לא רשימה קבועה שנשברת בפורט הבא."""
+    assert _is_loopback_origin(origin), f"{origin} לא זוהה כמקומי"
+
+
+@pytest.mark.parametrize(
+    "origin",
+    [
+        "",
+        "https://evil.example",
+        "http://localhost.evil.example",          # סיומת, לא השם עצמו
+        "http://evil.example/localhost",          # השם בנתיב
+        "http://127.0.0.1.evil.example",
+        "file://localhost/etc/passwd",            # סכימה לא נתמכת
+        "javascript:localhost",
+        "http://0.0.0.0:8070",                    # לא loopback
+        "http://192.168.1.10:8070",
+        "null",
+    ],
+)
+def test_non_loopback_origins_are_rejected(origin):
+    assert not _is_loopback_origin(origin), f"{origin} זוהה בטעות כמקומי"
+
+
+def test_loopback_is_off_in_production():
+    """ההיתר קיים בפיתוח בלבד. בפרודקשן רק ה-allowlist קובע."""
+    prod = Settings(
+        environment="production",
+        session_secret="x" * 64,
+        render_external_url="https://docs.example.com",
+    )
+    assert prod.allow_loopback_origins is False
+    assert prod.origin_allowlist == frozenset({"https://docs.example.com"})
+
+    dev = Settings(environment="development")
+    assert dev.allow_loopback_origins is True
+
+
+def test_explicit_allowlist_still_wins_in_production():
+    """ALLOWED_ORIGINS גובר על RENDER_EXTERNAL_URL, וסלאש בסוף מנורמל."""
+    settings = Settings(
+        environment="production",
+        session_secret="x" * 64,
+        allowed_origins="https://a.example/, https://b.example",
+        render_external_url="https://ignored.example",
+    )
+    assert settings.origin_allowlist == frozenset({"https://a.example", "https://b.example"})
+
+
+def test_guard_accepts_loopback_only_when_enabled():
+    """אותו מקור, שתי הגדרות — ההבדל הוא הדגל בלבד."""
+    strict = OriginGuard(None, allowlist=frozenset({"https://docs.example.com"}))
+    relaxed = OriginGuard(None, allowlist=frozenset(), allow_loopback=True)
+
+    assert strict._accepts("https://docs.example.com")
+    assert not strict._accepts("http://localhost:8070")
+    assert relaxed._accepts("http://localhost:8070")
+    assert not relaxed._accepts("https://evil.example")
+    assert not relaxed._accepts("")

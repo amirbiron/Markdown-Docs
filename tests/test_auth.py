@@ -81,8 +81,19 @@ async def _login(client) -> str:
 # ── מדד 1: בקשה בלי cookie מקבלת 401 ──────────────────────────────────
 
 
-async def test_no_cookie_is_401(client):
-    assert (await client.get("/api/auth/me")).status_code == 401
+async def test_no_cookie_is_401_on_protected_routes(client):
+    """נתיב שדורש אימות דוחה בקשה בלי cookie."""
+    response = await client.post(
+        "/api/projects", json={"name": "בלי כניסה"}, headers={"Origin": ORIGIN}
+    )
+    assert response.status_code == 401
+
+
+async def test_me_is_200_for_anonymous(client):
+    """"אף אחד" הוא תשובה, לא שגיאה — אחרת כל טעינת דף מייצרת רעש."""
+    response = await client.get("/api/auth/me")
+    assert response.status_code == 200
+    assert response.json() == {"authenticated": False}
 
 
 async def test_login_then_me_succeeds(client):
@@ -103,7 +114,7 @@ async def test_expired_token_rejected_even_with_valid_signature(client):
     assert read_token(stale) is None, "read_token קיבל טוקן שפג"
 
     client.cookies.set(COOKIE_NAME, stale)
-    assert (await client.get("/api/auth/me")).status_code == 401
+    assert (await client.get("/api/auth/me")).json()["authenticated"] is False
 
     # ואותו טוקן, נחתם עכשיו, כן עובד — כלומר הדחייה הייתה בגלל exp
     # ולא בגלל שהחתימה נשברה.
@@ -124,7 +135,9 @@ async def test_bumping_session_version_invalidates_cookie(client):
         )
         await session.commit()
 
-    assert (await client.get("/api/auth/me")).status_code == 401, "cookie שרד העלאת session_version"
+    assert (await client.get("/api/auth/me")).json()["authenticated"] is False, (
+        "cookie שרד העלאת session_version"
+    )
 
 
 # ── מדד 4: Origin חסר או זר מקבל 403 ──────────────────────────────────

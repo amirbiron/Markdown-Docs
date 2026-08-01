@@ -109,11 +109,18 @@ class Settings(BaseSettings):
             return frozenset(explicit)
         if self.render_external_url:
             return frozenset({self.render_external_url.strip().rstrip("/")})
-        if not self.is_production:
-            return frozenset(
-                {f"http://{host}:{port}" for host in ("localhost", "127.0.0.1") for port in (8000, 8010, 8080, 8899)}
-            )
         return frozenset()
+
+    @property
+    def allow_loopback_origins(self) -> bool:
+        """בפיתוח מאשרים כל מקור מקומי, בלי קשר לפורט.
+
+        כאן הייתה רשימת פורטים קבועה (8000, 8010, 8080, 8899), ומי שהריץ
+        על פורט אחר קיבל 403 בלי שום קשר לקוד שכתב. הפורט אינו גבול
+        אבטחה: מי שכבר מריץ קוד על loopback של המכונה הזאת אינו "מקור זר".
+        הגבול האמיתי הוא ההפרדה מפרודקשן, ושם התכונה הזאת כבויה תמיד.
+        """
+        return not self.is_production
 
 
 @lru_cache

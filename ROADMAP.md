@@ -417,7 +417,7 @@ payload = { "uid": ..., "sv": session_version, "exp": <unix timestamp> }
 שבעה שלבים. כל אחד מסתיים במשהו שאפשר להשתמש בו — לא בחצי תשתית.
 
 ### 1. תשתית
-Postgres ב-Render עם `Asia/Jerusalem` ו-UTF8, שרת FastAPI, SQLAlchemy async, מיגרציות Alembic, בדיקת בריאות. `render.yaml` עובר מ-`runtime: static` ל-`runtime: python`, והפרונט מוגש מאותו שירות כקבצים סטטיים — כך אין CORS ואין דומיין שני. בנוסף: כל ספריות הצד-שלישי ירדו ל-`assets/vendor/` — Prism עם חבילת שפות ארוזה מראש במקום ה-autoloader, וכן mermaid ו-React.
+Postgres ב-Render עם `Asia/Jerusalem` ו-UTF8, שרת FastAPI, SQLAlchemy async, מיגרציות Alembic, בדיקת בריאות. `render.yaml` עובר מ-`runtime: static` ל-`runtime: python`, והפרונט מוגש מאותו שירות כקבצים סטטיים — כך אין CORS ואין דומיין שני. בנוסף: כל ספריות הצד-שלישי ירדו ל-`assets/vendor/` — Prism עם חבילת שפות ארוזה מראש במקום ה-autoloader, וכן mermaid ו-React. גם הגופנים ירדו, ל-`assets/fonts/`, ואיתם נסגר המקור החיצוני האחרון: ה-CSP כבר לא מכיל אף דומיין זר באף הנחיה.
 **המדד:** `/api/health` מחזיר 200 מ-Render, המיגרציות רצות בדיפלוי, ו-`scripts/check-offline.js` עובר — הדף מתפקד במלואו כשכל בקשה חיצונית חסומה.
 
 ### 2. כניסה

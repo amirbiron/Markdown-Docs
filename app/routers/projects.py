@@ -166,9 +166,20 @@ async def update_project(
     if payload.visibility is not None:
         project.visibility = payload.visibility
 
+    # ה-slug נשמר לפני ה-commit. הוא לא ניתן לשינוי ולכן לא היה נכתב
+    # מחדש, אבל קריאה של attribute כלשהו אחרי commit היא בדיוק הדפוס
+    # שכלל 5 אוסר — עדיף ערך פרימיטיבי ביד.
+    project_slug = project.slug
     await session.commit()
-    await session.refresh(project, attribute_names=["documents", "links"])
-    return ProjectPrivate.model_validate(_payload(project, _ordered_documents(project), _ordered_links(project)))
+
+    # שליפה מחדש במקום refresh חלקי. אחרי UPDATE, עמודות עם onupdate —
+    # כאן updated_at — מתפוגגות במפורש גם כש-expire_on_commit=False, כי
+    # הערך החדש חושב ב-DB והסשן לא מכיר אותו. גישה אליהן אחר כך מנסה
+    # לטעון אותן מהקשר סינכרוני, וזה MissingGreenlet (כלל 5).
+    fresh = await load_project(session, project_slug, user, with_documents=True)
+    return ProjectPrivate.model_validate(
+        _payload(fresh, _ordered_documents(fresh), _ordered_links(fresh))
+    )
 
 
 @router.delete("/{slug}", status_code=status.HTTP_204_NO_CONTENT)

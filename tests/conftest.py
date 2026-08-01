@@ -11,17 +11,22 @@ from app.db import SessionLocal
 from app.main import app
 from app.seed import seed_admin
 
-_allowlist = sorted(get_settings().origin_allowlist)
-if not _allowlist:
+_settings = get_settings()
+_allowlist = sorted(_settings.origin_allowlist)
+
+# ה-Origin שהבדיקות שולחות בכל בקשה משנת מצב. בפיתוח אין allowlist מפורש
+# והמקורות המקומיים מאושרים לפי הכלל, ולכן נבחר כזה.
+if _allowlist:
+    ORIGIN = _allowlist[0]
+elif _settings.allow_loopback_origins:
+    ORIGIN = "http://localhost:8000"
+else:
     # לא assert: תחת python -O הוא נמחק, והכישלון היה חוזר בתור IndexError
     # מבלבל בשורה הבאה במקום ההודעה הזו.
     raise RuntimeError(
         "origin_allowlist ריק — הגדירו ALLOWED_ORIGINS או RENDER_EXTERNAL_URL, "
         "או הריצו עם ENVIRONMENT=development"
     )
-
-# ה-Origin שהבדיקות שולחות בכל בקשה משנת מצב.
-ORIGIN = _allowlist[0]
 WRITE = {"Origin": ORIGIN}
 
 EMAIL = "admin@example.com"

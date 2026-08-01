@@ -113,6 +113,12 @@ async def logout() -> Response:
 
 @router.get("/me")
 async def me(user=Depends(optional_user)) -> Response:
+    """מי מחובר. אנונימי מקבל 200 עם authenticated=false ולא 401.
+
+    "אף אחד" הוא תשובה תקינה לשאלה הזו, לא שגיאה. 401 כאן היה מייצר
+    שגיאה בקונסולה ובלוג בכל טעינת דף של מבקר אנונימי — רעש שמסתיר
+    שגיאות אמיתיות. הנתיבים המוגנים עצמם כמובן ממשיכים להחזיר 401.
+    """
     if user is None:
-        return JSONResponse({"authenticated": False}, status_code=status.HTTP_401_UNAUTHORIZED)
+        return JSONResponse({"authenticated": False})
     return JSONResponse({"authenticated": True, "email": user.email})

@@ -54,16 +54,16 @@ INDEX_FILE = PROJECT_ROOT / "index.html"
 # לוגיקת הרכיב דרך new Function, וכל העיצוב הוא inline styles. לכן ה-CSP
 # הזה לא יעצור הזרקת קוד.
 #
-# מה שהוא כן עושה, ומאז שהספריות ירדו ל-assets/vendor הרבה יותר חזק:
-# script-src כבר לא מכיל שום מקור חיצוני, ו-connect-src הוא 'self' בלבד.
-# כלומר גם קוד שהצליח לרוץ בדף לא יכול למשוך קוד נוסף מבחוץ ולא יכול
-# להבריח מידע החוצה. נשארו רק הגופנים, ואלה לא מריצים כלום.
+# מה שהוא כן עושה, ומאז שהספריות והגופנים ירדו ל-assets הרבה יותר חזק:
+# אין כאן אף מקור חיצוני, באף הנחיה. כלומר גם קוד שהצליח לרוץ בדף לא
+# יכול למשוך קוד נוסף מבחוץ ולא יכול להבריח מידע החוצה — אפילו לא דרך
+# בקשת גופן, שהיא ערוץ יציאה לכל דבר.
 CSP = "; ".join(
     [
         "default-src 'self'",
         "script-src 'self' 'unsafe-inline' 'unsafe-eval'",
-        "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
-        "font-src 'self' https://fonts.gstatic.com",
+        "style-src 'self' 'unsafe-inline'",
+        "font-src 'self'",
         "img-src 'self' data:",
         "connect-src 'self'",
         "base-uri 'self'",
@@ -188,7 +188,11 @@ app.include_router(api)
 # OriginGuard חייב לרוץ לפני BodySizeLimit — אחרת בקשה עוינת עם גוף של
 # מגה־בייט הייתה נקראת במלואה לפני שנגלה שהמקור שלה פסול.
 app.add_middleware(BodySizeLimit, max_bytes=settings.max_body_bytes)
-app.add_middleware(OriginGuard, allowlist=settings.origin_allowlist)
+app.add_middleware(
+    OriginGuard,
+    allowlist=settings.origin_allowlist,
+    allow_loopback=settings.allow_loopback_origins,
+)
 
 
 @app.get("/", include_in_schema=False)

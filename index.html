@@ -18,9 +18,9 @@ window.__resources = {
 <body>
 <x-dc>
 <helmet>
-<link rel="preconnect" href="https://fonts.googleapis.com" />
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="crossorigin" />
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Heebo:wght@300;400;500;600;700;800&family=Assistant:wght@300;400;500;600;700&family=Frank+Ruhl+Libre:wght@400;500;700;800&family=JetBrains+Mono:wght@400;500;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" />
+<!-- גופנים מקומיים. רשימת המשפחות נמצאת ב-scripts/vendor-fonts.sh, שהוא
+     גם מה שמייצר את הגיליון הזה ואת הקבצים שלידו. -->
+<link rel="stylesheet" href="./assets/fonts/fonts.css" />
 <script src="./assets/vendor/prism.js"></script>
 <script src="./assets/vendor/mermaid.js"></script>
 <style>
@@ -69,47 +69,74 @@ body, aside, header, section, main { transition: background-color 0.2s ease, bor
 
   <div style="display:flex;align-items:center;gap:12px;min-width:0">
     <sc-if value="{{ chrome.mark }}" hint-placeholder-val="{{ true }}">
-    <span style="flex:none;display:grid;place-items:center;width:26px;height:26px;border-radius:var(--r-sm);background:var(--accent);color:var(--accent-on);font-family:var(--mono);font-weight:700;font-size:14px">M</span>
+    <a href="#top" onClick="{{ goProjects }}" style="flex:none;display:grid;place-items:center;width:26px;height:26px;border-radius:var(--r-sm);background:var(--accent);color:var(--accent-on);font-family:var(--mono);font-weight:700;font-size:14px">M</a>
     </sc-if>
     <sc-if value="{{ chrome.wordmark }}" hint-placeholder-val="{{ false }}">
-    <span style="font-family:var(--display);font-size:19px;font-weight:700;color:var(--ink);white-space:nowrap">התיעוד</span>
+    <a href="#top" onClick="{{ goProjects }}" style="font-family:var(--display);font-size:19px;font-weight:700;color:var(--ink);white-space:nowrap">התיעוד</a>
     </sc-if>
     <span style="font-family:var(--crumb-font);font-size:var(--crumb-size);letter-spacing:var(--crumb-track);color:var(--faint);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ crumb }}</span>
   </div>
 
   <div style="display:flex;align-items:center;gap:var(--bar-gap)">
     <div style="display:flex;align-items:center;gap:2px;padding:3px;border-radius:var(--r-sm);background:var(--tint);border:1px solid var(--line)">
-      <button onClick="{{ goLibrary }}" style="{{ screenTab.library }}">ספרייה</button>
+      <button onClick="{{ goProjects }}" style="{{ screenTab.projects }}">פרויקטים</button>
       <button onClick="{{ goReference }}" style="{{ screenTab.reference }}">רפרנס</button>
     </div>
 
     <button onClick="{{ toggleTheme }}" title="{{ themeTitle }}" aria-label="{{ themeTitle }}" style="display:grid;place-items:center;width:32px;height:32px;border:1px solid var(--rule);border-radius:var(--r-sm);background:none;color:var(--muted);font-size:14px;line-height:1;cursor:pointer" style-hover="color:var(--head);border-color:var(--accent)">{{ themeGlyph }}</button>
 
-    <sc-if value="{{ onLibrary }}" hint-placeholder-val="{{ true }}">
+    <sc-if value="{{ onDoc }}" hint-placeholder-val="{{ false }}">
     <button onClick="{{ toggleSource }}" style="{{ chrome.srcBtn }}">{{ srcLabel }}</button>
     </sc-if>
-    <label for="md-file" style="{{ chrome.uploadBtn }}">העלאת מסמך</label>
+
+    <sc-if value="{{ signedIn }}" hint-placeholder-val="{{ false }}">
+    <button onClick="{{ logout }}" style="{{ chrome.ghostBtnSm }}">יציאה</button>
+    </sc-if>
+    <sc-if value="{{ signedOut }}" hint-placeholder-val="{{ true }}">
+    <button onClick="{{ openLogin }}" style="{{ chrome.uploadBtn }}">כניסה</button>
+    </sc-if>
   </div>
 </div>
 
+<sc-if value="{{ hasError }}" hint-placeholder-val="{{ false }}">
+<div style="max-width:var(--shell-w);margin:0 auto;padding:12px var(--bar-pad) 0">
+  <div style="display:flex;align-items:center;justify-content:space-between;gap:14px;padding:12px 16px;border-radius:var(--r-md);background:var(--red-soft);border:1px solid var(--red-ring);color:var(--red)">
+    <span style="font-size:14.5px">{{ error }}</span>
+    <button onClick="{{ clearError }}" style="padding:2px 8px;border:none;background:none;color:var(--red);font-size:16px;line-height:1;cursor:pointer">×</button>
+  </div>
+</div>
+</sc-if>
+
+<sc-if value="{{ loginOpen }}" hint-placeholder-val="{{ false }}">
+<div style="max-width:420px;margin:60px auto;padding:0 20px">
+  <div style="padding:28px;border:1px solid var(--line);border-radius:var(--r-md);background:var(--panel);box-shadow:var(--shadow)">
+    <h1 style="margin:0 0 6px;font-family:var(--display);font-size:26px;font-weight:800;color:var(--ink)">כניסה</h1>
+    <p style="margin:0 0 20px;font-size:14.5px;line-height:1.7;color:var(--soft)">צפייה בפרויקטים פומביים אינה דורשת כניסה. כתיבה כן.</p>
+    <div style="display:flex;flex-direction:column;gap:11px">
+      <input dir="ltr" type="email" placeholder="כתובת מייל" value="{{ loginEmail }}" onChange="{{ onLoginEmail }}" style="{{ chrome.field }}" />
+      <input dir="ltr" type="password" placeholder="סיסמה" value="{{ loginPassword }}" onChange="{{ onLoginPassword }}" onKeyDown="{{ onLoginKey }}" style="{{ chrome.field }}" />
+      <button onClick="{{ submitLogin }}" style="{{ chrome.ctaBtn }}">{{ loginLabel }}</button>
+      <button onClick="{{ closeLogin }}" style="{{ chrome.pasteBtn }}">ביטול</button>
+    </div>
+  </div>
+</div>
+</sc-if>
+
+<sc-if value="{{ shellVisible }}" hint-placeholder-val="{{ true }}">
 <div style="display:grid;grid-template-columns:auto minmax(0,1fr) auto;align-items:start;max-width:var(--shell-w);margin:0 auto">
 
   <sc-if value="{{ sidebarVisible }}" hint-placeholder-val="{{ true }}">
   <aside style="position:sticky;top:var(--bar-h);width:var(--rail-w);box-sizing:border-box;height:calc(100vh - var(--bar-h));overflow-y:auto;padding:var(--rail-pad);border-inline-end:1px solid var(--hair);background:var(--rail)">
 
-    <sc-if value="{{ onLibrary }}" hint-placeholder-val="{{ true }}">
+    <sc-if value="{{ onProject }}" hint-placeholder-val="{{ true }}">
     <div>
-      <div style="display:flex;align-items:center;gap:11px;margin:0 0 var(--rail-head-gap)">
-        <sc-if value="{{ chrome.mark }}" hint-placeholder-val="{{ true }}">
-        <span style="flex:none;display:grid;place-items:center;width:34px;height:34px;border-radius:var(--r-sm);background:var(--accent);color:var(--accent-on);font-family:var(--mono);font-weight:700;font-size:16px">M</span>
-        </sc-if>
-        <span style="display:block;min-width:0">
-          <span style="display:block;font-family:var(--display);font-size:var(--rail-title-size);font-weight:700;line-height:1.25;color:var(--head)">ספריית התיעוד</span>
-          <span style="display:block;margin-top:var(--rail-sub-gap);font-family:var(--mono);font-size:11px;letter-spacing:var(--rail-sub-track);text-transform:var(--rail-sub-case);color:var(--faint)">{{ docCount }} · he‑IL · rtl</span>
-        </span>
+      <div style="margin:0 0 var(--rail-head-gap)">
+        <a href="#top" onClick="{{ goProjects }}" style="display:block;margin-bottom:6px;font-family:var(--mono);font-size:11px;letter-spacing:0.08em;color:var(--faint)">← כל הפרויקטים</a>
+        <span style="display:block;font-family:var(--display);font-size:var(--rail-title-size);font-weight:700;line-height:1.25;color:var(--head)">{{ projectName }}</span>
+        <span style="display:block;margin-top:var(--rail-sub-gap);font-family:var(--mono);font-size:11px;letter-spacing:var(--rail-sub-track);text-transform:var(--rail-sub-case);color:var(--faint)">{{ docCount }} · {{ visibilityLabel }}</span>
       </div>
 
-      <input dir="rtl" placeholder="חיפוש במסמכים…" value="{{ q }}" onChange="{{ onSearch }}" style="{{ chrome.search }}" />
+      <input dir="rtl" placeholder="סינון מסמכים…" value="{{ q }}" onChange="{{ onSearch }}" style="{{ chrome.search }}" />
 
       <div style="{{ chrome.railLabel }}">מסמכים</div>
       <div style="display:flex;flex-direction:column;gap:var(--doc-gap);margin:0 0 10px;border-top:var(--doc-list-rule)">
@@ -119,29 +146,31 @@ body, aside, header, section, main { transition: background-color 0.2s ease, bor
             <span style="flex:none;font-family:var(--mono);font-size:10.5px;color:{{ doc.numFg }}">{{ doc.num }}</span>
             </sc-if>
             <a href="#top" onClick="{{ doc.open }}" style="{{ doc.linkStyle }}">{{ doc.title }}</a>
+            <sc-if value="{{ canEdit }}" hint-placeholder-val="{{ false }}">
             <button onClick="{{ doc.remove }}" title="מחיקה" style="flex:none;padding:2px 6px;border:none;border-radius:var(--r-sm);background:none;color:var(--faint);font-size:14px;line-height:1;cursor:pointer" style-hover="color:var(--red)">×</button>
+            </sc-if>
           </div>
         </sc-for>
       </div>
-      <sc-if value="{{ noResults }}" hint-placeholder-val="{{ false }}">
-        <div style="padding:6px 4px 12px;font-size:13.5px;color:var(--faint)">אין מסמך שתואם לחיפוש.</div>
+      <sc-if value="{{ noDocs }}" hint-placeholder-val="{{ false }}">
+        <div style="padding:6px 4px 12px;font-size:13.5px;color:var(--faint)">אין עדיין מסמכים בפרויקט.</div>
       </sc-if>
 
-      <label for="md-file" style="{{ chrome.dropzone }}">
-        גררו לכאן קבצי <span dir="ltr" style="font-family:var(--mono);font-size:12.5px">.md</span><br />או לחצו לבחירה
-      </label>
-      <button onClick="{{ togglePaste }}" style="{{ chrome.pasteBtn }}">{{ pasteLabel }}</button>
+      <sc-if value="{{ canEdit }}" hint-placeholder-val="{{ false }}">
+      <div>
+        <label for="md-file" style="{{ chrome.dropzone }}">
+          גררו לכאן קבצי <span dir="ltr" style="font-family:var(--mono);font-size:12.5px">.md</span><br />או לחצו לבחירה
+        </label>
+        <button onClick="{{ togglePaste }}" style="{{ chrome.pasteBtn }}">{{ pasteLabel }}</button>
 
-      <sc-if value="{{ pasting }}" hint-placeholder-val="{{ false }}">
-      <div style="margin:10px 0 0;display:flex;flex-direction:column;gap:9px">
-        <textarea dir="auto" placeholder="# כותרת המסמך…" value="{{ draft }}" onChange="{{ onDraft }}" style="width:100%;box-sizing:border-box;min-height:120px;padding:11px;background:var(--card);border:1px solid var(--line);border-radius:var(--r-sm);color:var(--head);font-family:var(--mono);font-size:12.5px;line-height:1.7;outline:none;resize:vertical" style-focus="border-color:var(--accent)"></textarea>
-        <button onClick="{{ addDraft }}" style="{{ chrome.addBtn }}">הוספה לספרייה</button>
+        <sc-if value="{{ pasting }}" hint-placeholder-val="{{ false }}">
+        <div style="margin:10px 0 0;display:flex;flex-direction:column;gap:9px">
+          <textarea dir="auto" placeholder="# כותרת המסמך…" value="{{ draft }}" onChange="{{ onDraft }}" style="width:100%;box-sizing:border-box;min-height:120px;padding:11px;background:var(--card);border:1px solid var(--line);border-radius:var(--r-sm);color:var(--head);font-family:var(--mono);font-size:12.5px;line-height:1.7;outline:none;resize:vertical" style-focus="border-color:var(--accent)"></textarea>
+          <button onClick="{{ addDraft }}" style="{{ chrome.addBtn }}">הוספה לפרויקט</button>
+        </div>
+        </sc-if>
       </div>
       </sc-if>
-
-      <div style="margin-top:20px;padding-top:16px;border-top:1px solid var(--hair);font-size:12.5px;line-height:1.7;color:var(--faint)">
-        המסמכים נשמרים בדפדפן הזה. <button onClick="{{ loadSample }}" style="padding:0;border:none;background:none;color:var(--accent-text);font-family:inherit;font-size:12.5px;cursor:pointer;text-decoration:underline">טעינת מסמך הדגמה</button>
-      </div>
     </div>
     </sc-if>
 
@@ -237,13 +266,49 @@ body, aside, header, section, main { transition: background-color 0.2s ease, bor
 
   <main id="top" onDragOver="{{ onDragOver }}" onDragLeave="{{ onDragLeave }}" onDrop="{{ onDrop }}" style="min-width:0;padding:var(--main-pad);max-width:var(--main-w)">
 
-    <sc-if value="{{ onLibrary }}" hint-placeholder-val="{{ true }}">
+    <sc-if value="{{ onProjects }}" hint-placeholder-val="{{ false }}">
     <div>
-      <sc-if value="{{ dragging }}" hint-placeholder-val="{{ false }}">
-        <div style="margin:0 0 22px;padding:22px;border:2px dashed var(--accent);border-radius:var(--r-md);background:var(--accent-soft);text-align:center;font-size:15.5px;color:var(--accent-text)">שחררו כאן כדי להוסיף לספרייה</div>
+      <header style="margin:0 0 var(--doc-head-gap)">
+        <h1 style="margin:0 0 12px;font-family:var(--display);font-size:var(--h1-size);font-weight:800;line-height:1.14;color:var(--ink);text-wrap:balance">פרויקטים</h1>
+        <p style="margin:0;font-size:var(--lead-size);line-height:1.75;color:var(--soft);max-width:62ch;text-wrap:pretty">{{ projectsLead }}</p>
+      </header>
+
+      <sc-if value="{{ canEdit }}" hint-placeholder-val="{{ false }}">
+      <div style="display:flex;flex-wrap:wrap;gap:10px;margin:0 0 26px;padding:16px 18px;border:1px dashed var(--rule);border-radius:var(--r-md)">
+        <input dir="auto" placeholder="שם הפרויקט החדש" value="{{ newProjectName }}" onChange="{{ onNewProjectName }}" onKeyDown="{{ onNewProjectKey }}" style="{{ chrome.field }};flex:1;min-width:220px" />
+        <button onClick="{{ createProject }}" style="{{ chrome.ctaBtn }}">יצירת פרויקט</button>
+      </div>
       </sc-if>
 
-      <sc-if value="{{ hasDoc }}" hint-placeholder-val="{{ true }}">
+      <div style="display:flex;flex-direction:column;gap:12px">
+        <sc-for list="{{ projects }}" as="p" hint-placeholder-count="3">
+          <a href="#top" onClick="{{ p.open }}" style="display:block;padding:18px 20px;border:1px solid var(--line);border-radius:var(--r-md);background:var(--panel);text-decoration:none" style-hover="border-color:var(--accent)">
+            <span style="display:flex;align-items:baseline;justify-content:space-between;gap:12px">
+              <span style="font-family:var(--display);font-size:20px;font-weight:700;color:var(--ink)">{{ p.name }}</span>
+              <span style="flex:none;font-family:var(--mono);font-size:10.5px;letter-spacing:0.1em;text-transform:uppercase;padding:2px 8px;border-radius:var(--r-pill);background:{{ p.badgeBg }};color:{{ p.badgeFg }}">{{ p.badge }}</span>
+            </span>
+            <span style="display:block;margin-top:6px;font-size:14.5px;line-height:1.7;color:var(--soft)">{{ p.description }}</span>
+            <span style="display:block;margin-top:10px;font-family:var(--mono);font-size:11.5px;color:var(--faint)">{{ p.meta }}</span>
+          </a>
+        </sc-for>
+      </div>
+
+      <sc-if value="{{ noProjects }}" hint-placeholder-val="{{ false }}">
+      <div style="padding:50px 20px;text-align:center">
+        <div style="display:grid;place-items:center;width:64px;height:64px;margin:0 auto 22px;border-radius:var(--r-md);background:var(--tint);border:1px solid var(--line);font-family:var(--mono);font-size:20px;color:var(--accent-text)">md</div>
+        <p style="margin:0 auto;max-width:46ch;font-size:17px;line-height:1.7;color:var(--soft);text-wrap:pretty">{{ emptyProjectsText }}</p>
+      </div>
+      </sc-if>
+    </div>
+    </sc-if>
+
+    <sc-if value="{{ onProject }}" hint-placeholder-val="{{ true }}">
+    <div>
+      <sc-if value="{{ dragging }}" hint-placeholder-val="{{ false }}">
+        <div style="margin:0 0 22px;padding:22px;border:2px dashed var(--accent);border-radius:var(--r-md);background:var(--accent-soft);text-align:center;font-size:15.5px;color:var(--accent-text)">שחררו כאן כדי להוסיף לפרויקט</div>
+      </sc-if>
+
+      <sc-if value="{{ onDoc }}" hint-placeholder-val="{{ true }}">
       <div>
         <header style="margin:0 0 var(--doc-head-gap)">
           <div style="display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin:0 0 14px">
@@ -269,20 +334,39 @@ body, aside, header, section, main { transition: background-color 0.2s ease, bor
         <div style="display:flex;flex-wrap:wrap;align-items:center;gap:12px;margin:34px 0 0;padding:16px 20px;border:1px dashed var(--rule);border-radius:var(--r-md)">
           <span style="font-size:14.5px;color:var(--text)">נוצר מתוך <span dir="ltr" style="font-family:var(--mono);font-size:13px">{{ fileName }}</span></span>
           <button onClick="{{ download }}" style="padding:7px 15px;border:1px solid var(--rule);border-radius:var(--r-pill);background:none;color:var(--text);font-family:inherit;font-size:13.5px;cursor:pointer" style-hover="border-color:var(--accent)">הורדת המקור</button>
-          <label for="md-file" style="padding:7px 15px;border:1px solid var(--rule);border-radius:var(--r-pill);color:var(--text);font-size:13.5px;cursor:pointer" style-hover="border-color:var(--accent);color:var(--accent-text)">העלאת מסמך נוסף</label>
         </div>
       </div>
       </sc-if>
 
       <sc-if value="{{ noDoc }}" hint-placeholder-val="{{ false }}">
-      <div style="padding:70px 20px;text-align:center">
-        <div style="display:grid;place-items:center;width:64px;height:64px;margin:0 auto 22px;border-radius:var(--r-md);background:var(--tint);border:1px solid var(--line);font-family:var(--mono);font-size:20px;color:var(--accent-text)">md</div>
-        <h1 style="margin:0 0 12px;font-family:var(--display);font-size:34px;font-weight:800;color:var(--ink)">הספרייה ריקה</h1>
-        <p style="margin:0 auto 26px;max-width:46ch;font-size:17px;line-height:1.7;color:var(--soft);text-wrap:pretty">גררו לכאן קבצי Markdown, או העלו אותם מהמחשב. כל מסמך מקבל עמוד, תוכן עניינים ועיצוב אחיד — כולל טבלאות, בלוקי קוד והתראות.</p>
-        <div style="display:flex;justify-content:center;flex-wrap:wrap;gap:10px">
-          <label for="md-file" style="{{ chrome.ctaBtn }}">בחירת קבצים</label>
-          <button onClick="{{ loadSample }}" style="{{ chrome.ghostBtn }}">טעינת מסמך הדגמה</button>
+      <div style="padding:60px 20px;text-align:center">
+        <h1 style="margin:0 0 12px;font-family:var(--display);font-size:32px;font-weight:800;color:var(--ink)">{{ projectName }}</h1>
+        <p style="margin:0 auto;max-width:46ch;font-size:17px;line-height:1.7;color:var(--soft);text-wrap:pretty">{{ emptyDocsText }}</p>
+      </div>
+      </sc-if>
+
+      <sc-if value="{{ hasLinksSection }}" hint-placeholder-val="{{ false }}">
+      <div style="margin:40px 0 0;padding-top:26px;border-top:1px solid var(--hair)">
+        <div style="{{ chrome.railLabel }}">קישורים</div>
+        <div style="display:flex;flex-direction:column;gap:2px;margin:0 0 14px">
+          <sc-for list="{{ links }}" as="link" hint-placeholder-count="2">
+            <div style="display:flex;align-items:baseline;gap:10px;padding:8px 0;border-bottom:1px solid var(--hair)">
+              <a href="{{ link.href }}" target="_blank" rel="noopener noreferrer" style="flex:1;min-width:0;font-size:15px;color:var(--accent-text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ link.title }}</a>
+              <span dir="ltr" style="flex:none;max-width:40%;font-family:var(--mono);font-size:11.5px;color:var(--faint);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ link.host }}</span>
+              <sc-if value="{{ canEdit }}" hint-placeholder-val="{{ false }}">
+              <button onClick="{{ link.remove }}" title="מחיקה" style="flex:none;padding:2px 6px;border:none;background:none;color:var(--faint);font-size:14px;line-height:1;cursor:pointer" style-hover="color:var(--red)">×</button>
+              </sc-if>
+            </div>
+          </sc-for>
         </div>
+
+        <sc-if value="{{ canEdit }}" hint-placeholder-val="{{ false }}">
+        <div style="display:flex;flex-wrap:wrap;gap:8px">
+          <input dir="auto" placeholder="שם הקישור" value="{{ newLinkTitle }}" onChange="{{ onNewLinkTitle }}" style="{{ chrome.field }};flex:1;min-width:140px" />
+          <input dir="ltr" placeholder="https://…" value="{{ newLinkUrl }}" onChange="{{ onNewLinkUrl }}" onKeyDown="{{ onNewLinkKey }}" style="{{ chrome.field }};flex:2;min-width:200px" />
+          <button onClick="{{ addLink }}" style="{{ chrome.addBtn }}">הוספה</button>
+        </div>
+        </sc-if>
       </div>
       </sc-if>
     </div>
@@ -807,140 +891,17 @@ console.<span style="color:var(--tok-fn)">log</span>(doc.<span style="color:var(
 
 </div>
 </div>
+</div>
+</sc-if>
+</div>
+
 </x-dc>
 <script type="text/x-dc" data-dc-script data-props="{&quot;showToc&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:true,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;פריסה&quot;},&quot;numberedHeadings&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:true,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;תוכן&quot;},&quot;showSourceByDefault&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:false,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;תוכן&quot;},&quot;defaultTheme&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;auto&quot;,&quot;dark&quot;,&quot;light&quot;],&quot;default&quot;:&quot;auto&quot;,&quot;tsType&quot;:&quot;'auto' | 'dark' | 'light'&quot;,&quot;section&quot;:&quot;עיצוב&quot;},&quot;defaultCodeTab&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;javascript&quot;,&quot;python&quot;,&quot;curl&quot;],&quot;default&quot;:&quot;javascript&quot;,&quot;tsType&quot;:&quot;'javascript' | 'python' | 'curl'&quot;,&quot;section&quot;:&quot;תוכן&quot;}}">
 const KEY = "md-docs-site-v1";
 const THEME_KEY = "md-docs-theme";
 
-const SAMPLE = [
-  "---",
-  "title: רכיבי Markdown",
-  "locale: he",
-  "dir: rtl",
-  "---",
-  "",
-  "# רכיבי Markdown",
-  "",
-  "כל רכיב שהתיעוד יודע להציג, עם הסינטקס שמייצר אותו. הדף הזה הוא גם רפרנס וגם בדיקת שפיות לעיצוב.",
-  "",
-  "## טיפוגרפיה",
-  "",
-  "היררכיית הכותרות היא ההסכם היחיד בין הכותב לקורא. **H2 פותח נושא**, *H3 מחלק אותו*, ומעבר לזה כבר צריך עמוד נפרד. טקסט ~~שאינו רלוונטי~~ מסומן ולא נמחק, ושמות ערכים נכתבים כ-`inline code`. קישורים כמו [רפרנס ה-API](https://example.com) תמיד מקבלים טקסט שמתאר את היעד.",
-  "",
-  "### כותרת משנית",
-  "",
-  "ברמה הזאת נכנסים לפרטים: מה קורה בפועל, מה נכשל, ואיך מזהים את זה.",
-  "",
-  "## רשימות ומשימות",
-  "",
-  "- שכבת ניתוח שממירה `.md` לעץ בלוקים",
-  "- שכבת רינדור",
-  "  - תבניות RTL",
-  "  - הדגשת סינטקס",
-  "- שכבת חיפוש",
-  "",
-  "1. התקנת ה-CLI",
-  "2. הגדרת `locale: he`",
-  "3. בנייה ופרסום",
-  "",
-  "- [x] הגדרת dir=rtl על שורש המסמך",
-  "- [x] מעבר לתכונות לוגיות בכל הפריסה",
-  "- [ ] שיקוף אייקוני ניווט בכיוון RTL",
-  "",
-  "## ציטוטים והתראות",
-  "",
-  "> תיעוד טוב לא מסביר מה הקוד עושה. הוא מסביר למה החלטנו שזה מה שהוא צריך לעשות.",
-  "",
-  "::: info מידע",
-  "בלוקי קוד נשארים LTR גם בתוך מסמך עברי — הכיוון נקבע על הבלוק, לא על העמוד.",
-  ":::",
-  "",
-  "::: success הצלחה",
-  "העמוד עבר בדיקת RTL: אין תכונה פיזית אחת בפריסה.",
-  ":::",
-  "",
-  "::: warning אזהרה",
-  "צלליות וגרדיאנטים לא מתהפכים לבד. אם יש להם משמעות כיוונית, הפוך אותם במפורש.",
-  ":::",
-  "",
-  "::: danger שגיאה",
-  "`flex-direction: row-reverse` בתוך הקשר RTL מחזיר את הסדר ל-LTR.",
-  ":::",
-  "",
-  "::: note הערה",
-  "שדות טופס מקבלים `dir=auto` כדי שכל ערך יזהה את הכיוון של עצמו.",
-  ":::",
-  "",
-  "## בלוקי קוד",
-  "",
-  "```js sdk/create-doc.js",
-  'import { Nimbus } from "@nimbus/sdk";',
-  "",
-  "const client = new Nimbus({ apiKey: process.env.NIMBUS_KEY });",
-  "",
-  "// create a Hebrew, right-to-left document",
-  "const doc = await client.docs.create({",
-  '  slug: "markdown-components",',
-  '  locale: "he",',
-  '  direction: "rtl",',
-  "  blocks: 9,",
-  "});",
-  "```",
-  "",
-  "```bash",
-  "$ npx nimbus build --locale he",
-  "24 documents compiled in 1.8s",
-  "```",
-  "",
-  "```sql",
-  "select slug, locale, count(*) as blocks",
-  "from doc_blocks",
-  "where locale = 'he' and published is true",
-  "group by slug, locale",
-  "order by blocks desc",
-  "limit 10;",
-  "```",
-  "",
-  "## תרשימים",
-  "",
-  "```mermaid",
-  "flowchart LR",
-  '  A["source .md"] --> B["parser"]',
-  '  B --> C["block tree"]',
-  '  C --> D["RTL renderer"]',
-  '  C --> E["search index"]',
-  "```",
-  "",
-  "::: details לחצו לפתיחה — קוד בתוך בלוק מתקפל",
-  "בלוק מתקפל יכול להכיל כל רכיב, כולל קוד:",
-  "",
-  "```python",
-  "blocks = parse(open('doc.md').read())",
-  "print(len(blocks))",
-  "```",
-  ":::",
-  "",
-  "## טבלאות",
-  "",
-  "| רכיב | סינטקס | שימוש |",
-  "| --- | --- | --- |",
-  "| כותרת קטע | `## כותרת` | פותח נושא חדש |",
-  "| התראה | `::: warning` | אזהרה בתוך הזרימה |",
-  "| בלוק קוד | גדר של שלושה גרשים + `js` | דוגמה שאפשר להריץ |",
-  "",
-  "| מסמך | מילים | עודכן |",
-  "| --- | --- | --- |",
-  "| רכיבי Markdown | 1,428 | 12.07.2026 |",
-  "| אימות ומפתחות | 960 | 28.06.2026 |",
-  "",
-  "## מדיה",
-  "",
-  "![לוח הבקרה של התיעוד](dashboard.png)",
-  "",
-  "---",
-  "",
-  "מסמך זה נטען כדוגמה. מחקו אותו והעלו את המסמכים שלכם."
-].join("\n");
+/* מסמך ההדגמה ומפתח ה-localStorage הישן הוסרו מכאן. המפתח עצמו לא
+   נמחק מהדפדפן — שלב 7 עוד צריך למצוא אותו כדי להעלות את המסמכים. */
 
 /* ═══════════════════════════════════════════════════════════════════
    ערכות העיצוב — מקור האמת היחיד
@@ -1138,7 +1099,9 @@ const CHROME = {
     navLinkRow: "display:flex;align-items:center;justify-content:space-between;padding:7px 12px;border-radius:var(--r-sm);font-size:14px;color:var(--soft)",
     navLinkActive: "display:block;padding:7px 12px;border-radius:var(--r-sm);background:var(--accent-soft);border-inline-start:2px solid var(--accent);font-size:14px;font-weight:600;color:var(--accent-text)",
     navLinkMono: "padding:7px 12px;border-radius:var(--r-sm);font-family:var(--mono);font-size:13px;color:var(--soft)",
-    navSub: "padding:4px 12px;font-size:13px;color:var(--faint-2)"
+    navSub: "padding:4px 12px;font-size:13px;color:var(--faint-2)",
+    field: "box-sizing:border-box;padding:9px 12px;background:var(--tint);border:1px solid var(--line);border-radius:var(--r-sm);color:var(--head);font-family:inherit;font-size:14px;outline:none",
+    ghostBtnSm: "padding:6px 12px;border:1px solid var(--rule);border-radius:var(--r-sm);background:none;color:var(--text);font-family:inherit;font-size:12.5px;cursor:pointer"
   },
   light: {
     mark: false,
@@ -1161,7 +1124,9 @@ const CHROME = {
     navLinkRow: "display:flex;align-items:center;justify-content:space-between;padding:6px 0;font-size:14.5px;color:var(--text)",
     navLinkActive: "display:block;padding:6px 0;border-inline-start:2px solid var(--accent);padding-inline-start:10px;font-size:14.5px;font-weight:700;color:var(--accent-text)",
     navLinkMono: "padding:6px 0;font-family:var(--mono);font-size:12.5px;color:var(--text)",
-    navSub: "padding:4px 12px;font-size:13px;color:var(--soft)"
+    navSub: "padding:4px 12px;font-size:13px;color:var(--soft)",
+    field: "box-sizing:border-box;padding:8px 2px;background:none;border:none;border-bottom:1px solid var(--rule);color:var(--ink);font-family:inherit;font-size:14.5px;outline:none",
+    ghostBtnSm: "padding:0;border:none;background:none;font-family:var(--mono);font-size:11.5px;letter-spacing:0.06em;text-transform:uppercase;color:var(--soft);cursor:pointer;border-bottom:1px solid var(--rule)"
   }
 };
 
@@ -1200,21 +1165,32 @@ function safeHref(raw) {
 
 class Component extends DCLogic {
   state = {
-    theme: "dark", screen: "library",
-    docs: [], current: null, q: "", active: 0, showSource: null, pasting: false, draft: "",
-    dragging: false, copied: false, codeCopied: "", openMap: {}, narrow: false, mobile: false,
+    theme: "dark",
+    screen: "projects",
+
+    /* המשתמש המחובר, או null. אנונימי הוא מצב לגיטימי — הוא רואה
+       פרויקטים פומביים. */
+    me: null,
+    ready: false,
+    error: "",
+
+    projects: [],
+    project: null,      // הפרויקט הפתוח, כולל מסמכים וקישורים
+    docSlug: null,
+    doc: null,          // המסמך הפתוח, עם התוכן המלא
+
+    loginOpen: false, loginEmail: "", loginPassword: "", loggingIn: false,
+    newProjectName: "", newLinkTitle: "", newLinkUrl: "",
+    q: "", pasting: false, draft: "", dragging: false,
+
+    showSource: null, copied: false, codeCopied: "", openMap: {},
+    active: 0, narrow: false, mobile: false,
     tab: null, raw: null, tasks: { t0: true, t1: true, t2: false },
     groups: { start: true, guides: true, api: false }, voted: false
   };
 
   componentDidMount() {
     this.applyTheme(this.initialTheme());
-
-    let docs = [];
-    try { docs = JSON.parse(localStorage.getItem(KEY) || "[]"); } catch (e) { docs = []; }
-    if (!Array.isArray(docs) || !docs.length) docs = [{ id: "sample", name: "markdown-components.md", src: SAMPLE }];
-    docs = docs.map((d) => (d && d.id === "sample" ? { id: "sample", name: d.name, src: SAMPLE } : d));
-    this.setState({ docs: docs, current: docs[0].id });
 
     this.onScroll = () => {
       const sel = this.state.screen === "reference" ? "[data-sec]" : "[data-h2]";
@@ -1233,7 +1209,6 @@ class Component extends DCLogic {
     this.mqMobile.addEventListener("change", this.onMq);
     this.onMq();
 
-    /* אם המשתמש לא בחר מצב ידנית, נעקוב אחרי הגדרת המערכת גם תוך כדי. */
     this.mqDark = window.matchMedia("(prefers-color-scheme: dark)");
     this.onScheme = () => { if (!this.storedTheme()) this.applyTheme(this.mqDark.matches ? "dark" : "light"); };
     this.mqDark.addEventListener("change", this.onScheme);
@@ -1243,6 +1218,8 @@ class Component extends DCLogic {
       if (window.mermaid) this.drawDiagrams();
       if (window.Prism && window.mermaid) { clearInterval(this.libTick); this.libTick = null; }
     }, 250);
+
+    this.bootstrap();
   }
 
   componentDidUpdate() {
@@ -1253,59 +1230,490 @@ class Component extends DCLogic {
     window.removeEventListener("scroll", this.onScroll);
     if (this.libTick) clearInterval(this.libTick);
     clearTimeout(this.codeTimer);
+    clearTimeout(this.timer);
     if (this.mqNarrow) this.mqNarrow.removeEventListener("change", this.onMq);
     if (this.mqMobile) this.mqMobile.removeEventListener("change", this.onMq);
     if (this.mqDark) this.mqDark.removeEventListener("change", this.onScheme);
-    clearTimeout(this.timer);
   }
 
-  /* ---------- ערכת עיצוב ---------- */
+  /* ---------- שכבת ה-API ---------- */
 
-  storedTheme() {
-    let v = null;
-    try { v = localStorage.getItem(THEME_KEY); } catch (e) { v = null; }
-    return v === "dark" || v === "light" ? v : null;
+  /* הבקשות יוצאות לאותו origin שממנו נטען הדף, ולכן אין CORS והדפדפן
+     מצרף את ה-cookie לבד. הוא גם מצרף Origin בכל בקשה שאינה GET, וזה
+     מה ש-OriginGuard בשרת בודק. */
+  async api(path, options) {
+    const opts = Object.assign({ credentials: "same-origin", headers: {} }, options || {});
+    if (opts.body !== undefined) {
+      opts.headers = Object.assign({ "Content-Type": "application/json" }, opts.headers);
+      opts.body = JSON.stringify(opts.body);
+    }
+    const response = await fetch("/api" + path, opts);
+    if (response.status === 204) return null;
+
+    let data = null;
+    try { data = await response.json(); } catch (e) { data = null; }
+    if (!response.ok) {
+      const error = new Error((data && data.detail) || "הפעולה נכשלה");
+      error.status = response.status;
+      throw error;
+    }
+    return data;
   }
 
-  initialTheme() {
-    const stored = this.storedTheme();
-    if (stored) return stored;
-    const prop = this.props.defaultTheme || "auto";
-    if (prop === "dark" || prop === "light") return prop;
+  /* עוטף פעולה ומציג את השגיאה במקום להשאיר את הממשק תקוע בלי הסבר.
+     401 מטופל בנפרד: הוא לא "תקלה" אלא סימן שצריך להתחבר. */
+  async guard(work) {
     try {
-      return window.matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark";
-    } catch (e) { return "dark"; }
+      return await work();
+    } catch (error) {
+      if (error.status === 401) {
+        this.setState({ me: null, loginOpen: true, error: "" });
+        return null;
+      }
+      this.setState({ error: error.message || "הפעולה נכשלה" });
+      return null;
+    }
   }
 
-  /* כאן, ורק כאן, ערכי הערכה הופכים למשתני CSS על <html>.
-     כל שאר הקוד קורא var() ולא יודע איזה מצב פעיל. */
-  applyTheme(mode) {
-    const c = THEMES[mode] || DARK;
-    const root = document.documentElement;
-    root.setAttribute("data-theme", mode);
-    root.style.colorScheme = mode;
-    Object.keys(c).forEach((k) => root.style.setProperty("--" + k, c[k]));
-    this.setState({ theme: mode });
-    this.repaintDiagrams();
+  async bootstrap() {
+    /* /auth/me מחזיר 200 גם לאנונימי, עם authenticated=false. אין כאן
+       מסלול שגיאה, ולכן גם אין רעש בקונסולה בכל טעינה. */
+    let me = null;
+    const who = await this.guard(() => this.api("/auth/me"));
+    if (who && who.authenticated) me = who;
+    const projects = (await this.guard(() => this.api("/projects"))) || [];
+    this.setState({ me: me, projects: projects, ready: true });
   }
 
-  toggleTheme() {
-    const next = this.state.theme === "dark" ? "light" : "dark";
-    try { localStorage.setItem(THEME_KEY, next); } catch (e) { /* אחסון חסום */ }
-    this.applyTheme(next);
+  async reloadProjects() {
+    const projects = (await this.guard(() => this.api("/projects"))) || [];
+    this.setState({ projects: projects });
   }
 
-  /* mermaid לא קורא var(), ולכן החלפת מצב מחייבת ציור מחדש של התרשימים:
-     מאפסים את data-drawn כדי ש-drawDiagrams יזהה אותם כלא-מצוירים. */
-  repaintDiagrams() {
-    this.mermaidReady = false;
-    Array.prototype.forEach.call(document.querySelectorAll("[data-mermaid]"), (el) => {
-      el.removeAttribute("data-drawn");
-    });
+  async openProject(slug, docSlug) {
+    const project = await this.guard(() => this.api("/projects/" + encodeURIComponent(slug)));
+    if (!project) return;
+    this.setState({ screen: "project", project: project, active: 0, doc: null, docSlug: null, q: "" });
+    window.scrollTo({ top: 0 });
+
+    const first = docSlug || (project.documents[0] && project.documents[0].slug);
+    if (first) await this.openDoc(first);
   }
 
-  mermaid() {
-    return MERMAID[this.state.theme] || MERMAID.dark;
+  async openDoc(docSlug) {
+    const project = this.state.project;
+    if (!project) return;
+    const doc = await this.guard(() =>
+      this.api("/projects/" + encodeURIComponent(project.slug) + "/docs/" + encodeURIComponent(docSlug))
+    );
+    if (!doc) return;
+    this.setState({ doc: doc, docSlug: docSlug, active: 0, showSource: null });
+    window.scrollTo({ top: 0 });
+  }
+
+  async refreshProject() {
+    const project = this.state.project;
+    if (!project) return;
+    const fresh = await this.guard(() => this.api("/projects/" + encodeURIComponent(project.slug)));
+    if (fresh) this.setState({ project: fresh });
+  }
+
+  /* ---------- כתיבה ---------- */
+
+  async createDocuments(items) {
+    const project = this.state.project;
+    if (!project || !items.length) return;
+    let created = null;
+    for (const item of items) {
+      const doc = await this.guard(() =>
+        this.api("/projects/" + encodeURIComponent(project.slug) + "/docs", {
+          method: "POST",
+          body: { title: item.title, content: item.content }
+        })
+      );
+      if (doc && !created) created = doc;
+    }
+    await this.refreshProject();
+    if (created) await this.openDoc(created.slug);
+  }
+
+  /* שם הקובץ הופך לכותרת, והשורה הראשונה שמתחילה ב-# גוברת עליו. */
+  readFiles(fileList) {
+    const files = Array.from(fileList || []).filter(
+      (f) => /\.(md|markdown|txt)$/i.test(f.name) || f.type.indexOf("text") === 0
+    );
+    if (!files.length) return;
+    Promise.all(files.map((f) => f.text().then((src) => {
+      const heading = src.match(/^#\s+(.*)$/m);
+      return { title: (heading ? heading[1] : f.name.replace(/\.(md|markdown|txt)$/i, "")).trim(), content: src };
+    }))).then((items) => this.createDocuments(items));
+  }
+
+  /* סימון משימה כותב לשרת ולא רק למסך. client_seq ו-editor_id נשלחים
+     כמו בכל שמירה אחרת, כדי ששתי לחיצות מהירות לא ידרסו זו את זו. */
+  toggleTaskLine(lineIdx) {
+    return (e) => {
+      if (e) e.stopPropagation();
+      const doc = this.state.doc;
+      if (lineIdx == null || !doc || !this.canEdit()) return;
+
+      const lines = doc.content.replace(/\r\n?/g, "\n").split("\n");
+      const line = lines[lineIdx];
+      if (line == null || !/\[[ xX]\]/.test(line)) return;
+      lines[lineIdx] = /\[[xX]\]/.test(line) ? line.replace(/\[[xX]\]/, "[ ]") : line.replace(/\[ \]/, "[x]");
+      const content = lines.join("\n");
+
+      this.setState({ doc: Object.assign({}, doc, { content: content }) });
+      this.saveContent(content);
+    };
+  }
+
+  saveContent(content) {
+    const project = this.state.project;
+    const doc = this.state.doc;
+    if (!project || !doc) return;
+    this.seq = (this.seq || 0) + 1;
+    if (!this.editorId) this.editorId = Math.random().toString(36).slice(2, 12);
+    return this.guard(() =>
+      this.api("/projects/" + encodeURIComponent(project.slug) + "/docs/" + encodeURIComponent(doc.slug), {
+        method: "PUT",
+        body: { content: content, client_seq: this.seq, editor_id: this.editorId }
+      })
+    );
+  }
+
+  canEdit() {
+    return !!this.state.me;
+  }
+
+  /* ---------- view model ---------- */
+
+  renderVals() {
+    const s = this.state;
+    const ed = s.theme === "light";
+    const chrome = CHROME[s.theme] || CHROME.dark;
+
+    const onProjects = s.screen === "projects";
+    const onProject = s.screen === "project";
+    const onReference = s.screen === "reference";
+    const canEdit = this.canEdit();
+
+    const project = s.project;
+    const doc = s.doc;
+    const parsed = doc ? this.parse(doc.content) : { front: {}, blocks: [] };
+    const numbered = this.props.numberedHeadings ?? true;
+
+    const h1 = parsed.blocks.filter((b) => b.t === "h" && b.level === 1)[0];
+    const title = parsed.front.title || (h1 ? h1.text : (doc ? doc.title : ""));
+    let leadIdx = -1;
+    for (let bi = 0; bi < parsed.blocks.length; bi++) {
+      const bt = parsed.blocks[bi].t;
+      if (bt === "p") { leadIdx = bi; break; }
+      if (bt !== "h") break;
+      if (parsed.blocks[bi].level !== 1) break;
+    }
+    const firstP = leadIdx > -1 ? parsed.blocks[leadIdx] : null;
+    const words = doc ? doc.content.split(/\s+/).filter(Boolean).length : 0;
+
+    const q = s.q.trim().toLowerCase();
+    const allDocs = project ? project.documents : [];
+    const docList = allDocs.filter((d) => !q || d.title.toLowerCase().indexOf(q) > -1);
+
+    /* תוכן העניינים משרת את שני המסכים. */
+    const toc = [];
+    if (onReference) {
+      REF_SECTIONS.forEach((sec, i) => toc.push({
+        label: sec.label, href: "#" + sec.id,
+        fg: i === s.active ? "var(--head)" : "var(--faint-2)",
+        go: this.scrollToId(sec.id)
+      }));
+    } else if (doc) {
+      let hi = 0;
+      parsed.blocks.forEach((b) => {
+        if (b.t !== "h" || b.level === 1) return;
+        hi++;
+        if (b.level > 3) return;
+        const id = "h-" + hi;
+        toc.push({
+          label: b.text.replace(/[`*~=]/g, ""),
+          href: "#" + id,
+          fg: b.level === 2 ? "var(--soft)" : "var(--faint-2)",
+          go: (e) => {
+            const el = document.getElementById(id);
+            if (!el) return;
+            if (e) e.preventDefault();
+            window.scrollTo({ top: el.getBoundingClientRect().top + window.scrollY - 90, behavior: "smooth" });
+          }
+        });
+      });
+    }
+
+    const tabOn = "padding:5px 13px;border:none;border-radius:var(--r-sm);background:var(--accent);color:var(--accent-on);font-family:inherit;font-size:12.5px;font-weight:600;cursor:pointer";
+    const tabOff = "padding:5px 13px;border:none;border-radius:var(--r-sm);background:none;color:var(--muted);font-family:inherit;font-size:12.5px;font-weight:500;cursor:pointer";
+
+    const apiTab = s.tab || this.props.defaultCodeTab || "javascript";
+    const raw = s.raw === null ? false : s.raw;
+    const g = s.groups;
+    const tabFgOn = "var(--head)", tabFgOff = "var(--faint-2)";
+
+    const hostOf = (url) => {
+      try { return new URL(url).host; } catch (e) { return url; }
+    };
+
+    return {
+      /* --- ערכת עיצוב --- */
+      theme: s.theme,
+      themeGlyph: ed ? "☾" : "☀",
+      themeTitle: ed ? "מעבר למצב כהה" : "מעבר למצב בהיר",
+      toggleTheme: () => this.toggleTheme(),
+      chrome: chrome,
+      srcLabel: chrome.srcLabel,
+      pasteLabel: chrome.pasteLabel,
+
+      /* --- מצב כללי --- */
+      shellVisible: !s.loginOpen,
+      hasError: !!s.error,
+      error: s.error,
+      clearError: () => this.setState({ error: "" }),
+      signedIn: !!s.me,
+      signedOut: !s.me,
+      canEdit: canEdit,
+
+      /* --- כניסה --- */
+      loginOpen: s.loginOpen,
+      loginEmail: s.loginEmail,
+      loginPassword: s.loginPassword,
+      loginLabel: s.loggingIn ? "מתחבר…" : "כניסה",
+      onLoginEmail: (e) => this.setState({ loginEmail: e.target.value }),
+      onLoginPassword: (e) => this.setState({ loginPassword: e.target.value }),
+      onLoginKey: (e) => { if (e.key === "Enter") this.submitLogin(); },
+      openLogin: () => this.setState({ loginOpen: true, error: "" }),
+      closeLogin: () => this.setState({ loginOpen: false, loginPassword: "" }),
+      submitLogin: () => this.submitLogin(),
+      logout: async () => {
+        await this.guard(() => this.api("/auth/logout", { method: "POST" }));
+        this.setState({ me: null, screen: "projects", project: null, doc: null });
+        await this.reloadProjects();
+      },
+
+      /* --- מסכים --- */
+      onProjects: onProjects,
+      onProject: onProject,
+      onReference: onReference,
+      onDoc: onProject && !!doc,
+      noDoc: onProject && !doc,
+      screenTab: {
+        projects: onReference ? tabOff : tabOn,
+        reference: onReference ? tabOn : tabOff
+      },
+      goProjects: (e) => {
+        if (e) e.preventDefault();
+        this.setState({ screen: "projects", project: null, doc: null, docSlug: null, active: 0 });
+        window.scrollTo({ top: 0 });
+      },
+      goReference: () => { this.setState({ screen: "reference", active: 0 }); window.scrollTo({ top: 0 }); },
+
+      /* --- מסך הפרויקטים --- */
+      projects: s.projects.map((p) => ({
+        name: p.name,
+        description: p.description || "בלי תיאור.",
+        badge: p.visibility === "public" ? "פומבי" : "פרטי",
+        badgeBg: p.visibility === "public" ? "var(--green-soft)" : "var(--tint)",
+        badgeFg: p.visibility === "public" ? "var(--green)" : "var(--faint)",
+        meta: p.documents.length + " מסמכים · " + p.slug,
+        open: (e) => { if (e) e.preventDefault(); this.openProject(p.slug); }
+      })),
+      noProjects: s.ready && !s.projects.length,
+      projectsLead: canEdit
+        ? "כל פרויקט מחזיק את המסמכים והקישורים שלו. המסמכים נשמרים בשרת וזמינים מכל מכשיר."
+        : "פרויקטים פומביים בלבד. לכתיבה נדרשת כניסה.",
+      emptyProjectsText: canEdit
+        ? "אין עדיין פרויקטים. צרו את הראשון בשדה שלמעלה."
+        : "אין פרויקטים פומביים להצגה.",
+      newProjectName: s.newProjectName,
+      onNewProjectName: (e) => this.setState({ newProjectName: e.target.value }),
+      onNewProjectKey: (e) => { if (e.key === "Enter") this.createProject(); },
+      createProject: () => this.createProject(),
+
+      /* --- מסך הפרויקט --- */
+      projectName: project ? project.name : "",
+      visibilityLabel: project && project.visibility === "public" ? "פומבי" : "פרטי",
+      docCount: allDocs.length + " מסמכים",
+      noDocs: onProject && !docList.length,
+      emptyDocsText: canEdit
+        ? "אין עדיין מסמכים. גררו לכאן קובץ Markdown, או הדביקו אחד מהסרגל."
+        : "אין מסמכים בפרויקט הזה.",
+      q: s.q,
+      onSearch: (e) => this.setState({ q: e.target.value }),
+
+      docs: docList.map((d, i) => {
+        const on = d.slug === s.docSlug;
+        return {
+          title: d.title,
+          num: ("0" + (i + 1)).slice(-2),
+          numFg: on ? "var(--accent)" : "var(--faint)",
+          numbered: ed,
+          rowStyle: ed
+            ? "display:flex;align-items:baseline;gap:9px;padding:9px 0;border-bottom:1px solid var(--line)"
+            : "display:flex;align-items:center;gap:6px;border-radius:var(--r-sm);background:" + (on ? "var(--accent-soft)" : "transparent") + ";border-inline-start:2px solid " + (on ? "var(--accent)" : "transparent"),
+          linkStyle: ed
+            ? "flex:1;min-width:0;font-size:14.5px;font-weight:" + (on ? "700" : "400") + ";color:" + (on ? "var(--accent-text)" : "var(--text)") + ";white-space:nowrap;overflow:hidden;text-overflow:ellipsis"
+            : "flex:1;min-width:0;padding:8px 11px;font-size:14px;color:" + (on ? "var(--accent-hover)" : "var(--soft)") + ";white-space:nowrap;overflow:hidden;text-overflow:ellipsis",
+          open: (e) => { if (e) e.preventDefault(); this.openDoc(d.slug); },
+          remove: async () => {
+            await this.guard(() =>
+              this.api("/projects/" + encodeURIComponent(project.slug) + "/docs/" + encodeURIComponent(d.slug), { method: "DELETE" })
+            );
+            if (s.docSlug === d.slug) this.setState({ doc: null, docSlug: null });
+            await this.refreshProject();
+          }
+        };
+      }),
+
+      /* --- קישורים --- */
+      hasLinksSection: onProject && !!project && (canEdit || (project.links && project.links.length > 0)),
+      links: (project ? project.links : []).map((link) => ({
+        title: link.title,
+        href: safeHref(link.url),
+        host: hostOf(link.url),
+        remove: async () => {
+          await this.guard(() =>
+            this.api("/projects/" + encodeURIComponent(project.slug) + "/links/" + link.id, { method: "DELETE" })
+          );
+          await this.refreshProject();
+        }
+      })),
+      newLinkTitle: s.newLinkTitle,
+      newLinkUrl: s.newLinkUrl,
+      onNewLinkTitle: (e) => this.setState({ newLinkTitle: e.target.value }),
+      onNewLinkUrl: (e) => this.setState({ newLinkUrl: e.target.value }),
+      onNewLinkKey: (e) => { if (e.key === "Enter") this.addLink(); },
+      addLink: () => this.addLink(),
+
+      /* --- המסמך --- */
+      crumb: onReference ? "רכיבי Markdown" : (project ? project.name + (doc ? " / " + doc.title : "") : "פרויקטים"),
+      title: title,
+      lead: firstP ? firstP.text.replace(/[`*~]/g, "") : "",
+      fileName: doc ? doc.slug + ".md" : "",
+      meta: words + " מילים · " + Math.max(1, Math.round(words / 200)) + " דקות קריאה",
+      source: doc ? doc.content : "",
+      body: this.render_blocks(parsed, numbered, leadIdx),
+
+      toc: toc,
+      tocEmpty: !toc.length,
+      tocY: s.active * 32 + 6,
+      tocVisible: (this.props.showToc ?? true) && !s.narrow && (onReference || !!doc),
+      sidebarVisible: !s.mobile && !onProjects,
+
+      showSource: s.showSource === null ? (this.props.showSourceByDefault ?? false) : s.showSource,
+      toggleSource: () => this.setState({ showSource: !(s.showSource === null ? (this.props.showSourceByDefault ?? false) : s.showSource) }),
+      copyLabel: s.copied ? "הועתק ✓" : "העתקה",
+      copySource: async () => {
+        try { if (doc) await navigator.clipboard.writeText(doc.content); } catch (e) {}
+        this.setState({ copied: true });
+        clearTimeout(this.timer);
+        this.timer = setTimeout(() => this.setState({ copied: false }), 1600);
+      },
+      download: () => {
+        if (!doc) return;
+        const url = URL.createObjectURL(new Blob([doc.content], { type: "text/markdown" }));
+        const a = document.createElement("a");
+        a.href = url; a.download = doc.slug + ".md"; a.click();
+        setTimeout(() => URL.revokeObjectURL(url), 2000);
+      },
+
+      pasting: s.pasting,
+      togglePaste: () => this.setState({ pasting: !s.pasting }),
+      draft: s.draft,
+      onDraft: (e) => this.setState({ draft: e.target.value }),
+      addDraft: async () => {
+        const src = s.draft.trim();
+        if (!src) return;
+        const heading = src.match(/^#\s+(.*)$/m);
+        await this.createDocuments([{ title: (heading ? heading[1] : "מסמך חדש").trim(), content: src }]);
+        this.setState({ draft: "", pasting: false });
+      },
+      onFiles: (e) => { this.readFiles(e.target.files); e.target.value = ""; },
+      dragging: s.dragging,
+      onDragOver: (e) => { e.preventDefault(); if (!s.dragging) this.setState({ dragging: true }); },
+      onDragLeave: () => this.setState({ dragging: false }),
+      onDrop: (e) => { e.preventDefault(); this.setState({ dragging: false }); if (this.canEdit()) this.readFiles(e.dataTransfer.files); },
+
+      /* --- רפרנס --- */
+      nav: {
+        s0: this.scrollToId("sec-01"), s1: this.scrollToId("sec-02"), s2: this.scrollToId("sec-03"), s3: this.scrollToId("sec-04"),
+        s4: this.scrollToId("sec-05"), s5: this.scrollToId("sec-06"), s6: this.scrollToId("sec-07"), s7: this.scrollToId("sec-08")
+      },
+      goTop: this.scrollToId("top"),
+      open: g,
+      closed: { start: !g.start, guides: !g.guides, api: !g.api },
+      toggle: { start: this.toggleGroup("start"), guides: this.toggleGroup("guides"), api: this.toggleGroup("api") },
+      rawOn: raw,
+      rawOff: !raw,
+      toggleRaw: () => this.setState({ raw: !raw }),
+      isJs: apiTab === "javascript",
+      isPy: apiTab === "python",
+      isCurl: apiTab === "curl",
+      tab: { js: () => this.setState({ tab: "javascript" }), py: () => this.setState({ tab: "python" }), curl: () => this.setState({ tab: "curl" }) },
+      tabFg: { js: apiTab === "javascript" ? tabFgOn : tabFgOff, py: apiTab === "python" ? tabFgOn : tabFgOff, curl: apiTab === "curl" ? tabFgOn : tabFgOff },
+      tabLine: { js: apiTab === "javascript" ? "var(--accent)" : "transparent", py: apiTab === "python" ? "var(--accent)" : "transparent", curl: apiTab === "curl" ? "var(--accent)" : "transparent" },
+      copyCode: this.flash("code", this.apiCode(apiTab)),
+      copiedCode: s.codeCopied === "code",
+      notCopiedCode: s.codeCopied !== "code",
+      copyPage: this.flash("page", "# רכיבי Markdown\n\nכל רכיב שהתיעוד יודע להציג, עם הסינטקס שמייצר אותו."),
+      copiedPage: s.codeCopied === "page",
+      notCopiedPage: s.codeCopied !== "page",
+      tasks: s.tasks,
+      task: { t0: this.toggleTask("t0"), t1: this.toggleTask("t1"), t2: this.toggleTask("t2") },
+      voted: s.voted,
+      voteYes: () => this.setState({ voted: true }),
+      voteNo: () => this.setState({ voted: true })
+    };
+  }
+
+  async submitLogin() {
+    if (this.state.loggingIn) return;
+    this.setState({ loggingIn: true, error: "" });
+    try {
+      const me = await this.api("/auth/login", {
+        method: "POST",
+        body: { email: this.state.loginEmail.trim(), password: this.state.loginPassword }
+      });
+      this.setState({ me: me, loginOpen: false, loginPassword: "", loggingIn: false });
+      await this.reloadProjects();
+    } catch (error) {
+      /* השרת מחזיר הודעה אחידה בכוונה — הוא לא מסגיר אם המייל קיים,
+         אם הסיסמה שגויה או אם הכניסה חסומה זמנית. */
+      this.setState({ loggingIn: false, error: error.message || "הכניסה נכשלה" });
+    }
+  }
+
+  async createProject() {
+    const name = this.state.newProjectName.trim();
+    if (!name) return;
+    const project = await this.guard(() =>
+      this.api("/projects", { method: "POST", body: { name: name } })
+    );
+    if (!project) return;
+    this.setState({ newProjectName: "" });
+    await this.reloadProjects();
+    await this.openProject(project.slug);
+  }
+
+  async addLink() {
+    const project = this.state.project;
+    const title = this.state.newLinkTitle.trim();
+    const url = this.state.newLinkUrl.trim();
+    if (!project || !title || !url) return;
+    const created = await this.guard(() =>
+      this.api("/projects/" + encodeURIComponent(project.slug) + "/links", {
+        method: "POST",
+        body: { title: title, url: url }
+      })
+    );
+    if (!created) return;
+    this.setState({ newLinkTitle: "", newLinkUrl: "" });
+    await this.refreshProject();
   }
 
   drawDiagrams() {
@@ -1352,8 +1760,6 @@ class Component extends DCLogic {
     set("text, tspan, .nodeLabel, .edgeLabel, .label, .titleText", (el) => { el.style.fill = P.text; el.style.color = P.text; });
     set(".edgeLabel rect, .labelBkg, .edgeLabel .label-container", (el) => { el.style.fill = P.edgeBg; el.style.background = P.edgeBg; el.style.backgroundColor = P.edgeBg; });
   }
-
-  /* ---------- כלי עזר ---------- */
 
   copyText(text, key) {
     return async () => {
@@ -1406,59 +1812,6 @@ class Component extends DCLogic {
       return null;
     }
   }
-
-  save(docs) {
-    try { localStorage.setItem(KEY, JSON.stringify(docs)); } catch (e) { /* אחסון מלא או חסום */ }
-  }
-
-  addDocs(items) {
-    if (!items.length) return;
-    const docs = this.state.docs.concat(items);
-    this.save(docs);
-    this.setState({ docs: docs, current: items[0].id, active: 0, q: "", screen: "library" });
-    window.scrollTo({ top: 0 });
-  }
-
-  readFiles(fileList) {
-    const files = Array.from(fileList || []).filter((f) => /\.(md|markdown|txt)$/i.test(f.name) || f.type.indexOf("text") === 0);
-    if (!files.length) return;
-    Promise.all(files.map((f) => f.text().then((src) => ({ id: "d" + Date.now() + Math.random().toString(36).slice(2, 6), name: f.name, src: src }))))
-      .then((items) => this.addDocs(items));
-  }
-
-  scrollToId(id) {
-    return (e) => {
-      if (e) e.preventDefault();
-      const el = document.getElementById(id);
-      if (!el) return;
-      window.scrollTo({ top: el.getBoundingClientRect().top + window.scrollY - 90, behavior: "smooth" });
-    };
-  }
-
-  flash(key, text) {
-    return async () => {
-      try { if (navigator.clipboard && text) await navigator.clipboard.writeText(text); } catch (err) { /* לוח חסום */ }
-      this.setState({ codeCopied: key });
-      clearTimeout(this.codeTimer);
-      this.codeTimer = setTimeout(() => this.setState({ codeCopied: "" }), 1800);
-    };
-  }
-
-  toggleGroup(key) {
-    return () => this.setState((s) => ({ groups: Object.assign({}, s.groups, { [key]: !s.groups[key] }) }));
-  }
-
-  toggleTask(key) {
-    return () => this.setState((s) => ({ tasks: Object.assign({}, s.tasks, { [key]: !s.tasks[key] }) }));
-  }
-
-  apiCode(tab) {
-    if (tab === "python") return 'from nimbus import Nimbus\n\nclient = Nimbus(api_key=os.environ["NIMBUS_KEY"])\n\ndoc = client.docs.create(\n    slug="markdown-components",\n    locale="he",\n    direction="rtl",\n    blocks=9,\n)\nprint(doc.url)';
-    if (tab === "curl") return 'curl -X POST https://api.nimbus.dev/v3/docs \\\n  -H "Authorization: Bearer $NIMBUS_KEY" \\\n  -H "Content-Type: application/json" \\\n  -d \'{"slug":"markdown-components","locale":"he","direction":"rtl"}\'';
-    return 'import { Nimbus } from "@nimbus/sdk";\n\nconst client = new Nimbus({ apiKey: process.env.NIMBUS_KEY });\n\nconst doc = await client.docs.create({\n  slug: "markdown-components",\n  locale: "he",\n  direction: "rtl",\n  blocks: 9,\n});\n\nconsole.log(doc.url);';
-  }
-
-  /* ---------- markdown → blocks ---------- */
 
   parse(src) {
     const lines = String(src || "").replace(/\r\n?/g, "\n").split("\n");
@@ -1550,26 +1903,6 @@ class Component extends DCLogic {
     return { front: front, blocks: blocks };
   }
 
-  /* ---------- inline ---------- */
-
-  toggleTaskLine(lineIdx) {
-    return (e) => {
-      if (e) e.stopPropagation();
-      if (lineIdx == null) return;
-      const cur = this.state.current;
-      const docs = this.state.docs.map((d) => {
-        if (d.id !== cur) return d;
-        const lines = d.src.replace(/\r\n?/g, "\n").split("\n");
-        const ln = lines[lineIdx];
-        if (ln == null || !/\[[ xX]\]/.test(ln)) return d;
-        lines[lineIdx] = /\[[xX]\]/.test(ln) ? ln.replace(/\[[xX]\]/, "[ ]") : ln.replace(/\[ \]/, "[x]");
-        return Object.assign({}, d, { src: lines.join("\n") });
-      });
-      this.save(docs);
-      this.setState({ docs: docs });
-    };
-  }
-
   toggleOpen(key) {
     return () => this.setState((st) => {
       const next = Object.assign({}, st.openMap);
@@ -1644,10 +1977,6 @@ class Component extends DCLogic {
       return React.createElement("span", { key: idx, style: { display: "block", minHeight: "1.75em" } }, parts.length ? parts : " ");
     });
   }
-
-  /* ---------- blocks → react ----------
-     ed = המצב הבהיר (Editorial). ההסתעפות כאן היא על מבנה בלבד —
-     צורת הכותרת, הקו המפריד, מסגרת ההתראה. הצבעים תמיד var(). */
 
   render_blocks(parsed, numbered, skipIdx, nested) {
     const ed = this.state.theme === "light";
@@ -1822,203 +2151,79 @@ class Component extends DCLogic {
     return out;
   }
 
-  /* ---------- view model ---------- */
+  apiCode(tab) {
+    if (tab === "python") return 'from nimbus import Nimbus\n\nclient = Nimbus(api_key=os.environ["NIMBUS_KEY"])\n\ndoc = client.docs.create(\n    slug="markdown-components",\n    locale="he",\n    direction="rtl",\n    blocks=9,\n)\nprint(doc.url)';
+    if (tab === "curl") return 'curl -X POST https://api.nimbus.dev/v3/docs \\\n  -H "Authorization: Bearer $NIMBUS_KEY" \\\n  -H "Content-Type: application/json" \\\n  -d \'{"slug":"markdown-components","locale":"he","direction":"rtl"}\'';
+    return 'import { Nimbus } from "@nimbus/sdk";\n\nconst client = new Nimbus({ apiKey: process.env.NIMBUS_KEY });\n\nconst doc = await client.docs.create({\n  slug: "markdown-components",\n  locale: "he",\n  direction: "rtl",\n  blocks: 9,\n});\n\nconsole.log(doc.url);';
+  }
 
-  renderVals() {
-    const s = this.state;
-    const ed = s.theme === "light";
-    const chrome = CHROME[s.theme] || CHROME.dark;
-    const onReference = s.screen === "reference";
+  toggleGroup(key) {
+    return () => this.setState((s) => ({ groups: Object.assign({}, s.groups, { [key]: !s.groups[key] }) }));
+  }
 
-    const doc = s.docs.filter((d) => d.id === s.current)[0] || s.docs[0] || null;
-    const parsed = doc ? this.parse(doc.src) : { front: {}, blocks: [] };
-    const numbered = this.props.numberedHeadings ?? true;
+  toggleTask(key) {
+    return () => this.setState((s) => ({ tasks: Object.assign({}, s.tasks, { [key]: !s.tasks[key] }) }));
+  }
 
-    const h1 = parsed.blocks.filter((b) => b.t === "h" && b.level === 1)[0];
-    const title = parsed.front.title || (h1 ? h1.text : (doc ? doc.name.replace(/\.(md|markdown|txt)$/i, "") : ""));
-    let leadIdx = -1;
-    for (let bi = 0; bi < parsed.blocks.length; bi++) {
-      const bt = parsed.blocks[bi].t;
-      if (bt === "p") { leadIdx = bi; break; }
-      if (bt !== "h") break;
-      if (parsed.blocks[bi].level !== 1) break;
-    }
-    const firstP = leadIdx > -1 ? parsed.blocks[leadIdx] : null;
-    const words = doc ? doc.src.split(/\s+/).filter(Boolean).length : 0;
-
-    const q = s.q.trim().toLowerCase();
-    const list = s.docs.filter((d) => !q || d.name.toLowerCase().indexOf(q) > -1 || d.src.toLowerCase().indexOf(q) > -1);
-
-    /* תוכן העניינים משרת את שני המסכים: כותרות המסמך בספרייה,
-       קטעי העמוד ברפרנס. */
-    const toc = [];
-    if (onReference) {
-      REF_SECTIONS.forEach((sec, i) => toc.push({
-        label: sec.label,
-        href: "#" + sec.id,
-        fg: i === s.active ? "var(--head)" : "var(--faint-2)",
-        go: this.scrollToId(sec.id)
-      }));
-    } else {
-      let hi = 0;
-      parsed.blocks.forEach((b) => {
-        if (b.t !== "h" || b.level === 1) return;
-        hi++;
-        if (b.level > 3) return;
-        const id = "h-" + hi;
-        toc.push({
-          label: b.text.replace(/[`*~=]/g, ""),
-          href: "#" + id,
-          fg: b.level === 2 ? "var(--soft)" : "var(--faint-2)",
-          go: (e) => {
-            const el = document.getElementById(id);
-            if (!el) return;
-            if (e) e.preventDefault();
-            window.scrollTo({ top: el.getBoundingClientRect().top + window.scrollY - 90, behavior: "smooth" });
-            if (window.history && window.history.replaceState) window.history.replaceState(null, "", "#" + id);
-          }
-        });
-      });
-    }
-
-    const tabOn = "padding:5px 13px;border:none;border-radius:var(--r-sm);background:var(--accent);color:var(--accent-on);font-family:inherit;font-size:12.5px;font-weight:600;cursor:pointer";
-    const tabOff = "padding:5px 13px;border:none;border-radius:var(--r-sm);background:none;color:var(--muted);font-family:inherit;font-size:12.5px;font-weight:500;cursor:pointer";
-
-    const apiTab = s.tab || this.props.defaultCodeTab || "javascript";
-    const raw = s.raw === null ? false : s.raw;
-    const g = s.groups;
-    const tabFgOn = "var(--head)", tabFgOff = "var(--faint-2)";
-
-    return {
-      /* --- ערכת עיצוב --- */
-      theme: s.theme,
-      themeGlyph: ed ? "☾" : "☀",
-      themeTitle: ed ? "מעבר למצב כהה" : "מעבר למצב בהיר",
-      toggleTheme: () => this.toggleTheme(),
-      chrome: chrome,
-      srcLabel: chrome.srcLabel,
-      pasteLabel: chrome.pasteLabel,
-
-      /* --- מסכים --- */
-      onLibrary: !onReference,
-      onReference: onReference,
-      screenTab: { library: onReference ? tabOff : tabOn, reference: onReference ? tabOn : tabOff },
-      goLibrary: () => { this.setState({ screen: "library", active: 0 }); window.scrollTo({ top: 0 }); },
-      goReference: () => { this.setState({ screen: "reference", active: 0 }); window.scrollTo({ top: 0 }); },
-
-      /* --- ספרייה --- */
-      docs: list.map((d, i) => {
-        const p = this.parse(d.src);
-        const t = p.front.title || (p.blocks.filter((b) => b.t === "h" && b.level === 1)[0] || {}).text || d.name;
-        const on = d.id === s.current;
-        return {
-          title: t,
-          num: ("0" + (i + 1)).slice(-2),
-          numFg: on ? "var(--accent)" : "var(--faint)",
-          numbered: ed,
-          rowStyle: ed
-            ? "display:flex;align-items:baseline;gap:9px;padding:9px 0;border-bottom:1px solid var(--line)"
-            : "display:flex;align-items:center;gap:6px;border-radius:var(--r-sm);background:" + (on ? "var(--accent-soft)" : "transparent") + ";border-inline-start:2px solid " + (on ? "var(--accent)" : "transparent"),
-          linkStyle: ed
-            ? "flex:1;min-width:0;font-size:14.5px;font-weight:" + (on ? "700" : "400") + ";color:" + (on ? "var(--accent-text)" : "var(--text)") + ";white-space:nowrap;overflow:hidden;text-overflow:ellipsis"
-            : "flex:1;min-width:0;padding:8px 11px;font-size:14px;color:" + (on ? "var(--accent-hover)" : "var(--soft)") + ";white-space:nowrap;overflow:hidden;text-overflow:ellipsis",
-          open: (e) => { if (e) e.preventDefault(); this.setState({ current: d.id, active: 0, showSource: null, screen: "library" }); window.scrollTo({ top: 0 }); },
-          remove: () => {
-            const docs = this.state.docs.filter((x) => x.id !== d.id);
-            this.save(docs);
-            this.setState({ docs: docs, current: this.state.current === d.id ? (docs[0] ? docs[0].id : null) : this.state.current });
-          }
-        };
-      }),
-      docCount: s.docs.length + " מסמכים",
-      noResults: !!q && !list.length,
-      hasDoc: !!doc,
-      noDoc: !doc,
-      crumb: onReference ? "רכיבי Markdown" : (doc ? title : "ספרייה ריקה"),
-      title: title,
-      lead: firstP ? firstP.text.replace(/[`*~]/g, "") : "",
-      fileName: doc ? doc.name : "",
-      meta: words + " מילים · " + Math.max(1, Math.round(words / 200)) + " דקות קריאה",
-      source: doc ? doc.src : "",
-      body: this.render_blocks(parsed, numbered, leadIdx),
-
-      toc: toc,
-      tocEmpty: !toc.length,
-      tocY: s.active * 32 + 6,
-      tocVisible: (this.props.showToc ?? true) && !s.narrow && (onReference || !!doc),
-      sidebarVisible: !s.mobile,
-      sidebarHidden: s.mobile,
-
-      showSource: s.showSource === null ? (this.props.showSourceByDefault ?? false) : s.showSource,
-      toggleSource: () => this.setState({ showSource: !(s.showSource === null ? (this.props.showSourceByDefault ?? false) : s.showSource) }),
-      copyLabel: s.copied ? "הועתק ✓" : "העתקה",
-      copySource: async () => {
-        try { if (doc) await navigator.clipboard.writeText(doc.src); } catch (e) {}
-        this.setState({ copied: true });
-        clearTimeout(this.timer);
-        this.timer = setTimeout(() => this.setState({ copied: false }), 1600);
-      },
-      download: () => {
-        if (!doc) return;
-        const url = URL.createObjectURL(new Blob([doc.src], { type: "text/markdown" }));
-        const a = document.createElement("a");
-        a.href = url; a.download = doc.name; a.click();
-        setTimeout(() => URL.revokeObjectURL(url), 2000);
-      },
-      q: s.q,
-      onSearch: (e) => this.setState({ q: e.target.value }),
-      pasting: s.pasting,
-      togglePaste: () => this.setState({ pasting: !s.pasting }),
-      draft: s.draft,
-      onDraft: (e) => this.setState({ draft: e.target.value }),
-      addDraft: () => {
-        const src = s.draft.trim();
-        if (!src) return;
-        const m = src.match(/^#\s+(.*)$/m);
-        const name = (m ? m[1].slice(0, 40).replace(/\s+/g, "-") : "pasted-" + (s.docs.length + 1)) + ".md";
-        this.addDocs([{ id: "d" + Date.now(), name: name, src: src }]);
-        this.setState({ draft: "", pasting: false });
-      },
-      onFiles: (e) => { this.readFiles(e.target.files); e.target.value = ""; },
-      dragging: s.dragging,
-      onDragOver: (e) => { e.preventDefault(); if (!s.dragging) this.setState({ dragging: true }); },
-      onDragLeave: () => this.setState({ dragging: false }),
-      onDrop: (e) => { e.preventDefault(); this.setState({ dragging: false }); this.readFiles(e.dataTransfer.files); },
-      loadSample: () => {
-        if (this.state.docs.some((d) => d.id === "sample")) { this.setState({ current: "sample", screen: "library" }); return; }
-        this.addDocs([{ id: "sample", name: "markdown-components.md", src: SAMPLE }]);
-      },
-
-      /* --- רפרנס --- */
-      nav: {
-        s0: this.scrollToId("sec-01"), s1: this.scrollToId("sec-02"), s2: this.scrollToId("sec-03"), s3: this.scrollToId("sec-04"),
-        s4: this.scrollToId("sec-05"), s5: this.scrollToId("sec-06"), s6: this.scrollToId("sec-07"), s7: this.scrollToId("sec-08")
-      },
-      goTop: this.scrollToId("top"),
-      open: g,
-      closed: { start: !g.start, guides: !g.guides, api: !g.api },
-      toggle: { start: this.toggleGroup("start"), guides: this.toggleGroup("guides"), api: this.toggleGroup("api") },
-      rawOn: raw,
-      rawOff: !raw,
-      toggleRaw: () => this.setState({ raw: !raw }),
-      isJs: apiTab === "javascript",
-      isPy: apiTab === "python",
-      isCurl: apiTab === "curl",
-      tab: { js: () => this.setState({ tab: "javascript" }), py: () => this.setState({ tab: "python" }), curl: () => this.setState({ tab: "curl" }) },
-      tabFg: { js: apiTab === "javascript" ? tabFgOn : tabFgOff, py: apiTab === "python" ? tabFgOn : tabFgOff, curl: apiTab === "curl" ? tabFgOn : tabFgOff },
-      tabLine: { js: apiTab === "javascript" ? "var(--accent)" : "transparent", py: apiTab === "python" ? "var(--accent)" : "transparent", curl: apiTab === "curl" ? "var(--accent)" : "transparent" },
-      copyCode: this.flash("code", this.apiCode(apiTab)),
-      copiedCode: s.codeCopied === "code",
-      notCopiedCode: s.codeCopied !== "code",
-      copyPage: this.flash("page", "# רכיבי Markdown\n\nכל רכיב שהתיעוד יודע להציג, עם הסינטקס שמייצר אותו."),
-      copiedPage: s.codeCopied === "page",
-      notCopiedPage: s.codeCopied !== "page",
-      tasks: s.tasks,
-      task: { t0: this.toggleTask("t0"), t1: this.toggleTask("t1"), t2: this.toggleTask("t2") },
-      voted: s.voted,
-      voteYes: () => this.setState({ voted: true }),
-      voteNo: () => this.setState({ voted: true })
+  scrollToId(id) {
+    return (e) => {
+      if (e) e.preventDefault();
+      const el = document.getElementById(id);
+      if (!el) return;
+      window.scrollTo({ top: el.getBoundingClientRect().top + window.scrollY - 90, behavior: "smooth" });
     };
+  }
+
+  flash(key, text) {
+    return async () => {
+      try { if (navigator.clipboard && text) await navigator.clipboard.writeText(text); } catch (err) { /* לוח חסום */ }
+      this.setState({ codeCopied: key });
+      clearTimeout(this.codeTimer);
+      this.codeTimer = setTimeout(() => this.setState({ codeCopied: "" }), 1800);
+    };
+  }
+
+  mermaid() {
+    return MERMAID[this.state.theme] || MERMAID.dark;
+  }
+
+  storedTheme() {
+    let v = null;
+    try { v = localStorage.getItem(THEME_KEY); } catch (e) { v = null; }
+    return v === "dark" || v === "light" ? v : null;
+  }
+
+  initialTheme() {
+    const stored = this.storedTheme();
+    if (stored) return stored;
+    const prop = this.props.defaultTheme || "auto";
+    if (prop === "dark" || prop === "light") return prop;
+    try {
+      return window.matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark";
+    } catch (e) { return "dark"; }
+  }
+
+  applyTheme(mode) {
+    const c = THEMES[mode] || DARK;
+    const root = document.documentElement;
+    root.setAttribute("data-theme", mode);
+    root.style.colorScheme = mode;
+    Object.keys(c).forEach((k) => root.style.setProperty("--" + k, c[k]));
+    this.setState({ theme: mode });
+    this.repaintDiagrams();
+  }
+
+  toggleTheme() {
+    const next = this.state.theme === "dark" ? "light" : "dark";
+    try { localStorage.setItem(THEME_KEY, next); } catch (e) { /* אחסון חסום */ }
+    this.applyTheme(next);
+  }
+
+  repaintDiagrams() {
+    this.mermaidReady = false;
+    Array.prototype.forEach.call(document.querySelectorAll("[data-mermaid]"), (el) => {
+      el.removeAttribute("data-drawn");
+    });
   }
 }
 </script>

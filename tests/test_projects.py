@@ -316,6 +316,33 @@ async def test_slug_is_immutable(owner):
     assert (await owner.get("/api/projects/renamed")).status_code == 404
 
 
+async def test_patch_that_really_changes_something_returns_200(owner):
+    """PATCH ששינה שדה — ולכן הריץ UPDATE אמיתי.
+
+    test_slug_is_immutable שולח רק slug, שמתעלמים ממנו, ולכן אף פעם לא
+    התבצע UPDATE ו-updated_at לא פג. רק כשמשנים שדה אמיתי מתגלה
+    ש-onupdate מפקיע את העמודה, וקריאה שלה אחרי commit היא MissingGreenlet
+    (כלל 5). הבדיקה הזאת נכשלת ב-500 אם חוזרים לגעת ב-project המקורי.
+    """
+    await make_project(owner)
+    before = (await owner.get("/api/projects/docs")).json()
+
+    patched = await owner.patch(
+        "/api/projects/docs",
+        json={"visibility": "public", "name": "שם מעודכן"},
+        headers=WRITE,
+    )
+    assert patched.status_code == 200, patched.text
+
+    body = patched.json()
+    assert body["visibility"] == "public"
+    assert body["name"] == "שם מעודכן"
+    assert body["updated_at"] >= before["updated_at"]
+
+    # ומה שחזר הוא מה שנשמר, לא רק מה שהוחזק בזיכרון.
+    assert (await owner.get("/api/projects/docs")).json()["name"] == "שם מעודכן"
+
+
 # ── סדר כתיבות משויך לעורך ────────────────────────────────────────────
 
 

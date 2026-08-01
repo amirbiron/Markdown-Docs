@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 import logging
+from urllib.parse import urlsplit
 
 from app.config import get_settings
 
@@ -16,6 +17,23 @@ logger = logging.getLogger("markdown_docs.middleware")
 settings = get_settings()
 
 MUTATING_METHODS = frozenset({"POST", "PUT", "PATCH", "DELETE"})
+
+# רק שמות שמצביעים על המכונה עצמה. אין כאן תבנית ואין סיומת — "localhost"
+# הוא שם מדויק, ולכן evil-localhost.example אינו נכנס.
+LOOPBACK_HOSTS = frozenset({"localhost", "127.0.0.1", "::1"})
+
+
+def _is_loopback_origin(origin: str) -> bool:
+    """האם המקור מצביע על המכונה הזאת עצמה.
+
+    הפירוק הוא urlsplit ולא השוואת מחרוזות: hostname מנרמל את הסוגריים
+    של IPv6 ואת האותיות הגדולות, ומחזיר None כשה-Origin מעוות. השוואת
+    startswith הייתה מאשרת גם http://localhost.evil.example.
+    """
+    parts = urlsplit(origin)
+    if parts.scheme not in ("http", "https"):
+        return False
+    return (parts.hostname or "").lower() in LOOPBACK_HOSTS
 
 
 async def _send_error(send, status: int, body: dict) -> None:
@@ -47,17 +65,29 @@ class OriginGuard:
     דפדפנים שולחים Origin בכל fetch שמשנה מצב, ולכן הלקוח שלנו לא נפגע.
     """
 
-    def __init__(self, app, allowlist: frozenset[str], protected_prefix: str = "/api") -> None:
+    def __init__(
+        self,
+        app,
+        allowlist: frozenset[str],
+        protected_prefix: str = "/api",
+        allow_loopback: bool = False,
+    ) -> None:
         self.app = app
         self.allowlist = allowlist
         self.protected_prefix = protected_prefix
+        self.allow_loopback = allow_loopback
+
+    def _accepts(self, origin: str) -> bool:
+        if origin in self.allowlist:
+            return True
+        return self.allow_loopback and _is_loopback_origin(origin)
 
     async def __call__(self, scope, receive, send):
         if scope["type"] != "http":
             return await self.app(scope, receive, send)
         if scope["method"] in MUTATING_METHODS and scope["path"].startswith(self.protected_prefix):
             origin = _headers(scope).get("origin", "").rstrip("/")
-            if origin not in self.allowlist:
+            if not self._accepts(origin):
                 logger.warning(
                     "בקשה משנה מצב נדחתה: %s %s (Origin=%s)",
                     scope["method"],

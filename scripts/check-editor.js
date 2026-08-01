@@ -80,14 +80,21 @@ function bigDocument(lines) {
 
   if (setup.error) { console.error('FATAL ' + setup.error); await browser.close(); process.exit(1); }
 
+  /* המתנה לתנאי ולא לשעון. השהיות קבועות כאן נכשלו בפועל כשהטעינה
+     איטית מהצפוי, והכישלון נראה כמו באג במוצר במקום כמו בדיקה חסרת
+     סבלנות. ההשהיות הקבועות שנשארו בהמשך הן מדידה — שם הן המדד עצמו. */
   await p.reload({ waitUntil: 'load' });
   await p.waitForSelector('#dc-root', { timeout: 20000 });
-  await p.waitForTimeout(3000);
-  await p.getByText(NAME).first().click();
-  await p.waitForTimeout(2500);
 
-  await p.getByRole('button', { name: 'עריכה', exact: true }).click();
-  await p.waitForTimeout(1500);
+  const projectLink = p.getByText(NAME).first();
+  await projectLink.waitFor({ state: 'visible', timeout: 20000 });
+  await projectLink.click();
+
+  const editButton = p.getByRole('button', { name: 'עריכה', exact: true });
+  await editButton.waitFor({ state: 'visible', timeout: 20000 });
+  await editButton.click();
+
+  await p.locator('textarea').first().waitFor({ state: 'visible', timeout: 20000 });
   check('העורך נפתח', await p.locator('textarea').first().isVisible());
 
   const ta = p.locator('textarea').first();
@@ -217,7 +224,47 @@ function bigDocument(lines) {
   check('מעבר מסמך באמצע ההמתנה לא מאבד את השמירה',
     !!persisted && persisted.indexOf(marker) >= 0, JSON.stringify((persisted || '').slice(0, 40)));
 
+  /* בדיקת הקונסולה רצה כאן ולא בסוף: הבדיקה הבאה מפילה בקשות בכוונה,
+     והדפדפן מדווח על כל אחת מהן כשגיאה. ערבוב של השתיים היה הופך את
+     "אין שגיאות" לבדיקה שאי אפשר להעביר. */
   check('אין שגיאות קונסולה', errs.length === 0, errs.slice(0, 3).join(' | '));
+
+  // ── מדד: שמירה שנכשלה ברשת אינה מאבדת תוכן ────────────────────────
+  // הכשל הזה שקט: המשתמש כתב, הרשת נפלה, והוא לא מקליד עוד תו אלא פשוט
+  // עוזב. אם מסלול היציאה מדלג על מצב failed, מה שנכתב נעלם בלי סימן.
+  // הבדיקה הקודמת העבירה אותנו למסמך השני. חוזרים לראשון, כי הוא זה
+  // שנבדק מול השרת בסוף.
+  const backToFirst = p.getByText('טיוטה').first();
+  await backToFirst.waitFor({ state: 'visible', timeout: 20000 });
+  await backToFirst.click();
+  await p.waitForTimeout(2000);
+
+  await p.route('**/api/projects/**', (route) =>
+    route.request().method() === 'PUT' ? route.abort('failed') : route.continue());
+
+  const failMarker = 'תוכן אחרי כשל ' + process.pid;
+  await ta.fill('# טיוטה\n\n' + failMarker + '\n');
+  await p.waitForTimeout(4500);          // מעבר ל-SAVE_MS — השמירה נכשלה
+  const showedFailure = await p.evaluate(() => document.body.innerText.indexOf('השמירה נכשלה') >= 0);
+  check('כשל שמירה מוצג למשתמש', showedFailure);
+
+  // הרשת חוזרת, והמשתמש עוזב בלי להקליד עוד תו
+  await p.unroute('**/api/projects/**');
+  await p.evaluate(() => {
+    Object.defineProperty(document, 'visibilityState', { value: 'hidden', configurable: true });
+    document.dispatchEvent(new Event('visibilitychange'));
+  });
+  await p.waitForTimeout(3000);
+
+  const afterFail = await p.evaluate(async ([slug, docSlug]) => {
+    const r = await fetch(`/api/projects/${encodeURIComponent(slug)}/docs/${encodeURIComponent(docSlug)}`,
+      { credentials: 'same-origin' });
+    return r.ok ? (await r.json()).content : null;
+  }, [setup.slug, setup.docSlug]);
+  check('שמירה שנכשלה מנוסה שוב ביציאה',
+    !!afterFail && afterFail.indexOf(failMarker) >= 0,
+    JSON.stringify((afterFail || '').slice(0, 40)));
+
 
   // ── ניקוי ─────────────────────────────────────────────────────────
   const removed = await p.evaluate(async (slug) => {

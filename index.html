@@ -1710,7 +1710,12 @@ class Component extends DCLogic {
   async flushSave() {
     clearTimeout(this.saveTimer);
     this.saveTimer = null;
-    if (!this.state.editing || this.state.saveState !== "dirty") return;
+    /* failed נכנס לכאן יחד עם dirty, וזה לא פרט: שמירה שנכשלה ברשת
+       משאירה תוכן שלא הגיע לשרת. אילו רק dirty היה עובר, הניסיון החוזר
+       היה תלוי בכך שהמשתמש יקליד עוד תו — ומי שנכשל ואז סגר את הטאב
+       היה מאבד את מה שכתב בלי שום סימן. */
+    const pending = this.state.saveState === "dirty" || this.state.saveState === "failed";
+    if (!this.state.editing || !pending) return;
 
     const content = this.state.editBuf;
     const doc = this.state.doc;
@@ -1929,7 +1934,7 @@ class Component extends DCLogic {
         host: hostOf(link.url),
         remove: async () => {
           await this.guard(() =>
-            this.api("/projects/" + encodeURIComponent(project.slug) + "/links/" + link.id, { method: "DELETE" })
+            this.api("/projects/" + encodeURIComponent(project.slug) + "/links/" + encodeURIComponent(link.id), { method: "DELETE" })
           );
           await this.refreshProject();
         }

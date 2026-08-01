@@ -116,6 +116,10 @@ const check = (label, ok, extra) => {
   // ── לקוח ב': דפדפן אחר לגמרי, בלי cookie ──────────────────────────
   const guest = await browser.newContext({ viewport: { width: 1500, height: 1000 } });
   const g = await guest.newPage();
+  // אותם מאזינים כמו בדף הבעלים. בלעדיהם "אין שגיאות קונסולה" בסוף
+  // ההרצה מדלג דווקא על מסלול המבקר האנונימי — זה שרוב הקוראים רואים.
+  g.on('console', (m) => { if (m.type() === 'error') errs.push('אורח: ' + m.text()); });
+  g.on('pageerror', (e) => errs.push('אורח PAGEERROR: ' + e.message));
   await g.goto(BASE, { waitUntil: 'load' });
   await g.waitForSelector('#dc-root', { timeout: 20000 });
   await g.waitForTimeout(3000);
@@ -144,16 +148,20 @@ const check = (label, ok, extra) => {
   // בלי זה כל הרצה משאירה פרויקט ומסמך במסד, ואחרי כמה הרצות מסך
   // הפרויקטים והחיפוש מתמלאים בזבל בדיקות. המחיקה מדורגת — CASCADE
   // מוריד גם את המסמכים, הגרסאות והקישורים.
-  if (published) {
-    const removed = await p.evaluate(async (slug) => {
-      const res = await fetch('/api/projects/' + encodeURIComponent(slug), {
-        method: 'DELETE',
-        credentials: 'same-origin',
-      });
-      return res.status;
-    }, published);
-    check('הפרויקט נמחק בסיום', removed === 204, 'status ' + removed);
-  }
+  // הניקוי אינו מותנה בהצלחת הפרסום. אילו היה, כשל ב-PATCH היה משאיר
+  // את הפרויקט במסד — כלומר בדיוק בהרצות הכושלות, שבהן חוזרים ומריצים
+  // שוב ושוב, הזבל היה מצטבר הכי מהר.
+  const removed = await p.evaluate(async (name) => {
+    const list = await (await fetch('/api/projects', { credentials: 'same-origin' })).json();
+    const mine = list.find((x) => x.name === name);
+    if (!mine) return 'לא נמצא';
+    const res = await fetch('/api/projects/' + encodeURIComponent(mine.slug), {
+      method: 'DELETE',
+      credentials: 'same-origin',
+    });
+    return res.status;
+  }, NAME);
+  check('הפרויקט נמחק בסיום', removed === 204, 'status ' + removed);
 
   await browser.close();
   const failed = results.filter((r) => !r.ok);

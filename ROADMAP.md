@@ -205,7 +205,7 @@ PUT /api/projects/:slug/docs/:docSlug
 
 לכן הבקשה נושאת גם `editor_id`, מזהה אקראי שכל עורך מייצר לעצמו:
 
-```
+```text
 PUT /api/projects/:slug/docs/:docSlug
 { "content": "...", "client_seq": 42, "editor_id": "a3f9c1" }
 ```

@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import logging
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 from fastapi import APIRouter, Depends, FastAPI, Request, Response
 from fastapi.exceptions import RequestValidationError
@@ -39,8 +40,11 @@ settings = get_settings()
 # רק תיקיית הנכסים מוגשת, ולא שורש הריפו. STATIC_ROOT="." עם mount על
 # "/" הפך כל קובץ בפרויקט לנגיש — alembic.ini, app/config.py, .env.example
 # והשאר. index.html מוגש בנתיב מפורש, ולכן אין צורך למאונט לראות אותו.
-ASSETS_DIR = "assets"
-INDEX_FILE = "index.html"
+# נגזרים מ-__file__ ולא מספריית העבודה. uvicorn שהופעל מספרייה אחרת היה
+# מחפש את index.html במקום הלא נכון ונופל בעלייה.
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+ASSETS_DIR = PROJECT_ROOT / "assets"
+INDEX_FILE = PROJECT_ROOT / "index.html"
 
 # אותן כותרות שהיו ב-render.yaml כשהאתר היה סטטי. ברגע שהוא הפך לשירות
 # web, Render לא מזריק אותן יותר — הן חייבות לצאת מהאפליקציה, אחרת הן

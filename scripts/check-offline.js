@@ -9,8 +9,26 @@
  * חשובה במיוחד: window.__resources מדלג על שלב שבו ה-runtime קורא מחדש
  * את מקור התבנית, וצריך לוודא שזה לא שובר את שמות האטריביוטים.
  */
-const { chromium } = require('/opt/node22/lib/node_modules/playwright');
+/* playwright נפתר דרך node_modules הרגיל. אם הוא מותקן גלובלית בלבד,
+   NODE_PATH מצביע עליו — עדיף על נתיב מוחלט שקשור למכונה אחת. */
+let chromium;
+try {
+  ({ chromium } = require('playwright'));
+} catch {
+  console.error('playwright לא מותקן. הריצו: npm install');
+  process.exit(1);
+}
+
 const SP = process.argv[2];
+if (!SP) {
+  console.error('חסר ארגומנט: נתיב לתיקייה שאליה יישמרו צילומי המסך');
+  console.error('שימוש: node scripts/check-offline.js <תיקייה>');
+  process.exit(1);
+}
+
+/* התלות החיצונית היחידה שמותרת. השוואת prefix על "https://fonts." הייתה
+   מקבלת גם fonts.evil.example. */
+const FONT_HOSTS = new Set(['fonts.googleapis.com', 'fonts.gstatic.com']);
 
 (async () => {
   const b = await chromium.launch();
@@ -22,7 +40,9 @@ const SP = process.argv[2];
     const url = route.request().url();
     if (url.startsWith('http://127.0.0.1:8899')) return route.continue();
     // גופנים הם התלות החיצונית היחידה שנשארה. הם לא מריצים קוד.
-    if (!url.startsWith('https://fonts.')) external.push(url);
+    let host = '';
+    try { host = new URL(url).hostname; } catch { host = ''; }
+    if (!FONT_HOSTS.has(host)) external.push(url);
     return route.abort();
   });
   p.on('console', (m) => { if (m.type() === 'error') errs.push(m.text()); });

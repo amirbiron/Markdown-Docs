@@ -103,12 +103,19 @@ class DocumentPrivate(DocumentPublic):
 
 
 class LinkPublic(BaseModel):
+    """מה שאנונימי רואה. בלי מזהה — הוא חסר שימוש למי שלא יכול לערוך."""
+
     model_config = ConfigDict(from_attributes=True)
 
-    id: uuid.UUID
     title: str
     url: str
     position: int
+
+
+class LinkPrivate(LinkPublic):
+    """לבעלים. המזהה נדרש לו כדי לעדכן ולמחוק."""
+
+    id: uuid.UUID
 
 
 class ProjectPublic(BaseModel):
@@ -122,6 +129,7 @@ class ProjectPublic(BaseModel):
 
 
 class ProjectPrivate(ProjectPublic):
+    links: list[LinkPrivate] = []
     visibility: Visibility
     created_at: datetime
     updated_at: datetime

@@ -114,6 +114,12 @@ async def _fuzzy(session: AsyncSession, term: str, limit: int, viewer: User | No
             ).join(Project, Document.project_id == Project.id),
             viewer,
         )
+        # האופרטור % הוא מה שמאפשר ל-ix_documents_title_trgm להיכנס
+        # לתמונה. תנאי similarity(...) > x לבדו הוא ביטוי שהמתכנן לא
+        # יכול לתרגם לאינדקס, והוא היה מריץ סריקה מלאה עם חישוב לכל שורה.
+        # הסף המפורש נשאר אחריו, כי % נשען על pg_trgm.similarity_threshold
+        # שהוא הגדרה גלובלית של החיבור ולא ערך שאנחנו שולטים בו כאן.
+        .where(Document.title.op("%")(term))
         .where(similarity > TRIGRAM_THRESHOLD)
         .order_by(literal_column("sim").desc(), Document.id)
         .limit(limit)

@@ -14,7 +14,7 @@ from app.db import get_session
 from app.deps import optional_user, require_user
 from app.models import Project, ProjectLink, User
 from app.routers.projects import NOT_FOUND, load_project
-from app.schemas import LinkCreate, LinkPublic, LinkUpdate
+from app.schemas import LinkCreate, LinkPrivate, LinkPublic, LinkUpdate
 
 router = APIRouter(prefix="/projects/{project_slug}/links", tags=["links"])
 
@@ -48,7 +48,7 @@ def _clean_url(raw: str) -> str:
         raise HTTPException(422, str(error)) from None
 
 
-@router.get("", response_model=list[LinkPublic])
+@router.get("", response_model=list[LinkPublic] | list[LinkPrivate])
 async def list_links(
     project_slug: str,
     viewer: User | None = Depends(optional_user),
@@ -69,10 +69,12 @@ async def list_links(
         .scalars()
         .all()
     )
-    return [LinkPublic.model_validate(link) for link in links]
+    # בעלים מקבל את המזהים כי הוא צריך אותם כדי לערוך; אנונימי לא.
+    model = LinkPrivate if (viewer is not None and project.owner_id == viewer.id) else LinkPublic
+    return [model.model_validate(link) for link in links]
 
 
-@router.post("", response_model=LinkPublic, status_code=status.HTTP_201_CREATED)
+@router.post("", response_model=LinkPrivate, status_code=status.HTTP_201_CREATED)
 async def create_link(
     project_slug: str,
     payload: LinkCreate,
@@ -105,10 +107,10 @@ async def create_link(
     await session.commit()
 
     link = await session.get(ProjectLink, link_id)
-    return LinkPublic.model_validate(link)
+    return LinkPrivate.model_validate(link)
 
 
-@router.patch("/{link_id}", response_model=LinkPublic)
+@router.patch("/{link_id}", response_model=LinkPrivate)
 async def update_link(
     project_slug: str,
     link_id: uuid.UUID,
@@ -128,7 +130,7 @@ async def update_link(
 
     await session.commit()
     await session.refresh(link)
-    return LinkPublic.model_validate(link)
+    return LinkPrivate.model_validate(link)
 
 
 @router.delete("/{link_id}", status_code=status.HTTP_204_NO_CONTENT)

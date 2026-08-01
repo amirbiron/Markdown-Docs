@@ -43,9 +43,20 @@ def clean(raw: str) -> str:
         raise UrlError("מותרות כתובות http ו-https בלבד")
 
     # `//example.com` מתפרש בדפדפן כיחסי-לפרוטוקול ויוצא החוצה, אבל
-    # urlparse מחזיר עליו scheme ריק — ולכן הוא כבר נפסל למעלה. מה
-    # שנשאר לבדוק הוא `https://` בלי מארח בכלל.
-    if not parts.netloc:
+    # urlparse מחזיר עליו scheme ריק — ולכן הוא כבר נפסל למעלה.
+    #
+    # כאן בודקים hostname ולא netloc, וזה ההבדל שחשוב: ל-`https://user@`
+    # יש netloc (המחרוזת "user@") אבל אין בו מארח כלל. בדיקה על netloc
+    # הייתה מקבלת אותו.
+    if not parts.hostname:
         raise UrlError("הכתובת חסרה שם מארח")
+
+    # גישה ל-.port זורקת ValueError על פורט לא חוקי — `x.co:99999` או
+    # `x.co:abc`. בלי הבדיקה הזו הכתובת מתקבלת, והשגיאה מתפוצצת אחר כך
+    # במקום אחר לגמרי, אצל מי שינסה להשתמש בה.
+    try:
+        parts.port
+    except ValueError:
+        raise UrlError("מספר הפורט בכתובת אינו תקין") from None
 
     return url

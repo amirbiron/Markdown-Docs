@@ -12,10 +12,22 @@ cd "$(dirname "$0")/.."
 
 PRISM=1.29.0
 MERMAID=10.9.1
-REACT=18.3.1
+
+# כתובות React נגזרות מ-assets/support.js ולא נכתבות כאן שוב. ה-runtime
+# הוא זה שמחליט איזו גרסה הוא מבקש, ומספר גרסה שנכתב פעמיים מתפצל בשקט
+# בשדרוג הבא — ואז index.html ממפה כתובת שאף אחד כבר לא מבקש, ה-mapping
+# לא נתפס, ו-React נטען מ-unpkg בלי שאף אחד ישים לב.
+REACT_URL=$(grep -oE 'https://unpkg\.com/react@[^"]+' assets/support.js | head -1)
+REACT_DOM_URL=$(grep -oE 'https://unpkg\.com/react-dom@[^"]+' assets/support.js | head -1)
+[ -n "$REACT_URL" ] && [ -n "$REACT_DOM_URL" ] || { echo "לא נמצאו כתובות React ב-assets/support.js"; exit 1; }
 
 OUT=assets/vendor
 mkdir -p "$OUT"
+
+# הורדה לקבצים זמניים, והעברה למקום הסופי רק אחרי שהכול הצליח. בלי זה,
+# curl שנכשל באמצע משאיר קובץ חתוך שהאתר ממשיך להגיש.
+TMP=$(mktemp -d "$OUT/.tmp.XXXXXX")
+trap 'rm -rf "$TMP"' EXIT
 
 # סדר הטעינה של Prism הוא תלותי: core, ואז markup ו-clike, ורק אז השפות
 # שנשענות עליהן. שרשור בסדר שגוי נכשל בשקט — השפה פשוט לא נרשמת.
@@ -36,19 +48,39 @@ PRISM_PARTS=(
   components/prism-markdown.min.js
 )
 
-echo "/* Prism ${PRISM} — חבילה ארוזה מראש. נוצר על ידי scripts/vendor.sh */" > "$OUT/prism.js"
+echo "/* Prism ${PRISM} — חבילה ארוזה מראש. נוצר על ידי scripts/vendor.sh */" > "$TMP/prism.js"
 for part in "${PRISM_PARTS[@]}"; do
   echo "  · $part"
-  curl -fsS "https://cdn.jsdelivr.net/npm/prismjs@${PRISM}/${part}" >> "$OUT/prism.js"
-  printf '\n;\n' >> "$OUT/prism.js"
+  curl -fsS "https://cdn.jsdelivr.net/npm/prismjs@${PRISM}/${part}" >> "$TMP/prism.js"
+  printf '\n;\n' >> "$TMP/prism.js"
 done
 
 echo "  · mermaid"
-curl -fsS "https://cdn.jsdelivr.net/npm/mermaid@${MERMAID}/dist/mermaid.min.js" -o "$OUT/mermaid.js"
+curl -fsS "https://cdn.jsdelivr.net/npm/mermaid@${MERMAID}/dist/mermaid.min.js" -o "$TMP/mermaid.js"
 
 echo "  · react"
-curl -fsS "https://unpkg.com/react@${REACT}/umd/react.production.min.js" -o "$OUT/react.js"
-curl -fsS "https://unpkg.com/react-dom@${REACT}/umd/react-dom.production.min.js" -o "$OUT/react-dom.js"
+curl -fsS "$REACT_URL" -o "$TMP/react.js"
+curl -fsS "$REACT_DOM_URL" -o "$TMP/react-dom.js"
+
+# ── אימות מול הסכומים השמורים ────────────────────────────────────────
+# רק אחרי שכל ההורדות הצליחו. הקובץ CHECKSUMS מקובע בריפו, ולכן CDN
+# שמגיש תוכן אחר נתפס כאן במקום להיכנס בשקט.
+CHECKSUMS=assets/vendor/CHECKSUMS
+if [ -f "$CHECKSUMS" ] && [ "${REFRESH_CHECKSUMS:-0}" != "1" ]; then
+  echo
+  echo "מאמת מול $CHECKSUMS"
+  ( cd "$TMP" && sha256sum -c "$(cd .. && pwd)/CHECKSUMS" ) || {
+    echo
+    echo "אימות נכשל. אם זה שדרוג גרסה מכוון: REFRESH_CHECKSUMS=1 $0"
+    exit 1
+  }
+fi
+
+for f in prism.js mermaid.js react.js react-dom.js; do
+  mv "$TMP/$f" "$OUT/$f"
+done
+
+( cd "$OUT" && sha256sum prism.js mermaid.js react.js react-dom.js > CHECKSUMS )
 
 echo
-ls -la "$OUT" | awk 'NR>3 {printf "  %-16s %s\n", $9, $5}'
+ls -la "$OUT" | awk 'NR>3 && $9 !~ /^\./ {printf "  %-16s %s\n", $9, $5}'

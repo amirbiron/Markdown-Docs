@@ -16,69 +16,26 @@ from app.main import app
 from app.seed import seed_admin
 from app.security import COOKIE_NAME
 
-from tests.conftest import EMAIL, ORIGIN, PASSWORD, WRITE  # noqa: F401
-
-
-@pytest.fixture(scope="session", autouse=True)
-async def seeded():
-    async with SessionLocal() as session:
-        await seed_admin(session)
-    yield
-
-
-@pytest.fixture(autouse=True)
-async def clean_projects():
-    """כל טסט מתחיל מספרייה ריקה."""
-    async with SessionLocal() as session:
-        await session.execute(text("DELETE FROM projects"))
-        await session.commit()
-    yield
-
-
-@pytest.fixture
-async def owner():
-    """לקוח מחובר."""
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
-        response = await c.post(
-            "/api/auth/login", json={"email": EMAIL, "password": PASSWORD}, headers=WRITE
-        )
-        assert response.status_code == 200, response.text
-        yield c
-
-
-@pytest.fixture
-async def anon():
-    """לקוח לא מחובר."""
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
-        yield c
-
-
-async def _project(owner, slug="docs", name="התיעוד", visibility="private"):
-    response = await owner.post(
-        "/api/projects",
-        json={"name": name, "slug": slug, "visibility": visibility},
-        headers=WRITE,
-    )
-    assert response.status_code == 201, response.text
-    return response.json()
-
-
-async def _document(owner, project="docs", slug="installation", title="התקנה", content="# התקנה"):
-    response = await owner.post(
-        f"/api/projects/{project}/docs",
-        json={"title": title, "slug": slug, "content": content},
-        headers=WRITE,
-    )
-    assert response.status_code == 201, response.text
-    return response.json()
+from tests.conftest import (  # noqa: F401
+    EMAIL,
+    ORIGIN,
+    PASSWORD,
+    WRITE,
+    anon,
+    clean_projects,
+    make_document,
+    make_project,
+    owner,
+    seeded_admin,
+)
 
 
 # ── מדד: המחזור המלא, כולל שמירת הגרסה הקודמת ─────────────────────────
 
 
 async def test_full_cycle_keeps_the_previous_version(owner):
-    await _project(owner)
-    await _document(owner, content="גרסה ראשונה")
+    await make_project(owner)
+    await make_document(owner, content="גרסה ראשונה")
 
     updated = await owner.put(
         "/api/projects/docs/docs/installation",
@@ -97,8 +54,8 @@ async def test_full_cycle_keeps_the_previous_version(owner):
 
 async def test_identical_content_does_not_create_a_version(owner):
     """שמירה אוטומטית שלא שינתה כלום לא צריכה לייצר היסטוריה."""
-    await _project(owner)
-    await _document(owner, content="אותו תוכן")
+    await make_project(owner)
+    await make_document(owner, content="אותו תוכן")
     for _ in range(3):
         await owner.put(
             "/api/projects/docs/docs/installation", json={"content": "אותו תוכן"}, headers=WRITE
@@ -109,8 +66,8 @@ async def test_identical_content_does_not_create_a_version(owner):
 
 async def test_version_history_is_capped(owner):
     """היסטוריה לא גדלה בלי גבול."""
-    await _project(owner)
-    await _document(owner, content="0")
+    await make_project(owner)
+    await make_document(owner, content="0")
     keep = get_settings().document_versions_kept
     for i in range(1, keep + 12):
         await owner.put(
@@ -124,13 +81,13 @@ async def test_version_history_is_capped(owner):
 
 
 async def test_private_project_is_404_for_anonymous(anon, owner):
-    await _project(owner, visibility="private")
+    await make_project(owner, visibility="private")
     assert (await anon.get("/api/projects/docs")).status_code == 404
 
 
 async def test_public_project_is_readable_without_a_cookie(anon, owner):
-    await _project(owner, visibility="public")
-    await _document(owner)
+    await make_project(owner, visibility="public")
+    await make_document(owner)
     response = await anon.get("/api/projects/docs")
     assert response.status_code == 200
     assert response.json()["name"] == "התיעוד"
@@ -139,7 +96,7 @@ async def test_public_project_is_readable_without_a_cookie(anon, owner):
 
 async def test_missing_and_private_are_indistinguishable(anon, owner):
     """אותה תשובה בדיוק — אחרת אפשר למפות אילו פרויקטים קיימים."""
-    await _project(owner, slug="secret", visibility="private")
+    await make_project(owner, slug="secret", visibility="private")
     hidden = await anon.get("/api/projects/secret")
     absent = await anon.get("/api/projects/does-not-exist")
     assert hidden.status_code == absent.status_code == 404
@@ -147,28 +104,28 @@ async def test_missing_and_private_are_indistinguishable(anon, owner):
 
 
 async def test_listing_hides_private_projects(anon, owner):
-    await _project(owner, slug="open", name="פתוח", visibility="public")
-    await _project(owner, slug="closed", name="סגור", visibility="private")
+    await make_project(owner, slug="open", name="פתוח", visibility="public")
+    await make_project(owner, slug="closed", name="סגור", visibility="private")
 
     assert [p["slug"] for p in (await anon.get("/api/projects")).json()] == ["open"]
     assert {p["slug"] for p in (await owner.get("/api/projects")).json()} == {"open", "closed"}
 
 
 async def test_public_response_does_not_leak_owner_fields(anon, owner):
-    await _project(owner, visibility="public")
+    await make_project(owner, visibility="public")
     body = (await anon.get("/api/projects/docs")).json()
     for leaked in ("owner_id", "id", "visibility", "created_at", "updated_at"):
         assert leaked not in body, f"התשובה הציבורית חשפה {leaked}"
 
 
 async def test_document_in_private_project_is_404_for_anonymous(anon, owner):
-    await _project(owner, visibility="private")
-    await _document(owner)
+    await make_project(owner, visibility="private")
+    await make_document(owner)
     assert (await anon.get("/api/projects/docs/docs/installation")).status_code == 404
 
 
 async def test_anonymous_cannot_write(anon, owner):
-    await _project(owner, visibility="public")
+    await make_project(owner, visibility="public")
     response = await anon.post(
         "/api/projects/docs/docs", json={"title": "חדש"}, headers=WRITE
     )
@@ -186,7 +143,7 @@ async def test_hebrew_slug_is_derived_from_the_name(owner):
 
 
 async def test_duplicate_project_slug_is_409(owner):
-    await _project(owner)
+    await make_project(owner)
     response = await owner.post(
         "/api/projects", json={"name": "אחר", "slug": "docs"}, headers=WRITE
     )
@@ -194,15 +151,15 @@ async def test_duplicate_project_slug_is_409(owner):
 
 
 async def test_same_document_slug_in_two_projects_is_allowed(owner):
-    await _project(owner, slug="one", name="ראשון")
-    await _project(owner, slug="two", name="שני")
-    await _document(owner, project="one")
-    await _document(owner, project="two")
+    await make_project(owner, slug="one", name="ראשון")
+    await make_project(owner, slug="two", name="שני")
+    await make_document(owner, project="one")
+    await make_document(owner, project="two")
 
 
 async def test_duplicate_document_slug_in_one_project_is_409(owner):
-    await _project(owner)
-    await _document(owner)
+    await make_project(owner)
+    await make_document(owner)
     response = await owner.post(
         "/api/projects/docs/docs", json={"title": "שוב", "slug": "installation"}, headers=WRITE
     )
@@ -219,8 +176,8 @@ async def test_unusable_slug_is_422(owner):
 
 async def test_stale_write_is_rejected_without_an_error(owner):
     """שמירה שנתקעה ברשת ונחתה מאוחר לא מחזירה את המסמך אחורה."""
-    await _project(owner)
-    await _document(owner, content="התחלה")
+    await make_project(owner)
+    await make_document(owner, content="התחלה")
 
     fresh = await owner.put(
         "/api/projects/docs/docs/installation",
@@ -240,8 +197,8 @@ async def test_stale_write_is_rejected_without_an_error(owner):
 
 
 async def test_equal_sequence_is_also_rejected(owner):
-    await _project(owner)
-    await _document(owner)
+    await make_project(owner)
+    await make_document(owner)
     await owner.put(
         "/api/projects/docs/docs/installation", json={"content": "א", "client_seq": 5, "editor_id": "t"}, headers=WRITE
     )
@@ -253,8 +210,8 @@ async def test_equal_sequence_is_also_rejected(owner):
 
 async def test_writes_without_a_sequence_still_apply(owner):
     """לקוח שלא שולח מונה חוזר לכלל 'האחרון לפי סדר ההגעה'."""
-    await _project(owner)
-    await _document(owner)
+    await make_project(owner)
+    await make_document(owner)
     await owner.put(
         "/api/projects/docs/docs/installation", json={"content": "א", "client_seq": 9, "editor_id": "t"}, headers=WRITE
     )
@@ -269,39 +226,42 @@ async def test_writes_without_a_sequence_still_apply(owner):
 
 
 async def test_documents_are_ordered_by_position_then_id(owner):
-    await _project(owner)
-    for slug in ("a", "b", "c"):
-        await _document(owner, slug=slug, title=slug.upper())
+    """כשכל ה-position שווים, ה-id הוא מה שקובע.
 
-    # כל המסמכים לאותו מקום — הסדר עדיין חייב להיות יציב בין קריאות
+    הבדיקה הקודמת כאן השוותה את התשובה לעצמה ממוינת לפי position. מיון
+    של פייתון יציב, ולכן מיון רשימה שכבר מסודרת מחזיר אותה רשימה —
+    הטענה הייתה נכונה תמיד, גם אילו ה-tiebreaker היה מוסר. הסדר הצפוי
+    נגזר כאן מה-id בפועל, שלא נחשף ב-API ולכן נשלף מבסיס הנתונים.
+    """
+    await make_project(owner)
     for slug in ("a", "b", "c"):
-        await owner.put(
-            f"/api/projects/docs/docs/{slug}", json={"position": 0}, headers=WRITE
-        )
+        await make_document(owner, slug=slug, title=slug.upper())
+
+    for slug in ("a", "b", "c"):
+        await owner.put(f"/api/projects/docs/docs/{slug}", json={"position": 0}, headers=WRITE)
+
+    async with SessionLocal() as session:
+        expected = [
+            row[0]
+            for row in (
+                await session.execute(text("SELECT slug FROM documents ORDER BY position, id"))
+            ).all()
+        ]
 
     reads = [
         [d["slug"] for d in (await owner.get("/api/projects/docs")).json()["documents"]]
         for _ in range(4)
     ]
-    assert all(order == reads[0] for order in reads), f"הסדר השתנה בין קריאות: {reads}"
-
-    # יציבות לבדה לא מספיקה — גם מיון שרירותי יכול לצאת יציב במקרה.
-    # ה-tiebreaker הוא ה-id, והוא נגזר מסדר היצירה, ולכן הסדר הצפוי ידוע.
-    expected = sorted(["a", "b", "c"])
-    assert sorted(reads[0]) == expected
-    assert reads[0] == [
-        d["slug"]
-        for d in sorted(
-            (await owner.get("/api/projects/docs")).json()["documents"],
-            key=lambda d: d["position"],
-        )
-    ]
+    assert sorted(reads[0]) == ["a", "b", "c"], "לא כל המסמכים חזרו"
+    assert all(order == expected for order in reads), (
+        f"הסדר לא תואם למיון לפי (position, id). צפוי {expected}, התקבל {reads}"
+    )
 
 
 async def test_new_documents_go_to_the_end(owner):
-    await _project(owner)
+    await make_project(owner)
     for slug in ("first", "second", "third"):
-        await _document(owner, slug=slug, title=slug)
+        await make_document(owner, slug=slug, title=slug)
     order = [d["slug"] for d in (await owner.get("/api/projects/docs")).json()["documents"]]
     assert order == ["first", "second", "third"]
 
@@ -312,8 +272,8 @@ async def test_new_documents_go_to_the_end(owner):
 @pytest.mark.parametrize("bad", ["NaN", "Infinity", "-Infinity"])
 async def test_nan_and_infinity_are_rejected_for_position(owner, bad):
     """NaN עובר כל בדיקת טווח, כי כל השוואה איתו מחזירה False."""
-    await _project(owner)
-    await _document(owner)
+    await make_project(owner)
+    await make_document(owner)
     response = await owner.put(
         "/api/projects/docs/docs/installation",
         content=f'{{"position": {bad}}}'.encode(),
@@ -323,8 +283,8 @@ async def test_nan_and_infinity_are_rejected_for_position(owner, bad):
 
 
 async def test_negative_position_is_rejected(owner):
-    await _project(owner)
-    await _document(owner)
+    await make_project(owner)
+    await make_document(owner)
     response = await owner.put(
         "/api/projects/docs/docs/installation", json={"position": -1}, headers=WRITE
     )
@@ -335,8 +295,8 @@ async def test_negative_position_is_rejected(owner):
 
 
 async def test_deleting_a_project_removes_its_documents_and_versions(owner):
-    await _project(owner)
-    await _document(owner, content="א")
+    await make_project(owner)
+    await make_document(owner, content="א")
     await owner.put("/api/projects/docs/docs/installation", json={"content": "ב"}, headers=WRITE)
 
     assert (await owner.delete("/api/projects/docs", headers=WRITE)).status_code == 204
@@ -349,7 +309,7 @@ async def test_deleting_a_project_removes_its_documents_and_versions(owner):
 
 async def test_slug_is_immutable(owner):
     """שינוי slug שובר כל קישור שנשלח — ולכן הוא פשוט לא נתמך."""
-    await _project(owner)
+    await make_project(owner)
     patched = await owner.patch("/api/projects/docs", json={"slug": "renamed"}, headers=WRITE)
     assert patched.status_code == 200, patched.text
     assert (await owner.get("/api/projects/docs")).status_code == 200
@@ -366,8 +326,8 @@ async def test_a_second_editor_is_not_locked_out(owner):
     למסמך, אף כתיבה של ב' לא הייתה מתקבלת לעולם — הוא היה נראה כאילו
     "נתקע" בלי שום הודעת שגיאה.
     """
-    await _project(owner)
-    await _document(owner)
+    await make_project(owner)
+    await make_document(owner)
 
     for seq in (10, 20, 50):
         applied = await owner.put(
@@ -387,8 +347,8 @@ async def test_a_second_editor_is_not_locked_out(owner):
 
 
 async def test_stale_write_from_the_same_editor_is_still_rejected(owner):
-    await _project(owner)
-    await _document(owner)
+    await make_project(owner)
+    await make_document(owner)
     await owner.put(
         "/api/projects/docs/docs/installation",
         json={"content": "חדש", "client_seq": 10, "editor_id": "tab-a"},
@@ -404,8 +364,8 @@ async def test_stale_write_from_the_same_editor_is_still_rejected(owner):
 
 
 async def test_sequence_without_an_editor_id_is_422(owner):
-    await _project(owner)
-    await _document(owner)
+    await make_project(owner)
+    await make_document(owner)
     response = await owner.put(
         "/api/projects/docs/docs/installation", json={"client_seq": 3}, headers=WRITE
     )

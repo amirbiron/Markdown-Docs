@@ -1,4 +1,4 @@
-fastapi==0.118.3
+fastapi==0.141.1
 uvicorn[standard]==0.34.0
 sqlalchemy[asyncio]==2.0.36
 asyncpg==0.30.0
@@ -10,6 +10,8 @@ itsdangerous==2.2.0
 
 # רצפות לתלויות עקיפות. הן נמשכות ממילא על ידי fastapi, uvicorn ו-alembic,
 # אבל בלי רצפה מפורשת פותר התלויות רשאי לבחור גרסה ישנה ופגיעה.
-starlette>=0.47.2
+# הרצפות נקבעו מול pip-audit ולא מהערכה:
+#   python3 -m pip_audit
+starlette>=1.3.1
 h11>=0.16.0
-mako>=1.2.2
+mako>=1.3.10

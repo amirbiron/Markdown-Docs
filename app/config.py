@@ -1,6 +1,7 @@
 """הגדרות שנטענות ממשתני סביבה."""
 
 from functools import lru_cache
+from typing import Literal
 
 from pydantic import model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -34,7 +35,10 @@ class Settings(BaseSettings):
     # UTC בכל מקרה; ההגדרה הזו משפיעה על הצגה והמרות בלבד.
     timezone: str = "Asia/Jerusalem"
 
-    environment: str = "development"
+    # Literal ולא str: טעות כתיב כמו "prodution" הייתה נקראת כ"לא
+    # פרודקשן", וזה משתיק גם את בדיקת הסוד וגם את דגל ה-Secure בעוגייה.
+    # כשל שקט מהסוג הגרוע — הכול נראה עובד.
+    environment: Literal["development", "production"] = "development"
 
     # תוקף ה-session. נאכף בשרת דרך exp שבתוך הטוקן החתום, לא דרך
     # Max-Age של ה-cookie.

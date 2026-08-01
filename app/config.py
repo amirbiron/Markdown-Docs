@@ -65,6 +65,22 @@ class Settings(BaseSettings):
     # היסטוריה שגדלה בלי גבול, ולכן הישנות נמחקות.
     document_versions_kept: int = 50
 
+    # ── גיבויים ──────────────────────────────────────────────────────
+    # היעד הוא הדיסק הקבוע ב-Render. ברירת המחדל מקומית, כדי שפיתוח
+    # ובדיקות לא ידרשו הרשאות כתיבה מחוץ לפרויקט.
+    backup_dir: str = "./var/backups"
+    backup_enabled: bool = True
+    backup_every_hours: int = 24
+    backup_keep: int = 30
+
+    # העותק שיוצא החוצה. כבוי כברירת מחדל בכוונה: מי שמפעיל אותו עושה
+    # זאת ביודעין, אחרי שהגדיר סוד הצפנה ויעד.
+    backup_telegram_enabled: bool = False
+    backup_offsite_every_hours: int = 168  # שבוע
+    backup_passphrase: str | None = None
+    telegram_bot_token: str | None = None
+    telegram_chat_id: str | None = None
+
     @property
     def async_database_url(self) -> str:
         """מנרמל את ה-URL של Render לדרייבר asyncpg."""

@@ -6,8 +6,9 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager, suppress
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, FastAPI, Request, Response
@@ -22,10 +23,12 @@ from app.security import PasswordPolicyError
 from app.db import SessionLocal, engine, get_session
 from app.middleware import BodySizeLimit, OriginGuard
 from app.routers import auth as auth_router
+from app.routers import backup as backup_router
 from app.routers import documents as documents_router
 from app.routers import links as links_router
 from app.routers import projects as projects_router
 from app.routers import search as search_router
+from app import scheduler
 from app.seed import seed_admin
 
 # בלי הגדרת רמה מפורשת, logger.info לא מגיע לפלט של uvicorn — ובדיקת
@@ -115,7 +118,22 @@ async def lifespan(app: FastAPI):
         raise
     except Exception:
         logger.exception("יצירת המשתמש הראשוני נכשלה")
+
+    # מתזמן הגיבוי רץ כאן ולא כשירות נפרד, כי דיסק קבוע ב-Render נגיש
+    # למופע אחד בלבד ו-Cron Job אינו יכול לגעת בו כלל.
+    backup_task = None
+    if settings.backup_enabled:
+        backup_task = asyncio.create_task(scheduler.loop())
+
     yield
+
+    if backup_task is not None:
+        backup_task.cancel()
+        # ההמתנה אינה טקס: בלעדיה התהליך יורד באמצע כתיבת ארכיון,
+        # והקובץ החלקי נשאר על הדיסק.
+        with suppress(asyncio.CancelledError):
+            await backup_task
+
     await engine.dispose()
 
 
@@ -182,6 +200,7 @@ api.include_router(projects_router.router)
 api.include_router(documents_router.router)
 api.include_router(links_router.router)
 api.include_router(search_router.router)
+api.include_router(backup_router.router)
 app.include_router(api)
 
 # הסדר כאן הוא מה שקובע מה רץ קודם: מה שנוסף אחרון עוטף את הכול.

@@ -85,6 +85,10 @@ body, aside, header, section, main { transition: background-color 0.2s ease, bor
 
     <button onClick="{{ toggleTheme }}" title="{{ themeTitle }}" aria-label="{{ themeTitle }}" style="display:grid;place-items:center;width:32px;height:32px;border:1px solid var(--rule);border-radius:var(--r-sm);background:none;color:var(--muted);font-size:14px;line-height:1;cursor:pointer" style-hover="color:var(--head);border-color:var(--accent)">{{ themeGlyph }}</button>
 
+    <sc-if value="{{ signedIn }}" hint-placeholder-val="{{ false }}">
+    <a href="{{ backupHref }}" title="הורדת גיבוי מלא" style="{{ chrome.srcBtn }};text-decoration:none">גיבוי</a>
+    </sc-if>
+
     <sc-if value="{{ canOpenEditor }}" hint-placeholder-val="{{ false }}">
     <button onClick="{{ toggleEditing }}" style="{{ chrome.srcBtn }}">{{ editLabel }}</button>
     </sc-if>
@@ -355,6 +359,18 @@ body, aside, header, section, main { transition: background-color 0.2s ease, bor
         <h1 style="margin:0 0 12px;font-family:var(--display);font-size:32px;font-weight:800;color:var(--ink)">{{ projectName }}</h1>
         <p style="margin:0 auto;max-width:46ch;font-size:17px;line-height:1.7;color:var(--soft);text-wrap:pretty">{{ emptyDocsText }}</p>
       </div>
+      </sc-if>
+
+      <sc-if value="{{ legacyVisible }}" hint-placeholder-val="{{ false }}">
+      <div style="margin:32px 0 0;padding:18px 20px;border:1px solid var(--accent);border-radius:var(--r-md);background:var(--accent-soft)">
+        <div style="font-size:15px;color:var(--accent-text);margin:0 0 4px">{{ legacyLabel }}</div>
+        <p style="margin:0 0 14px;font-size:13.5px;line-height:1.7;color:var(--soft)">הם נשמרו בדפדפן הזה בלבד. אחרי ההעלאה הם יהיו זמינים מכל מכשיר, וניקוי נתוני האתר לא ימחק אותם.</p>
+        <button onClick="{{ runMigration }}" disabled="{{ migrating }}" style="{{ chrome.ctaBtn }}">{{ migrateLabel }}</button>
+      </div>
+      </sc-if>
+
+      <sc-if value="{{ hasMigrateNote }}" hint-placeholder-val="{{ false }}">
+      <div style="margin:16px 0 0;padding:12px 16px;border:1px solid var(--rule);border-radius:var(--r-sm);font-size:13.5px;color:var(--text)">{{ migrateNote }}</div>
       </sc-if>
 
       <sc-if value="{{ hasLinksSection }}" hint-placeholder-val="{{ false }}">
@@ -1258,6 +1274,7 @@ class Component extends DCLogic {
 
     loginOpen: false, loginEmail: "", loginPassword: "", loggingIn: false,
     newProjectName: "", newLinkTitle: "", newLinkUrl: "",
+    migrating: false, migrateNote: "",
     q: "", pasting: false, draft: "", dragging: false,
 
     /* editing — האם המסך המפוצל פתוח. editBuf הוא מקור האמת של תיבת
@@ -1425,6 +1442,75 @@ class Component extends DCLogic {
     if (!project) return;
     const fresh = await this.guard(() => this.api("/projects/" + encodeURIComponent(project.slug)));
     if (fresh) this.setState({ project: fresh });
+  }
+
+  /* ---------- הגירה מהאחסון המקומי ---------- */
+
+  /* קורא את המסמכים שנשמרו בדפדפן בגרסה הקודמת של האתר.
+
+     המבנה הישן הוא { id, name, src }. המסמך שה-id שלו "sample" הוא
+     מסמך ההדגמה המובנה ולא תוכן שהמשתמש כתב, ולכן הוא מדולג — העלאה
+     שלו הייתה מייצרת לכל אחד עותק של אותו קובץ הדגמה. */
+  legacyDocs() {
+    let raw = null;
+    try { raw = localStorage.getItem(KEY); } catch (e) { return []; }
+    if (!raw) return [];
+
+    let parsed = null;
+    try { parsed = JSON.parse(raw); } catch (e) { return []; }
+    if (!Array.isArray(parsed)) return [];
+
+    return parsed
+      .filter((d) => d && d.id !== "sample" && typeof d.src === "string" && d.src.trim())
+      .map((d) => {
+        const heading = d.src.match(/^#\s+(.*)$/m);
+        const fromName = String(d.name || "").replace(/\.(md|markdown|txt)$/i, "");
+        return {
+          title: (heading ? heading[1] : fromName).trim() || "מסמך",
+          content: d.src
+        };
+      });
+  }
+
+  /* מעלה את המסמכים המקומיים לפרויקט, ומוחק את המפתח רק אם כולם עברו.
+
+     המחיקה המותנית היא העיקר: מפתח שנמחק אחרי הצלחה חלקית לוקח איתו
+     בדיוק את המסמכים שלא הועלו, ואין מהם עותק שני בשום מקום. */
+  async migrateLegacy(projectSlug) {
+    const items = this.legacyDocs();
+    if (!items.length) return;
+
+    this.setState({ migrating: true, migrateNote: "" });
+
+    let ok = 0;
+    const failed = [];
+    for (const item of items) {
+      const created = await this.guard(() =>
+        this.api("/projects/" + encodeURIComponent(projectSlug) + "/docs", {
+          method: "POST",
+          body: { title: item.title, content: item.content }
+        })
+      );
+      if (created) ok++;
+      else failed.push(item.title);
+    }
+
+    if (!failed.length) {
+      /* רק כאן. עד לרגע הזה הדפדפן הוא העותק היחיד. */
+      try { localStorage.removeItem(KEY); } catch (e) { /* אחסון חסום */ }
+      this.setState({
+        migrating: false,
+        migrateNote: "הועלו " + ok + " מסמכים, והעותק המקומי נמחק."
+      });
+    } else {
+      this.setState({
+        migrating: false,
+        migrateNote: "הועלו " + ok + " מתוך " + items.length +
+          ". העותק המקומי נשמר כדי שאפשר יהיה לנסות שוב."
+      });
+    }
+
+    await this.refreshProject();
   }
 
   /* ---------- כתיבה ---------- */
@@ -1954,6 +2040,18 @@ class Component extends DCLogic {
       meta: words + " מילים · " + Math.max(1, Math.round(words / 200)) + " דקות קריאה",
       source: doc ? doc.content : "",
       body: this.render_blocks(parsed, numbered, leadIdx),
+
+      /* --- הגירה וגיבוי --- */
+      /* מוצג רק כשיש בפועל מה להעביר, ורק לבעלים בתוך פרויקט. */
+      legacyCount: onProject && canEdit && !s.editing ? this.legacyDocs().length : 0,
+      legacyVisible: onProject && canEdit && !s.editing && this.legacyDocs().length > 0,
+      legacyLabel: this.legacyDocs().length + " מסמכים נמצאו באחסון של הדפדפן",
+      migrating: s.migrating,
+      migrateLabel: s.migrating ? "מעלה…" : "העלאה לפרויקט הזה",
+      migrateNote: s.migrateNote,
+      hasMigrateNote: !!s.migrateNote,
+      runMigration: () => { if (project) this.migrateLegacy(project.slug); },
+      backupHref: "/api/backup.zip",
 
       /* --- העורך --- */
       canOpenEditor: onDocNow && canEdit,

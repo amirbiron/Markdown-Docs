@@ -29,6 +29,30 @@ SUFFIX = ".zip"
 PREFIX = "backup-"
 STAMP_FORMAT = "%Y%m%d-%H%M%S"
 
+# הודעה קבועה, כי ה-router מבדיל לפיה בין "תפוס" לבין "נשבר".
+ALREADY_RUNNING = "גיבוי כבר רץ כרגע"
+
+# נעילה בתוך התהליך. שני מקורות יכולים להפעיל גיבוי — המתזמן והכפתור
+# הידני — ובלעדיה שניהם שולפים במקביל את כל התוכן ומתנגשים על אותו שם
+# קובץ.
+#
+# מגבלה שכדאי שתהיה כתובה: הנעילה היא לתהליך אחד. השירות מוגבל למופע
+# יחיד ממילא בגלל הדיסק, ולכן זה מספיק כאן; ריצה בכמה workers הייתה
+# דורשת נעילה מבוזרת.
+_lock = asyncio.Lock()
+
+# תוצאת הריצה האחרונה, לתצוגה. בזיכרון בלבד — אחרי הפעלה מחדש היא ריקה
+# עד הגיבוי הבא, וזה מקובל: מה שקובע באמת הוא הקבצים על הדיסק.
+_last_run: dict | None = None
+
+
+def last_run() -> dict | None:
+    return _last_run
+
+
+def is_running() -> bool:
+    return _lock.locked()
+
 
 def backup_dir() -> Path:
     return Path(get_settings().backup_dir)
@@ -44,8 +68,11 @@ def _stamp_of(path: Path) -> datetime | None:
     if not name.startswith(PREFIX) or not name.endswith(SUFFIX):
         return None
     core = name[len(PREFIX) : -len(SUFFIX)]
+    # שני גיבויים באותה שנייה מקבלים סיומת -2, -3. החותמת היא החלק
+    # שלפניה.
+    stamp = core.split("-dup", 1)[0]
     try:
-        return datetime.strptime(core, STAMP_FORMAT).replace(tzinfo=UTC)
+        return datetime.strptime(stamp, STAMP_FORMAT).replace(tzinfo=UTC)
     except ValueError:
         return None
 
@@ -87,6 +114,14 @@ async def write_backup(directory: Path | None = None) -> Path:
     data = await archive_bytes()
     stamp = datetime.now(UTC).strftime(STAMP_FORMAT)
     path = target / f"{PREFIX}{stamp}{SUFFIX}"
+
+    # החותמת היא ברזולוציית שנייה. עם הגיבוי היומי זה לא נתקל, אבל
+    # לחיצה כפולה על "גיבוי עכשיו" נופלת בדיוק לכאן — והקובץ השני היה
+    # דורס את הראשון בשקט, כלומר גיבוי שנעלם.
+    n = 2
+    while path.exists():
+        path = target / f"{PREFIX}{stamp}-dup{n}{SUFFIX}"
+        n += 1
 
     # כתיבה לקובץ זמני והחלפה אטומית. קריסה באמצע כתיבה ישירה משאירה
     # ארכיון חתוך ששום דבר לא מסמן אותו כפגום.
@@ -143,14 +178,55 @@ def _due(now: datetime, last: datetime | None, every_hours: int) -> bool:
     return last is None or now - last >= timedelta(hours=every_hours)
 
 
-async def run_once() -> Path | None:
-    """סבב אחד: כותב אם הגיע הזמן, ושולח החוצה אם הגיע הזמן לזה."""
+async def run_guarded(force: bool = False) -> dict:
+    """נקודת הכניסה היחידה שמריצה גיבוי, ולעולם לא זורקת.
+
+    הבדיקה `is_running()` נעשית *לפני* התפיסה ולא במקומה. `async with`
+    לבדו היה גורם לקריאה שנייה להמתין לסיום הראשונה ואז להריץ גיבוי
+    נוסף — בקשת HTTP שתקועה שתי דקות ומייצרת עבודה כפולה. כאן היא
+    חוזרת מיד, וה-router מתרגם את זה ל-409 ולא ל-500: "תפוס, נסה עוד
+    רגע" הוא מצב אחר לגמרי מ"משהו נשבר".
+    """
+    global _last_run
+
+    if is_running():
+        return {"ok": False, "error": ALREADY_RUNNING}
+
+    async with _lock:
+        started = datetime.now(UTC)
+        try:
+            path = await run_once(force=force)
+        except Exception as exc:
+            # המתזמן קורא לכאן. חריגה שיוצאת החוצה מפילה את הלולאה
+            # ומשאירה את המערכת בלי גיבויים — בשקט.
+            logger.exception("הגיבוי נכשל")
+            _last_run = {
+                "ok": False,
+                "at": started.isoformat(),
+                "error": type(exc).__name__,
+            }
+            return {"ok": False, "error": "הגיבוי נכשל"}
+
+        _last_run = {
+            "ok": True,
+            "at": started.isoformat(),
+            "file": path.name if path else None,
+            "skipped": path is None,
+        }
+        return {"ok": True, "file": path.name if path else None, "skipped": path is None}
+
+
+async def run_once(force: bool = False) -> Path | None:
+    """סבב אחד: כותב אם הגיע הזמן, ושולח החוצה אם הגיע הזמן לזה.
+
+    force מדלג על בדיקת התזמון בלבד — הוא לא מדלג על הנעילה.
+    """
     settings = get_settings()
     now = datetime.now(UTC)
 
     latest = existing_backups()
     last = _stamp_of(latest[0]) if latest else None
-    if not _due(now, last, settings.backup_every_hours):
+    if not force and not _due(now, last, settings.backup_every_hours):
         return None
 
     path = await write_backup()
@@ -182,10 +258,26 @@ async def loop() -> None:
     )
     while True:
         try:
-            await run_once()
+            # run_guarded בולעת שגיאות בעצמה ומחזירה תוצאה, ולכן הסבב
+            # הבא תמיד מגיע גם אחרי כישלון.
+            await run_guarded()
         except asyncio.CancelledError:
             raise
         except Exception:
-            # תקלה בגיבוי לא מפילה את השרת ולא עוצרת את הסבב הבא.
             logger.exception("סבב הגיבוי נכשל")
         await asyncio.sleep(TICK_SECONDS)
+
+
+def next_run_at() -> str | None:
+    """מתי הגיבוי הבא צפוי, לפי הגיבוי האחרון שעל הדיסק.
+
+    נגזר ולא נשמר: המתזמן לא מחזיק לוח זמנים משלו, אלא שואל בכל דופק
+    "האם עברו מספיק שעות". לכן זו התשובה הנכונה גם אחרי הפעלה מחדש.
+    """
+    latest = existing_backups()
+    if not latest:
+        return None
+    last = _stamp_of(latest[0])
+    if last is None:
+        return None
+    return (last + timedelta(hours=get_settings().backup_every_hours)).isoformat()

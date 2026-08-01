@@ -86,7 +86,7 @@ body, aside, header, section, main { transition: background-color 0.2s ease, bor
     <button onClick="{{ toggleTheme }}" title="{{ themeTitle }}" aria-label="{{ themeTitle }}" style="display:grid;place-items:center;width:32px;height:32px;border:1px solid var(--rule);border-radius:var(--r-sm);background:none;color:var(--muted);font-size:14px;line-height:1;cursor:pointer" style-hover="color:var(--head);border-color:var(--accent)">{{ themeGlyph }}</button>
 
     <sc-if value="{{ signedIn }}" hint-placeholder-val="{{ false }}">
-    <a href="{{ backupHref }}" title="הורדת גיבוי מלא" style="{{ chrome.srcBtn }};text-decoration:none">גיבוי</a>
+    <button onClick="{{ toggleBackupPanel }}" title="מצב הגיבוי" style="{{ chrome.srcBtn }}">גיבוי</button>
     </sc-if>
 
     <sc-if value="{{ canOpenEditor }}" hint-placeholder-val="{{ false }}">
@@ -111,6 +111,42 @@ body, aside, header, section, main { transition: background-color 0.2s ease, bor
   <div style="display:flex;align-items:center;justify-content:space-between;gap:14px;padding:12px 16px;border-radius:var(--r-md);background:var(--red-soft);border:1px solid var(--red-ring);color:var(--red)">
     <span style="font-size:14.5px">{{ error }}</span>
     <button onClick="{{ clearError }}" style="padding:2px 8px;border:none;background:none;color:var(--red);font-size:16px;line-height:1;cursor:pointer">×</button>
+  </div>
+</div>
+</sc-if>
+
+<sc-if value="{{ backupOpen }}" hint-placeholder-val="{{ false }}">
+<div style="max-width:620px;margin:36px auto 0;padding:0 20px">
+  <div style="padding:22px 24px;border:1px solid var(--line);border-radius:var(--r-md);background:var(--panel);box-shadow:var(--shadow)">
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;margin:0 0 18px">
+      <h2 style="margin:0;font-family:var(--display);font-size:20px;font-weight:800;color:var(--ink)">מצב הגיבוי</h2>
+      <button onClick="{{ toggleBackupPanel }}" style="{{ chrome.ghostBtnSm }}">סגירה</button>
+    </div>
+
+    <sc-if value="{{ hasBackupState }}" hint-placeholder-val="{{ false }}">
+    <div>
+      <div style="display:grid;grid-template-columns:auto 1fr;gap:8px 18px;font-size:14px;margin:0 0 18px">
+        <span style="color:var(--faint)">מנגנון</span><span style="color:var(--text)">{{ backup.enabled }}</span>
+        <span style="color:var(--faint)">ריצה אחרונה</span><span style="color:var(--text)">{{ backup.lastRun }}</span>
+        <span style="color:var(--faint)">ריצה הבאה</span><span style="color:var(--text)">{{ backup.nextRun }}</span>
+        <span style="color:var(--faint)">נשמרים</span><span style="color:var(--text)">{{ backup.count }} · {{ backup.total }}</span>
+        <span style="color:var(--faint)">עותק חיצוני</span><span style="color:var(--text)">{{ backup.offsite }}</span>
+      </div>
+
+      <div style="display:flex;flex-direction:column;gap:4px;margin:0 0 18px">
+        <sc-for list="{{ backupFiles }}" as="file" hint-placeholder-count="3">
+          <div style="display:flex;justify-content:space-between;gap:12px;font-family:var(--mono);font-size:12px;color:var(--muted)">
+            <span dir="ltr">{{ file.name }}</span><span>{{ file.size }}</span>
+          </div>
+        </sc-for>
+      </div>
+    </div>
+    </sc-if>
+
+    <div style="display:flex;flex-wrap:wrap;gap:10px;padding-top:16px;border-top:1px solid var(--hair)">
+      <button onClick="{{ runBackupNow }}" disabled="{{ backupBusy }}" style="{{ chrome.ctaBtn }}">{{ backupRunLabel }}</button>
+      <a href="{{ backupHref }}" style="{{ chrome.ghostBtn }};text-decoration:none">הורדת גיבוי</a>
+    </div>
   </div>
 </div>
 </sc-if>
@@ -1275,6 +1311,7 @@ class Component extends DCLogic {
     loginOpen: false, loginEmail: "", loginPassword: "", loggingIn: false,
     newProjectName: "", newLinkTitle: "", newLinkUrl: "",
     migrating: false, migrateNote: "",
+    backupOpen: false, backupBusy: false, backupState: null,
     q: "", pasting: false, draft: "", dragging: false,
 
     /* editing — האם המסך המפוצל פתוח. editBuf הוא מקור האמת של תיבת
@@ -1442,6 +1479,58 @@ class Component extends DCLogic {
     if (!project) return;
     const fresh = await this.guard(() => this.api("/projects/" + encodeURIComponent(project.slug)));
     if (fresh) this.setState({ project: fresh });
+  }
+
+  /* ---------- מצב הגיבוי ---------- */
+
+  async toggleBackupPanel() {
+    if (this.state.backupOpen) { this.setState({ backupOpen: false }); return; }
+    this.setState({ backupOpen: true });
+    await this.loadBackupState();
+  }
+
+  async loadBackupState() {
+    const state = await this.guard(() => this.api("/backup"));
+    if (state) this.setState({ backupState: state });
+  }
+
+  async runBackupNow() {
+    if (this.state.backupBusy) return;
+    this.setState({ backupBusy: true });
+    await this.guard(() => this.api("/backup/run", { method: "POST" }));
+    this.setState({ backupBusy: false });
+    await this.loadBackupState();
+  }
+
+  /* טקסט קריא למצב, כדי שהפאנל יענה על השאלות בלי שצריך לפרש JSON. */
+  backupSummary() {
+    const state = this.state.backupState;
+    if (!state) return null;
+
+    const when = (iso) => {
+      if (!iso) return "—";
+      const d = new Date(iso);
+      return isNaN(d) ? "—" : d.toLocaleString("he-IL");
+    };
+    const size = (bytes) => {
+      if (!bytes) return "0";
+      const units = ["B", "KB", "MB", "GB"];
+      let n = bytes, i = 0;
+      while (n >= 1024 && i < units.length - 1) { n /= 1024; i++; }
+      return n.toFixed(n < 10 && i > 0 ? 1 : 0) + " " + units[i];
+    };
+
+    const last = state.last_run;
+    return {
+      enabled: state.enabled ? "פעיל" : "כבוי",
+      lastRun: last ? (last.ok ? when(last.at) + (last.skipped ? " (לא היה צורך)" : "") : "נכשל ב-" + when(last.at)) : "לא רץ מאז ההפעלה",
+      lastOk: !last || last.ok !== false,
+      nextRun: when(state.next_run_at),
+      count: state.backups.length + " מתוך " + state.keep,
+      total: size(state.total_bytes),
+      offsite: state.offsite_enabled ? "מופעל" : "כבוי",
+      files: state.backups.slice(0, 5).map((b) => ({ name: b.name, size: size(b.bytes) }))
+    };
   }
 
   /* ---------- הגירה מהאחסון המקומי ---------- */
@@ -2052,6 +2141,17 @@ class Component extends DCLogic {
       hasMigrateNote: !!s.migrateNote,
       runMigration: () => { if (project) this.migrateLegacy(project.slug); },
       backupHref: "/api/backup.zip",
+
+      /* מצב הגיבוי. שלוש השאלות בראש: פעיל, מתי אחרון, מתי הבא —
+         גיבוי שאף אחד לא רואה הוא גיבוי שאף אחד לא מגלה שהפסיק. */
+      backupOpen: s.backupOpen,
+      toggleBackupPanel: () => this.toggleBackupPanel(),
+      backupBusy: s.backupBusy,
+      backupRunLabel: s.backupBusy ? "מגבה…" : "גיבוי עכשיו",
+      runBackupNow: () => this.runBackupNow(),
+      backup: this.backupSummary(),
+      backupFiles: (this.backupSummary() || {}).files || [],
+      hasBackupState: !!s.backupState,
 
       /* --- העורך --- */
       canOpenEditor: onDocNow && canEdit,

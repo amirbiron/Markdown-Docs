@@ -1,55 +1,91 @@
-# Render Blueprint — אתר סטטי.
-# האתר הוא HTML + JS בלבד, בלי שלב build ובלי שרת, ולכן runtime: static.
+# Render Blueprint.
+# האתר כבר לא סטטי: FastAPI מגיש גם את ה-API תחת /api וגם את הפרונט
+# מהשורש, מאותו origin. זה מה שמייתר CORS ומאפשר cookie עם SameSite=Lax.
 # פריסה: New → Blueprint ב-Render, ולכוון לריפו הזה.
+
+databases:
+  - name: markdown-docs-db
+    databaseName: markdown_docs
+    user: markdown_docs
+    plan: basic-256mb
 
 services:
   - type: web
     name: markdown-docs
-    runtime: static
-    # אין תלויות להתקין ואין מה לקמפל — הקבצים מוגשים כמו שהם.
-    buildCommand: echo "static site — no build step"
-    staticPublishPath: .
-    pullRequestPreviewsEnabled: true
+    runtime: python
+    plan: starter
+    buildCommand: pip install -r requirements.txt
+    # המיגרציות רצות לפני שהשרת עולה. אם הן נכשלות, הדיפלוי נכשל —
+    # וזה עדיף על שרת שעולה מול סכימה ישנה ונשבר בבקשה הראשונה.
+    startCommand: alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port $PORT
 
-    headers:
-      # ————— אבטחה —————
-      - path: /*
-        name: X-Content-Type-Options
-        value: nosniff
-      - path: /*
-        name: Referrer-Policy
-        value: strict-origin-when-cross-origin
-      - path: /*
-        name: X-Frame-Options
-        value: DENY
-      - path: /*
-        name: Permissions-Policy
-        value: camera=(), microphone=(), geolocation=(), interest-cohort=()
+    # הבדיקה הרדודה בכוונה. /api/health/db נוגע ב-DB, ואם Render היה
+    # מנטר אותו, תקלת DB חולפת הייתה מפעילה את השירות מחדש בלולאה
+    # ומחמירה את התקלה במקום לפתור אותה.
+    healthCheckPath: /api/health
 
-      # מדיניות התוכן מגבילה את המקורות שמהם מותר לטעון קוד וגופנים.
-      # 'unsafe-eval' נדרש כי runtime ה-dc ב-assets/support.js מריץ את
-      # לוגיקת הרכיב דרך new Function — בלעדיו העמוד לא עולה.
-      # 'unsafe-inline' נדרש כי כל העיצוב הוא style attributes inline.
-      - path: /*
-        name: Content-Security-Policy
-        value: >-
-          default-src 'self';
-          script-src 'self' 'unsafe-inline' 'unsafe-eval' https://unpkg.com https://cdn.jsdelivr.net;
-          style-src 'self' 'unsafe-inline' https://fonts.googleapis.com;
-          font-src 'self' https://fonts.gstatic.com;
-          img-src 'self' data:;
-          connect-src 'self' https://cdn.jsdelivr.net https://unpkg.com;
-          base-uri 'self';
-          form-action 'none';
-          frame-ancestors 'none';
-          object-src 'none'
+    # הדיסק הקבוע לגיבויים. שלוש השלכות שכולן מקובלות כאן ושכדאי שיהיו
+    # כתובות: השירות מוגבל למופע אחד ולא יכול להתרחב לרוחב, כל דיפלוי
+    # כולל כמה שניות של חוסר זמינות (Render עוצר את המופע הישן לפני
+    # שהוא מפעיל את החדש, כדי ששתי גרסאות לא יכתבו לאותו דיסק), והדיסק
+    # דורש instance בתשלום.
+    #
+    # זו גם הסיבה שהמתזמן רץ בתוך השירות ולא כ-Cron Job: cron job של
+    # Render אינו יכול לגשת לדיסק קבוע בכלל.
+    disk:
+      name: backups
+      mountPath: /var/backups
+      sizeGB: 1
 
-      # ————— קאשינג —————
-      # ה-HTML מתעדכן בכל דיפלוי, ולכן נבדק מול השרת בכל בקשה.
-      - path: /index.html
-        name: Cache-Control
-        value: no-cache
-      # ה-runtime מוחלף רק בעדכון גרסה — נשמר שעה עם revalidate ברקע.
-      - path: /assets/*
-        name: Cache-Control
-        value: public, max-age=3600, stale-while-revalidate=86400
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: markdown-docs-db
+          property: connectionString
+      - key: SESSION_SECRET
+        generateValue: true
+      - key: ENVIRONMENT
+        value: production
+      - key: PYTHON_VERSION
+        value: "3.11.11"
+
+      # המשתמש היחיד. ה-seed בעלייה יוצר אותו אם אינו קיים, ולא נוגע בו
+      # אם כן — כלומר שינוי הסיסמה כאן אחרי היצירה לא מחליף אותה.
+      # sync: false => Render מבקש את הערך בפריסה ולא שומר אותו בריפו.
+      - key: ADMIN_EMAIL
+        sync: false
+      - key: ADMIN_PASSWORD
+        sync: false
+
+      # מספר הפרוקסים המהימנים בין הלקוח לשרת. ב-Render יש אחד, והערך
+      # הזה קובע מאיזה סוף של X-Forwarded-For נקראת כתובת הלקוח. ערך
+      # שגוי כאן הופך את הגבלת הקצב לעקיפה בהחלפת מחרוזת.
+      - key: TRUSTED_PROXY_HOPS
+        value: "1"
+
+      # יעד הגיבוי הוא נקודת העגינה של הדיסק שלמעלה.
+      - key: BACKUP_DIR
+        value: /var/backups
+
+      # העותק שיוצא לטלגרם כבוי כברירת מחדל. להפעלה צריך גם להדליק את
+      # הדגל וגם להגדיר BACKUP_PASSPHRASE ופרטי בוט — בלעדיהם השליחה
+      # מדלגת ומדווחת, ולא שולחת ארכיון לא מוצפן.
+      #
+      # BACKUP_PASSPHRASE הוא המפתח לכל התוכן. אסור שיישב באותו מקום
+      # שבו יושב הגיבוי: הוא כאן ובעותק אחד מחוץ למערכת, ולא נשלח
+      # לטלגרם לצד הקובץ.
+      - key: BACKUP_TELEGRAM_ENABLED
+        value: "false"
+      - key: BACKUP_PASSPHRASE
+        sync: false
+      - key: TELEGRAM_BOT_TOKEN
+        sync: false
+      - key: TELEGRAM_CHAT_ID
+        sync: false
+
+      # RENDER_EXTERNAL_URL מוזרק אוטומטית על ידי Render ומשמש כברירת
+      # מחדל ל-allowlist של Origin. ALLOWED_ORIGINS גובר עליו אם הוגדר.
+
+# כותרות האבטחה עברו לאפליקציה (app/main.py, SECURITY_HEADERS).
+# בלוק headers ב-render.yaml חל על אתרים סטטיים בלבד — אילו היה נשאר
+# כאן, הוא היה מתעלם בשקט וה-CSP היה נעלם בלי שאף אחד ישים לב.

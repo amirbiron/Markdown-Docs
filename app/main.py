@@ -22,7 +22,9 @@ from app.db import SessionLocal, engine, get_session
 from app.middleware import BodySizeLimit, OriginGuard
 from app.routers import auth as auth_router
 from app.routers import documents as documents_router
+from app.routers import links as links_router
 from app.routers import projects as projects_router
+from app.routers import search as search_router
 from app.seed import seed_admin
 
 # בלי הגדרת רמה מפורשת, logger.info לא מגיע לפלט של uvicorn — ובדיקת
@@ -174,6 +176,8 @@ async def health_db(session: AsyncSession = Depends(get_session)) -> Response:
 api.include_router(auth_router.router)
 api.include_router(projects_router.router)
 api.include_router(documents_router.router)
+api.include_router(links_router.router)
+api.include_router(search_router.router)
 app.include_router(api)
 
 # הסדר כאן הוא מה שקובע מה רץ קודם: מה שנוסף אחרון עוטף את הכול.

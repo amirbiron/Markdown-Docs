@@ -6,6 +6,7 @@
 
 from __future__ import annotations
 
+import uuid
 from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
@@ -101,6 +102,15 @@ class DocumentPrivate(DocumentPublic):
     last_editor_id: str | None
 
 
+class LinkPublic(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    title: str
+    url: str
+    position: int
+
+
 class ProjectPublic(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -108,6 +118,7 @@ class ProjectPublic(BaseModel):
     name: str
     description: str | None
     documents: list[DocumentSummary] = []
+    links: list[LinkPublic] = []
 
 
 class ProjectPrivate(ProjectPublic):
@@ -134,3 +145,38 @@ class VersionSummary(BaseModel):
     # בבתים של UTF-8, כמו כל מדידת גודל אחרת במערכת. len() על מחרוזת היה
     # מחזיר בערך חצי מהגודל האמיתי של מסמך בעברית.
     size_bytes: int
+
+
+# ─────────────────────────── קישורי פרויקט ───────────────────────────
+
+
+class LinkCreate(BaseModel):
+    title: str = Field(min_length=1, max_length=200)
+    url: str = Field(min_length=1, max_length=2048)
+    position: int | None = Field(default=None, ge=0, le=PG_INT_MAX)
+
+
+class LinkUpdate(BaseModel):
+    title: str | None = Field(default=None, min_length=1, max_length=200)
+    url: str | None = Field(default=None, min_length=1, max_length=2048)
+    position: int | None = Field(default=None, ge=0, le=PG_INT_MAX)
+
+
+
+
+# ─────────────────────────── חיפוש ───────────────────────────
+
+
+class SearchHit(BaseModel):
+    project_slug: str
+    project_name: str
+    doc_slug: str
+    title: str
+
+    # קטע מהתוכן עם סימון סביב ההתאמה. הסימנים הם « ו-» ולא תגיות HTML,
+    # כי הלקוח מרנדר רכיבי React ולא מזריק HTML.
+    snippet: str
+
+    # "text" = התאמה בחיפוש טקסט מלא. "fuzzy" = נמצא רק בהשוואת דמיון,
+    # אחרי שהחיפוש הרגיל לא החזיר כלום. הלקוח יכול להציג את זה אחרת.
+    match: str

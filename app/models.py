@@ -12,6 +12,7 @@ import uuid
 from datetime import datetime
 
 from sqlalchemy import (
+    Computed,
     DateTime,
     Enum,
     ForeignKey,
@@ -23,7 +24,7 @@ from sqlalchemy import (
     UniqueConstraint,
     func,
 )
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.dialects.postgresql import TSVECTOR, UUID
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
 NAMING_CONVENTION = {
@@ -49,6 +50,23 @@ def _uuid_pk() -> Mapped[uuid.UUID]:
 
 # timestamptz ולא timestamp: האחסון תמיד UTC, וההמרה לאזור הזמן קורית בהצגה.
 _TS = DateTime(timezone=True)
+
+# ביטוי וקטור החיפוש. מוגדר כאן פעם אחת ומשוכפל מילה במילה במיגרציה —
+# הבדל של רווח אחד גורם ל-autogenerate לדווח על drift בכל הרצה (כלל 11).
+#
+# 'simple' ולא 'english': אין מילון עברי לפוסטגרס, וה-stemming האנגלי
+# מניח מורפולוגיה שלא קיימת בעברית. simple מפרק למילים בלי stemming —
+# פחות חכם, אבל עובד על שתי השפות באותה מידה.
+#
+# strip_nikud כי unaccent מסיר דיאקריטיקה לטינית בלבד. מי שכתב מנוקד
+# ומחפש בלי ניקוד לא היה מקבל תוצאות.
+#
+# setweight נותן לכותרת משקל A ולתוכן B, כדי שמסמך שהמילה בכותרתו יצוף
+# מעל מסמך שהיא מוזכרת בו באמצע פסקה.
+SEARCH_VECTOR_SQL = (
+    "setweight(to_tsvector('simple', strip_nikud(coalesce(title, ''))), 'A') || "
+    "setweight(to_tsvector('simple', strip_nikud(coalesce(content, ''))), 'B')"
+)
 
 
 class Visibility(enum.StrEnum):
@@ -147,6 +165,12 @@ class Document(Base):
         _TS, nullable=False, server_default=func.now(), onupdate=func.now()
     )
 
+    # עמודה מחושבת ומאוחסנת: הערך מתעדכן לבד בכל כתיבה, ואי אפשר לשכוח
+    # לרענן אותו. טריגר היה נותן את אותו דבר עם עוד מקום להישבר בו.
+    search_vector: Mapped[str] = mapped_column(
+        TSVECTOR, Computed(SEARCH_VECTOR_SQL, persisted=True), nullable=False
+    )
+
     project: Mapped[Project] = relationship(back_populates="documents")
     versions: Mapped[list[DocumentVersion]] = relationship(
         back_populates="document", cascade="all, delete-orphan"
@@ -158,6 +182,17 @@ class Document(Base):
         # מיון לפי position בלבד היה מחזיר סדר שרירותי שמשתנה בין טעינות
         # (כלל 8). האינדקס תואם בדיוק ל-ORDER BY שהקוד משתמש בו.
         Index("ix_documents_project_id_position_id", "project_id", "position", "id"),
+        # GIN הוא האינדקס לחיפוש טקסט מלא. בלעדיו כל שאילתת חיפוש סורקת
+        # את כל הטבלה ומחשבת מחדש את הדירוג לכל שורה.
+        Index("ix_documents_search_vector", "search_vector", postgresql_using="gin"),
+        # trigram על הכותרת, לחיפוש סובלני לשגיאות כתיב כשה-FTS לא מצא
+        # כלום. gin_trgm_ops דורש את התוסף pg_trgm.
+        Index(
+            "ix_documents_title_trgm",
+            "title",
+            postgresql_using="gin",
+            postgresql_ops={"title": "gin_trgm_ops"},
+        ),
     )
 
 

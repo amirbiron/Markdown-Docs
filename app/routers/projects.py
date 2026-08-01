@@ -13,7 +13,7 @@ from sqlalchemy.orm import selectinload
 from app import slugs
 from app.db import get_session
 from app.deps import optional_user, require_user
-from app.models import Document, Project, User, Visibility
+from app.models import Document, Project, ProjectLink, User, Visibility
 from app.schemas import ProjectCreate, ProjectPrivate, ProjectPublic, ProjectUpdate
 
 logger = logging.getLogger("markdown_docs.projects")
@@ -31,7 +31,7 @@ async def load_project(
     """שולף פרויקט לפי הכללים של מי שמסתכל, או זורק 404."""
     query = select(Project).where(Project.slug == slugs.normalize(slug).lower())
     if with_documents:
-        query = query.options(selectinload(Project.documents))
+        query = query.options(selectinload(Project.documents), selectinload(Project.links))
 
     project = (await session.execute(query)).scalar_one_or_none()
     if project is None:
@@ -44,7 +44,7 @@ async def load_project(
     raise HTTPException(status.HTTP_404_NOT_FOUND, NOT_FOUND)
 
 
-def _payload(project: Project, documents: list[Document]) -> dict:
+def _payload(project: Project, documents: list[Document], links: list[ProjectLink]) -> dict:
     """בונה את שדות התשובה משמות מפורשים.
 
     project.__dict__ נראה קצר יותר, אבל הוא מחזיר את מצב ה-ORM הפנימי:
@@ -59,6 +59,7 @@ def _payload(project: Project, documents: list[Document]) -> dict:
         "created_at": project.created_at,
         "updated_at": project.updated_at,
         "documents": documents,
+        "links": links,
     }
 
 
@@ -72,13 +73,18 @@ def _ordered_documents(project: Project) -> list[Document]:
     return sorted(project.documents, key=lambda doc: (doc.position, str(doc.id)))
 
 
+def _ordered_links(project: Project) -> list[ProjectLink]:
+    """אותו כלל כמו במסמכים — position ואז id."""
+    return sorted(project.links, key=lambda link: (link.position, str(link.id)))
+
+
 @router.get("", response_model=list[ProjectPublic] | list[ProjectPrivate])
 async def list_projects(
     viewer: User | None = Depends(optional_user),
     session: AsyncSession = Depends(get_session),
 ):
     """בלי session מוחזרים פומביים בלבד."""
-    query = select(Project).options(selectinload(Project.documents))
+    query = select(Project).options(selectinload(Project.documents), selectinload(Project.links))
     if viewer is None:
         query = query.where(Project.visibility == Visibility.PUBLIC)
     else:
@@ -90,7 +96,7 @@ async def list_projects(
 
     model = ProjectPrivate if viewer is not None else ProjectPublic
     return [
-        model.model_validate(_payload(project, _ordered_documents(project)))
+        model.model_validate(_payload(project, _ordered_documents(project), _ordered_links(project)))
         for project in projects
     ]
 
@@ -125,7 +131,7 @@ async def create_project(
         raise HTTPException(status.HTTP_409_CONFLICT, "כבר קיים פרויקט עם המזהה הזה") from None
 
     await session.refresh(project)
-    return ProjectPrivate.model_validate(_payload(project, []))
+    return ProjectPrivate.model_validate(_payload(project, [], []))
 
 
 @router.get("/{slug}", response_model=ProjectPublic | ProjectPrivate)
@@ -137,7 +143,7 @@ async def get_project(
     project = await load_project(session, slug, viewer, with_documents=True)
     is_owner = viewer is not None and project.owner_id == viewer.id
     model = ProjectPrivate if is_owner else ProjectPublic
-    return model.model_validate(_payload(project, _ordered_documents(project)))
+    return model.model_validate(_payload(project, _ordered_documents(project), _ordered_links(project)))
 
 
 @router.patch("/{slug}", response_model=ProjectPrivate)
@@ -161,8 +167,8 @@ async def update_project(
         project.visibility = payload.visibility
 
     await session.commit()
-    await session.refresh(project, attribute_names=["documents"])
-    return ProjectPrivate.model_validate(_payload(project, _ordered_documents(project)))
+    await session.refresh(project, attribute_names=["documents", "links"])
+    return ProjectPrivate.model_validate(_payload(project, _ordered_documents(project), _ordered_links(project)))
 
 
 @router.delete("/{slug}", status_code=status.HTTP_204_NO_CONTENT)

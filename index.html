@@ -85,6 +85,10 @@ body, aside, header, section, main { transition: background-color 0.2s ease, bor
 
     <button onClick="{{ toggleTheme }}" title="{{ themeTitle }}" aria-label="{{ themeTitle }}" style="display:grid;place-items:center;width:32px;height:32px;border:1px solid var(--rule);border-radius:var(--r-sm);background:none;color:var(--muted);font-size:14px;line-height:1;cursor:pointer" style-hover="color:var(--head);border-color:var(--accent)">{{ themeGlyph }}</button>
 
+    <sc-if value="{{ canOpenEditor }}" hint-placeholder-val="{{ false }}">
+    <button onClick="{{ toggleEditing }}" style="{{ chrome.srcBtn }}">{{ editLabel }}</button>
+    </sc-if>
+
     <sc-if value="{{ onDoc }}" hint-placeholder-val="{{ false }}">
     <button onClick="{{ toggleSource }}" style="{{ chrome.srcBtn }}">{{ srcLabel }}</button>
     </sc-if>
@@ -329,12 +333,20 @@ body, aside, header, section, main { transition: background-color 0.2s ease, bor
         </div>
         </sc-if>
 
+        <sc-if value="{{ editing }}" hint-placeholder-val="{{ false }}">
+        <div>{{ editorPane }}</div>
+        </sc-if>
+
+        <sc-if value="{{ viewingDoc }}" hint-placeholder-val="{{ true }}">
+        <div>
         <article>{{ body }}</article>
 
         <div style="display:flex;flex-wrap:wrap;align-items:center;gap:12px;margin:34px 0 0;padding:16px 20px;border:1px dashed var(--rule);border-radius:var(--r-md)">
           <span style="font-size:14.5px;color:var(--text)">נוצר מתוך <span dir="ltr" style="font-family:var(--mono);font-size:13px">{{ fileName }}</span></span>
           <button onClick="{{ download }}" style="padding:7px 15px;border:1px solid var(--rule);border-radius:var(--r-pill);background:none;color:var(--text);font-family:inherit;font-size:13.5px;cursor:pointer" style-hover="border-color:var(--accent)">הורדת המקור</button>
         </div>
+        </div>
+        </sc-if>
       </div>
       </sc-if>
 
@@ -1044,6 +1056,22 @@ const MERMAID = {
 
 /* סוגי ההתראות. הצבע הוא שם של גוון, לא ערך — כך אותה מפה משרתת
    את שני המצבים, וכל גוון מוגדר פעם אחת בערכה. */
+/* הסף שמעליו בלוק בלי שפה נחשב טקסט עברי. 0.3 נבחר במימוש המקורי
+   ועובד: בלוק דו-לשוני טיפוסי נופל הרבה מתחתיו או הרבה מעליו. */
+const HEBREW_RATIO = 0.3;
+
+/* שני ה-debounce של העורך, ובכוונה רחוקים זה מזה.
+
+   הרינדור מקומי ולכן זול — 150ms מרגיש מיידי אבל לא רץ באמצע הקלדה
+   רציפה. השמירה היא בקשת רשת, ולכן היא מחכה הרבה יותר: בלי ההפרדה,
+   עורך שמרגיש חלק שולח מאות בקשות בדקה. */
+const PREVIEW_MS = 150;
+const SAVE_MS = 2500;
+
+/* שמות שמשמעותם "זה לא קוד". המחרוזת הריקה היא גדר בלי שפה כלל.
+   כל שם אחר — javascript, python, sql — חוסם RTL בלי לבדוק תוכן. */
+const PLAIN_LANGS = new Set(["", "plaintext", "text", "nohighlight", "none", "txt"]);
+
 const CALLOUT = {
   info: { hue: "accent", g: "i", label: "מידע" },
   success: { hue: "green", g: "✓", label: "הצלחה" },
@@ -1065,6 +1093,55 @@ const CALLOUT = {
   summary: { hue: "steelblue", g: "≡", label: "תקציר" },
   details: { hue: "gray", g: "▸", label: "פרטים" }
 };
+
+/* ═══════════════════════════════════════════════════════════════════
+   תבניות סרגל העריכה — טבלה אחת
+
+   כל תבנית היא זוג before/after שעוטף את מה שסומן. זה ההבדל בין
+   "==טקסט חשוב==" ל-"====" שדורס את הבחירה. כשאין בחירה, ph הוא הטקסט
+   שנכנס במקומה ונשאר מסומן, כדי שאפשר יהיה להקליד עליו מיד.
+
+   block מסמן תבנית שחייבת לשבת בשורה משלה — הזרקה שלה באמצע פסקה
+   שוברת את הפרסור, ולכן מוסיפים שורות ריקות סביבה.
+   ═══════════════════════════════════════════════════════════════════ */
+const SNIPPETS = [
+  { group: "טקסט", items: [
+    { label: "מודגש", icon: "B", before: "**", after: "**", ph: "טקסט" },
+    { label: "נטוי", icon: "I", before: "*", after: "*", ph: "טקסט" },
+    { label: "קו חוצה", icon: "S", before: "~~", after: "~~", ph: "טקסט" },
+    { label: "הדגשה", icon: "H", before: "==", after: "==", ph: "טקסט" },
+    { label: "קוד", icon: "</>", before: "`", after: "`", ph: "code" },
+    { label: "קישור", icon: "🔗", before: "[", after: "](https://)", ph: "טקסט הקישור" }
+  ] },
+  { group: "מבנה", items: [
+    { label: "כותרת 2", icon: "H2", before: "## ", after: "", ph: "כותרת", block: true },
+    { label: "כותרת 3", icon: "H3", before: "### ", after: "", ph: "כותרת", block: true },
+    { label: "רשימה", icon: "•", before: "- ", after: "", ph: "פריט", block: true },
+    { label: "רשימה ממוספרת", icon: "1.", before: "1. ", after: "", ph: "פריט", block: true },
+    { label: "ציטוט", icon: "❝", before: "> ", after: "", ph: "ציטוט", block: true },
+    { label: "משימות", icon: "☑", before: "- [ ] ", after: "", ph: "משימה", block: true },
+    { label: "בלוק קוד", icon: "▤", before: "```\n", after: "\n```", ph: "קוד", block: true },
+    { label: "טבלה", icon: "▦", before: "", after: "", block: true,
+      ph: "| עמודה | עמודה |\n|---|---|\n| תא | תא |" },
+    { label: "קו מפריד", icon: "—", before: "", after: "", ph: "---", block: true },
+    { label: "בלוק מתקפל", icon: "▸", before: "::: details כותרת\n", after: "\n:::", ph: "תוכן", block: true }
+  ] }
+];
+
+/* ההתראות נגזרות מ-CALLOUT ולא נכתבות שוב. הוספת סוג חדש לפרסר מוסיפה
+   אותו לסרגל באותה שורה — שתי רשימות נפרדות היו מתפצלות בשקט. */
+SNIPPETS.push({
+  group: "התראות",
+  items: Object.keys(CALLOUT).map((kind) => ({
+    label: CALLOUT[kind].label,
+    icon: CALLOUT[kind].g,
+    kind: kind,
+    before: "::: " + kind + "\n",
+    after: "\n:::",
+    ph: "תוכן ההתראה",
+    block: true
+  }))
+});
 
 const FALLBACK_HUE = "gray";
 
@@ -1183,6 +1260,12 @@ class Component extends DCLogic {
     newProjectName: "", newLinkTitle: "", newLinkUrl: "",
     q: "", pasting: false, draft: "", dragging: false,
 
+    /* editing — האם המסך המפוצל פתוח. editBuf הוא מקור האמת של תיבת
+       הטקסט, ו-editView הוא מה שמרונדר בפועל: הוא מפגר אחרי editBuf
+       ברוחב ה-debounce, וזה בדיוק מה שמונע רינדור בכל תו.
+       (draft למעלה הוא תיבת ההדבקה — שדה אחר לגמרי.) */
+    editing: false, editBuf: "", editView: "", saveState: "",
+
     showSource: null, copied: false, codeCopied: "", openMap: {},
     active: 0, narrow: false, mobile: false,
     tab: null, raw: null, tasks: { t0: true, t1: true, t2: false },
@@ -1191,6 +1274,16 @@ class Component extends DCLogic {
 
   componentDidMount() {
     this.applyTheme(this.initialTheme());
+
+    /* הרשת האחרונה: אם המשתמש מסתיר את הטאב או סוגר אותו בזמן שיש
+       שמירה ממתינה, היא יוצאת עכשיו. visibilitychange הוא האירוע שדפדפני
+       מובייל באמת מפעילים — beforeunload לא נורה שם כשעוברים אפליקציה. */
+    this.onLeave = (e) => {
+      if (e && e.type === "pagehide") { this.flushSave(); return; }
+      if (document.visibilityState === "hidden") this.flushSave();
+    };
+    document.addEventListener("visibilitychange", this.onLeave);
+    window.addEventListener("pagehide", this.onLeave);
 
     this.onScroll = () => {
       const sel = this.state.screen === "reference" ? "[data-sec]" : "[data-h2]";
@@ -1228,8 +1321,14 @@ class Component extends DCLogic {
 
   componentWillUnmount() {
     window.removeEventListener("scroll", this.onScroll);
+    if (this.onLeave) {
+      document.removeEventListener("visibilitychange", this.onLeave);
+      window.removeEventListener("pagehide", this.onLeave);
+    }
     if (this.libTick) clearInterval(this.libTick);
     clearTimeout(this.codeTimer);
+    clearTimeout(this.previewTimer);
+    clearTimeout(this.saveTimer);
     clearTimeout(this.timer);
     if (this.mqNarrow) this.mqNarrow.removeEventListener("change", this.onMq);
     if (this.mqMobile) this.mqMobile.removeEventListener("change", this.onMq);
@@ -1303,11 +1402,21 @@ class Component extends DCLogic {
   async openDoc(docSlug) {
     const project = this.state.project;
     if (!project) return;
+
+    /* לפני שעוזבים את המסמך הנוכחי. בלי זה, מעבר מסמך באמצע חלון
+       ההמתנה של ה-debounce מוחק את מה שהוקלד בשניות האחרונות. */
+    await this.flushSave();
+
     const doc = await this.guard(() =>
       this.api("/projects/" + encodeURIComponent(project.slug) + "/docs/" + encodeURIComponent(docSlug))
     );
     if (!doc) return;
-    this.setState({ doc: doc, docSlug: docSlug, active: 0, showSource: null });
+    const content = doc.content || "";
+    this.setState({
+      doc: doc, docSlug: docSlug, active: 0, showSource: null,
+      /* העורך נשאר פתוח במעבר בין מסמכים, אבל התוכן שלו מוחלף. */
+      editBuf: content, editView: content, saveState: ""
+    });
     window.scrollTo({ top: 0 });
   }
 
@@ -1394,6 +1503,232 @@ class Component extends DCLogic {
     return !!this.state.me;
   }
 
+  /* ---------- העורך ---------- */
+
+  /* פתיחה וסגירה של המסך המפוצל. הסגירה מבריחה שמירה ממתינה — אחרת
+     לחיצה על "סיום" מיד אחרי הקלדה מאבדת את התו האחרון. */
+  async toggleEditing() {
+    if (this.state.editing) {
+      await this.flushSave();
+      this.setState({ editing: false });
+      return;
+    }
+    const content = (this.state.doc && this.state.doc.content) || "";
+    this.setState({ editing: true, editBuf: content, editView: content, saveState: "" });
+  }
+
+  /* כל הקלדה עוברת דרך כאן, ומכאן יוצאים שני טיימרים נפרדים.
+
+     זו הנקודה שכל השלב עומד עליה: הרינדור מהיר כי הוא מקומי, והשמירה
+     איטית כי היא רשת. טיימר אחד משותף היה מכריח לבחור — או פריוויו
+     מקרטע, או שרת שמקבל בקשה בכל הקלדה. */
+  onEdit(value) {
+    this.setState({ editBuf: value, saveState: "dirty" });
+
+    clearTimeout(this.previewTimer);
+    this.previewTimer = setTimeout(() => this.setState({ editView: value }), PREVIEW_MS);
+
+    clearTimeout(this.saveTimer);
+    this.saveTimer = setTimeout(() => { this.flushSave(); }, SAVE_MS);
+  }
+
+  /* סנכרון גלילה לפי אחוזים. מדויק כל עוד הצדדים דומים בגובה; בלוק
+     קוד ארוך מזיז את היחס, וסנכרון לפי בלוקים הוא שלב אחר. */
+  syncScroll() {
+    const src = this.editRef, out = this.previewRef;
+    if (!src || !out) return;
+    const room = src.scrollHeight - src.clientHeight;
+    if (room <= 0) return;
+    out.scrollTop = (src.scrollTop / room) * (out.scrollHeight - out.clientHeight);
+  }
+
+  /* המסך המפוצל, בנוי כרכיבי React ולא בתבנית — הוא צריך ref לתיבת
+     הטקסט כדי לקרוא ולהזיז את הבחירה, וזה מה שסרגל הכפתורים עומד עליו. */
+  editorPane(parsed, leadIdx) {
+    const s = this.state;
+    const label = { dirty: "לא נשמר", saving: "שומר…", saved: "נשמר", failed: "השמירה נכשלה" }[s.saveState] || "";
+    const labelColor = s.saveState === "failed" ? "var(--red)" : s.saveState === "saved" ? "var(--green)" : "var(--muted)";
+
+    const buttons = [];
+    SNIPPETS.forEach((group) => {
+      /* ההתראות הן 19 סוגים. כשורת כפתורים הן ממלאות את הסרגל בגליפים
+         בני תו אחד שאי אפשר לזהות; כרשימה נפתחת הן שורה אחת עם השמות
+         המלאים. אותה טבלת SNIPPETS, תצוגה אחרת. */
+      if (group.group === "התראות") {
+        buttons.push(React.createElement("select", {
+          key: "sel-callouts",
+          value: "",
+          onChange: (e) => {
+            const snip = group.items.filter((it) => it.kind === e.target.value)[0];
+            if (snip) this.applySnippet(snip);
+          },
+          style: {
+            height: 28, padding: "0 8px", border: "1px solid var(--rule)",
+            borderRadius: "var(--r-sm)", background: "var(--card)",
+            color: "var(--text)", fontFamily: "inherit", fontSize: 12.5, cursor: "pointer"
+          }
+        }, [React.createElement("option", { key: "ph", value: "" }, "התראה…")].concat(
+          group.items.map((it) =>
+            React.createElement("option", { key: it.kind, value: it.kind }, it.icon + "  " + it.label))
+        )));
+        return;
+      }
+
+      buttons.push(React.createElement("span", {
+        key: "g-" + group.group,
+        style: { padding: "0 8px", fontSize: 11, letterSpacing: "0.06em", color: "var(--faint)", alignSelf: "center", whiteSpace: "nowrap" }
+      }, group.group));
+      group.items.forEach((snip) => {
+        buttons.push(React.createElement("button", {
+          key: "s-" + group.group + "-" + snip.label,
+          type: "button",
+          title: snip.label,
+          /* onMouseDown ולא onClick: הלחיצה לא מוציאה את הפוקוס מהתיבה,
+             ולכן הבחירה שהמשתמש סימן עדיין קיימת כשהתבנית נכנסת. */
+          onMouseDown: (e) => { e.preventDefault(); this.applySnippet(snip); },
+          style: {
+            minWidth: 30, height: 28, padding: "0 7px",
+            border: "1px solid var(--rule)", borderRadius: "var(--r-sm)",
+            background: "var(--card)", color: "var(--text)",
+            fontFamily: "inherit", fontSize: 12.5, lineHeight: 1, cursor: "pointer"
+          },
+          "style-hover": "border-color:var(--accent)"
+        }, snip.icon));
+      });
+    });
+
+    const toolbar = React.createElement("div", {
+      key: "tb",
+      style: {
+        display: "flex", flexWrap: "wrap", alignItems: "center", gap: 5,
+        padding: "9px 12px", borderBottom: "1px solid var(--line)",
+        background: "var(--tint)", maxHeight: 112, overflowY: "auto"
+      }
+    }, buttons);
+
+    const editor = React.createElement("textarea", {
+      key: "ta",
+      ref: (el) => { this.editRef = el; },
+      dir: "auto",
+      spellCheck: false,
+      value: s.editBuf,
+      onChange: (e) => this.onEdit(e.target.value),
+      onScroll: () => this.syncScroll(),
+      style: {
+        flex: 1, width: "100%", boxSizing: "border-box", minHeight: 0,
+        padding: "18px 20px", border: "none", outline: "none", resize: "none",
+        background: "var(--card)", color: "var(--head)",
+        fontFamily: "var(--mono)", fontSize: 13, lineHeight: 1.8
+      }
+    });
+
+    /* parsed מגיע מ-editView ולא מ-editBuf — זה מה שגורם לפריוויו לפגר
+       ב-150ms מאחורי ההקלדה במקום לרוץ בכל תו. */
+    const preview = React.createElement("div", {
+      key: "pv",
+      ref: (el) => { this.previewRef = el; },
+      style: { flex: 1, minHeight: 0, overflowY: "auto", padding: "18px 22px", background: "var(--panel)" }
+    }, this.render_blocks(parsed, this.props.numberedHeadings ?? true, leadIdx));
+
+    const pane = (children, title) => React.createElement("div", {
+      style: {
+        display: "flex", flexDirection: "column", flex: "1 1 0", minWidth: 0, minHeight: 0,
+        border: "1px solid var(--line)", borderRadius: "var(--r-md)", overflow: "hidden"
+      }
+    }, [
+      React.createElement("div", {
+        key: "h",
+        style: { padding: "8px 12px", background: "var(--tint)", borderBottom: "1px solid var(--line)", fontSize: 12, color: "var(--muted)" }
+      }, title),
+      children
+    ]);
+
+    return React.createElement("div", { style: { display: "flex", flexDirection: "column", gap: 12 } }, [
+      React.createElement("div", {
+        key: "bar",
+        style: { display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }
+      }, [
+        React.createElement("span", { key: "st", style: { fontSize: 12.5, color: labelColor } }, label),
+        React.createElement("span", { key: "sp", style: { fontSize: 12.5, color: "var(--faint)" } },
+          s.editBuf.split("\n").length + " שורות")
+      ]),
+      React.createElement("div", {
+        key: "split",
+        style: {
+          display: "flex", gap: 12, height: "calc(100vh - 230px)", minHeight: 380,
+          flexDirection: s.narrow ? "column" : "row"
+        }
+      }, [
+        /* התצוגה משמאל והמקור מימין: במסך RTL הצד הימני הוא זה שהעין
+           מתחילה ממנו, ושם צריכה להיות התיבה שמקלידים בה. */
+        React.createElement("div", { key: "l", style: { display: "flex", flex: "1 1 0", minWidth: 0 } }, pane(preview, "תצוגה")),
+        React.createElement("div", { key: "r", style: { display: "flex", flex: "1 1 0", minWidth: 0 } },
+          React.createElement("div", {
+            style: { display: "flex", flexDirection: "column", flex: 1, minWidth: 0, border: "1px solid var(--line)", borderRadius: "var(--r-md)", overflow: "hidden" }
+          }, [toolbar, editor]))
+      ])
+    ]);
+  }
+
+  /* הזרקת תבנית מהסרגל.
+
+     הכלל היחיד שחשוב כאן: מה שסומן נעטף ולא נדרס. מי שסימן "טקסט חשוב"
+     ולחץ על הדגשה מצפה ל-==טקסט חשוב==, לא ל-==== שמחק לו את הבחירה.
+     כשאין בחירה נכנס ה-placeholder והוא נשאר מסומן, כדי שאפשר יהיה
+     להקליד עליו מיד. */
+  applySnippet(snip) {
+    const el = this.editRef;
+    if (!el) return;
+
+    const value = this.state.editBuf;
+    const start = el.selectionStart, end = el.selectionEnd;
+    const selected = value.slice(start, end);
+    const inner = selected || snip.ph || "";
+
+    let before = snip.before, after = snip.after;
+    let head = value.slice(0, start), tail = value.slice(end);
+
+    /* תבנית שחייבת שורה משלה. הזרקה שלה באמצע פסקה שוברת את הפרסור —
+       "## כותרת" בסוף שורה קיימת אינו כותרת אלא טקסט. */
+    if (snip.block) {
+      if (head && !head.endsWith("\n")) head += "\n";
+      if (tail && !tail.startsWith("\n")) after += "\n";
+    }
+
+    const next = head + before + inner + after + tail;
+    /* הסמן נכנס לתוך התבנית ולא אחריה, ומסמן את מה שבפנים. */
+    const from = head.length + before.length;
+    this.onEdit(next);
+    requestAnimationFrame(() => {
+      el.focus();
+      el.setSelectionRange(from, from + inner.length);
+    });
+  }
+
+  /* שמירה מיידית של מה שממתין. נקראת גם מהטיימר וגם מכל מסלול שבו
+     המשתמש עלול לעזוב — מעבר מסמך, סגירת העורך, הסתרת הטאב. */
+  async flushSave() {
+    clearTimeout(this.saveTimer);
+    this.saveTimer = null;
+    if (!this.state.editing || this.state.saveState !== "dirty") return;
+
+    const content = this.state.editBuf;
+    const doc = this.state.doc;
+    if (!doc || content === doc.content) { this.setState({ saveState: "" }); return; }
+
+    this.setState({ saveState: "saving" });
+    const result = await this.saveContent(content);
+    if (!result) { this.setState({ saveState: "failed" }); return; }
+
+    /* התוכן נכנס ל-doc בזיכרון גם אם השרת דחה את הבקשה כמאוחרת: זו
+       אותה מחרוזת שהמשתמש רואה מולו, והדחייה אומרת "כבר לא רלוונטי"
+       ולא "נכשל". */
+    this.setState({
+      doc: Object.assign({}, doc, { content: content }),
+      saveState: "saved"
+    });
+  }
+
   /* ---------- view model ---------- */
 
   renderVals() {
@@ -1408,7 +1743,15 @@ class Component extends DCLogic {
 
     const project = s.project;
     const doc = s.doc;
-    const parsed = doc ? this.parse(doc.content) : { front: {}, blocks: [] };
+    /* onDoc למטה הוא מפתח באובייקט התשובה ולא משתנה, ולכן אי אפשר
+       להסתמך עליו כאן. אותו ביטוי, פעם אחת, בשם מקומי. */
+    const onDocNow = onProject && !!doc;
+
+    /* בזמן עריכה מנתחים את מה שבתיבה ולא את מה ששמור. כך הכותרת
+       והפתיח בראש העמוד מתעדכנים בזמן אמת יחד עם הפריוויו, במקום
+       להציג את הגרסה הקודמת עד לשמירה הבאה. */
+    const editingDoc = onDocNow && s.editing;
+    const parsed = editingDoc ? this.parse(s.editView) : (doc ? this.parse(doc.content) : { front: {}, blocks: [] });
     const numbered = this.props.numberedHeadings ?? true;
 
     const h1 = parsed.blocks.filter((b) => b.t === "h" && b.level === 1)[0];
@@ -1606,6 +1949,16 @@ class Component extends DCLogic {
       meta: words + " מילים · " + Math.max(1, Math.round(words / 200)) + " דקות קריאה",
       source: doc ? doc.content : "",
       body: this.render_blocks(parsed, numbered, leadIdx),
+
+      /* --- העורך --- */
+      canOpenEditor: onDocNow && canEdit,
+      editing: onDocNow && s.editing,
+      viewingDoc: onDocNow && !s.editing,
+      editLabel: s.editing ? "סיום עריכה" : "עריכה",
+      toggleEditing: () => this.toggleEditing(),
+      /* אותו parsed ואותו leadIdx שהתצוגה הרגילה משתמשת בהם — הפריוויו
+         חייב להיות זהה לתוצאה, אחרת הוא משקר. */
+      editorPane: editingDoc ? this.editorPane(parsed, leadIdx) : null,
 
       toc: toc,
       tocEmpty: !toc.length,
@@ -1810,6 +2163,27 @@ class Component extends DCLogic {
     const alias = { js: "javascript", jsx: "jsx", ts: "typescript", tsx: "tsx", sh: "bash", shell: "bash", zsh: "bash", console: "bash", py: "python", yml: "yaml", md: "markdown", html: "markup", xml: "markup", "c++": "cpp", cs: "csharp", golang: "go", rb: "ruby", ps1: "powershell" };
     const l = (lang || "").toLowerCase();
     return alias[l] || l;
+  }
+
+  /* האם הבלוק הזה הוא טקסט עברי ולא קוד.
+     שני תנאים, והסדר ביניהם הוא כל העניין. */
+  rtlCode(b) {
+    /* התנאי הראשון הוא השפה, לא כמות העברית. בלוק שנפתח ב-```js הוא קוד
+       גם כשכל ההערות בתוכו עבריות, והיפוך שלו גרוע בהרבה מהבעיה שאנחנו
+       פותרים. רק בלוק בלי שפה — או עם שם שמסמן "זה לא קוד" — מועמד. */
+    if (!PLAIN_LANGS.has((b.lang || "").toLowerCase())) return false;
+
+    /* התנאי השני: יחס העברית מתוך האותיות בלבד. ספרות, פיסוק, רווחים
+       וחיצים אינם נספרים — אחרת בלוק עם הרבה סוגריים מדלל את המכנה
+       ומזייף את התוצאה. */
+    const text = b.code || "";
+    let hebrew = 0, letters = 0;
+    for (let i = 0; i < text.length; i++) {
+      const c = text.charCodeAt(i);
+      if (c >= 0x0590 && c <= 0x05ff) { hebrew++; letters++; }
+      else if ((c >= 0x41 && c <= 0x5a) || (c >= 0x61 && c <= 0x7a)) letters++;
+    }
+    return letters > 0 && hebrew / letters > HEBREW_RATIO;
   }
 
   codeHtml(code, lang) {
@@ -2090,13 +2464,17 @@ class Component extends DCLogic {
         const ck = "c" + idx;
         const done = this.state.codeCopied === ck;
         const html = this.codeHtml(b.code, b.lang);
+        /* נבדק כאן, על אובייקט הבלוק, ולא על ה-DOM אחרי הרינדור. b.lang
+           מגיע מהגדר עצמו, ולכן אין תלות בסדר מול מנוע הצביעה — שמוסיף
+           language-* משלו ומבלבל בדיקה שרצה מאוחר מדי. */
+        const rtl = this.rtlCode(b);
         const codeStyle = { fontFamily: "var(--mono)", fontSize: ed ? 13 : 13.5, color: "var(--code-text)", background: "none", textShadow: "none", whiteSpace: "pre", padding: 0 };
         out.push(React.createElement("div", { key: key, style: { border: "1px solid var(--line)", borderRadius: "var(--r-md)", overflow: "hidden", background: "var(--card)", margin: ed ? "0 0 24px" : "0 0 20px" } },
           React.createElement("div", { key: "bar", style: { display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, padding: ed ? "7px 12px" : "8px 12px", background: "var(--tint)", borderBottom: "1px solid var(--line)" } },
             React.createElement("button", { key: "c", onClick: this.copyText(b.code, ck), title: done ? "הועתק" : "העתקת הקוד", style: { display: "flex", alignItems: "center", justifyContent: "center", width: 28, height: 26, border: "1px solid " + (done ? "var(--green-ring)" : "var(--rule)"), borderRadius: "var(--r-sm)", background: "none", color: done ? "var(--green)" : "var(--muted)", cursor: "pointer" } },
               done ? React.createElement("span", { key: "v", style: { fontSize: 13, lineHeight: 1 } }, "✓") : this.copyIcon("var(--tint)")),
             React.createElement("span", { key: "n", dir: "ltr", style: { fontFamily: "var(--mono)", fontSize: ed ? 11.5 : 12, color: "var(--muted)" } }, b.title || b.lang || "code")),
-          React.createElement("pre", { key: "p", dir: "ltr", style: { margin: 0, padding: "18px 20px", fontFamily: "var(--mono)", fontSize: ed ? 13 : 13.5, lineHeight: 1.75, color: "var(--code-text)", textAlign: "left", overflowX: "auto" } },
+          React.createElement("pre", { key: "p", dir: rtl ? "rtl" : "ltr", style: { margin: 0, padding: "18px 20px", fontFamily: "var(--mono)", fontSize: ed ? 13 : 13.5, lineHeight: 1.75, color: "var(--code-text)", textAlign: rtl ? "right" : "left", overflowX: "auto" } },
             html
               ? React.createElement("code", { className: "language-" + this.langOf(b.lang), style: codeStyle, dangerouslySetInnerHTML: { __html: html } })
               : React.createElement("code", { style: codeStyle }, this.highlight(b.code, b.lang)))));

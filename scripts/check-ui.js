@@ -73,6 +73,16 @@ const check = (label, ok, extra) => {
   const docText = await p.evaluate(() => document.body.innerText);
   check('המסמך נוצר ומרונדר', docText.includes('מדריך התקנה') && docText.includes('שלב ראשון'));
 
+  // מסמך דרך העלאת קובץ. מסלול נפרד לגמרי מההדבקה — הוא עובר דרך
+  // readFiles, ואיפוס value של ה-input מרוקן את אותו FileList שמחזיקים.
+  // בלי הבדיקה הזאת הרגרסיה הזו שקטה לחלוטין.
+  const upload = SHOTS + '/upload-check.md';
+  require('fs').writeFileSync(upload, '# מסמך מקובץ\n\nתוכן שהועלה.\n');
+  await p.setInputFiles('input[type="file"]', [upload]);
+  await p.waitForTimeout(3000);
+  const uploaded = await p.evaluate(() => document.body.innerText);
+  check('העלאת קובץ יוצרת מסמך', uploaded.includes('מסמך מקובץ') && uploaded.includes('תוכן שהועלה'));
+
   // קישור
   await p.fill('input[placeholder="שם הקישור"]', 'CodeKeeper');
   await p.fill('input[placeholder="https://…"]', 'https://codekeeper.com');
@@ -87,6 +97,10 @@ const check = (label, ok, extra) => {
   const published = await p.evaluate(async (slugName) => {
     const list = await (await fetch('/api/projects', { credentials: 'same-origin' })).json();
     const mine = list.find((x) => x.name === slugName);
+    // בלי זה, כשל קודם ביצירת הפרויקט הופך כאן ל-TypeError בתוך evaluate,
+    // שמטפס ל-catch הכללי ומבטל את כל הבדיקות שאחריו — הפלט מסתיר אז את
+    // הכשל האמיתי במקום להצביע עליו.
+    if (!mine) return null;
     const res = await fetch('/api/projects/' + encodeURIComponent(mine.slug), {
       method: 'PATCH',
       credentials: 'same-origin',
@@ -125,6 +139,21 @@ const check = (label, ok, extra) => {
   await p.screenshot({ path: SHOTS + '/ui-light.png' });
 
   check('אין שגיאות קונסולה', errs.length === 0, errs.slice(0, 3).join(' | '));
+
+  // ── ניקוי ─────────────────────────────────────────────────────────
+  // בלי זה כל הרצה משאירה פרויקט ומסמך במסד, ואחרי כמה הרצות מסך
+  // הפרויקטים והחיפוש מתמלאים בזבל בדיקות. המחיקה מדורגת — CASCADE
+  // מוריד גם את המסמכים, הגרסאות והקישורים.
+  if (published) {
+    const removed = await p.evaluate(async (slug) => {
+      const res = await fetch('/api/projects/' + encodeURIComponent(slug), {
+        method: 'DELETE',
+        credentials: 'same-origin',
+      });
+      return res.status;
+    }, published);
+    check('הפרויקט נמחק בסיום', removed === 204, 'status ' + removed);
+  }
 
   await browser.close();
   const failed = results.filter((r) => !r.ok);

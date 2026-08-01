@@ -1338,15 +1338,23 @@ class Component extends DCLogic {
   }
 
   /* שם הקובץ הופך לכותרת, והשורה הראשונה שמתחילה ב-# גוברת עליו. */
-  readFiles(fileList) {
+  async readFiles(fileList) {
     const files = Array.from(fileList || []).filter(
       (f) => /\.(md|markdown|txt)$/i.test(f.name) || f.type.indexOf("text") === 0
     );
     if (!files.length) return;
-    Promise.all(files.map((f) => f.text().then((src) => {
-      const heading = src.match(/^#\s+(.*)$/m);
-      return { title: (heading ? heading[1] : f.name.replace(/\.(md|markdown|txt)$/i, "")).trim(), content: src };
-    }))).then((items) => this.createDocuments(items));
+    /* שרשרת Promise בלי await ובלי catch נכשלת בשקט: קובץ שלא נקרא מייצר
+       unhandled rejection, והמשתמש רואה מסך שלא השתנה בלי שום הסבר. */
+    try {
+      const items = await Promise.all(files.map(async (f) => {
+        const src = await f.text();
+        const heading = src.match(/^#\s+(.*)$/m);
+        return { title: (heading ? heading[1] : f.name.replace(/\.(md|markdown|txt)$/i, "")).trim(), content: src };
+      }));
+      await this.createDocuments(items);
+    } catch (e) {
+      this.setState({ error: "קריאת הקבצים נכשלה" });
+    }
   }
 
   /* סימון משימה כותב לשרת ולא רק למסך. client_seq ו-editor_id נשלחים
@@ -1633,11 +1641,14 @@ class Component extends DCLogic {
         await this.createDocuments([{ title: (heading ? heading[1] : "מסמך חדש").trim(), content: src }]);
         this.setState({ draft: "", pasting: false });
       },
-      onFiles: (e) => { this.readFiles(e.target.files); e.target.value = ""; },
+      /* Array.from ולא הפניה ל-e.target.files: איפוס value מרוקן את אותו
+         FileList עצמו, ומי שמחזיק אותו נשאר עם רשימה ריקה. העותק חייב
+         להילקח לפני האיפוס. */
+      onFiles: async (e) => { const files = Array.from(e.target.files || []); e.target.value = ""; await this.readFiles(files); },
       dragging: s.dragging,
       onDragOver: (e) => { e.preventDefault(); if (!s.dragging) this.setState({ dragging: true }); },
       onDragLeave: () => this.setState({ dragging: false }),
-      onDrop: (e) => { e.preventDefault(); this.setState({ dragging: false }); if (this.canEdit()) this.readFiles(e.dataTransfer.files); },
+      onDrop: async (e) => { e.preventDefault(); this.setState({ dragging: false }); if (this.canEdit()) await this.readFiles(e.dataTransfer.files); },
 
       /* --- רפרנס --- */
       nav: {
@@ -1722,7 +1733,11 @@ class Component extends DCLogic {
     const P = this.mermaid();
     if (!this.mermaidReady) {
       try {
-        m.initialize({ startOnLoad: false, securityLevel: "loose", theme: "base", fontFamily: "Heebo, Assistant, sans-serif", themeVariables: P.vars });
+        /* strict ולא loose. התרשים מגיע מתוכן מסמך, והתוצאה מוזרקת דרך
+           innerHTML — כלומר Mermaid הוא הסניטייזר היחיד בשרשרת. ב-loose
+           הוא מדלג על סינון התוויות, הקישורים וה-SVG הסופי, ומסמך ציבורי
+           נקרא גם בידי מי שלא כתב אותו. */
+        m.initialize({ startOnLoad: false, securityLevel: "strict", theme: "base", fontFamily: "Heebo, Assistant, sans-serif", themeVariables: P.vars });
       } catch (e) { return; }
       this.mermaidReady = true;
     }

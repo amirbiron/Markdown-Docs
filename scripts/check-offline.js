@@ -147,6 +147,7 @@ if (!SP) {
   }, [EMAIL, PASSWORD]);
 
   let rendered = { tokens: 0, languages: [], mermaid: 0 };
+  let cleanup = null;
   if (!doc.error) {
     await p.reload({ waitUntil: 'load' });
     await p.waitForSelector('#dc-root', { timeout: 20000 });
@@ -163,12 +164,26 @@ if (!SP) {
       mermaid: document.querySelectorAll('[data-mermaid] svg').length,
     }));
     await p.screenshot({ path: SP + '/offline-doc.png' });
+
+    // ניקוי: בלי זה כל הרצה משאירה פרויקט במסד. לא מפיל את התרחיש —
+    // כשל מחיקה מדווח בפלט ולא הופך בדיקה שעברה לכישלון.
+    cleanup = await p.evaluate(async (slug) => {
+      try {
+        const res = await fetch('/api/projects/' + encodeURIComponent(slug), {
+          method: 'DELETE',
+          credentials: 'same-origin',
+        });
+        return res.status;
+      } catch (e) {
+        return 'שגיאה: ' + e.message;
+      }
+    }, doc.slug);
   }
 
   console.log(JSON.stringify({
     externalRequests: external,
     errs: errs.slice(0, 8),
-    dark, light, rendered, doc,
+    dark, light, rendered, doc, cleanup,
     interactive: { themeToggle: dark.theme !== light.theme, searchWorks, refSections, backToReference },
   }, null, 2));
 
@@ -182,8 +197,10 @@ if (!SP) {
     rendered.mermaid > 0 &&
     dark.theme !== light.theme &&
     searchWorks &&
-    refSections === 8 &&
-    backToReference === 8;
+    // לא מספר קבוע: מקטע תשיעי ברפרנס אינו רגרסיה. מה שנבדק הוא שהמסך
+    // חזר לאותו מבנה אחרי מעבר הלוך-חזור.
+    refSections > 0 &&
+    backToReference === refSections;
   console.log(ok ? '\nהכול עבר' : '\nנכשל');
   process.exit(ok ? 0 : 1);
 })().catch((e) => { console.error('FATAL', e.message); process.exit(1); });

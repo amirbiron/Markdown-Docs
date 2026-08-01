@@ -6,6 +6,16 @@ description = "אתר תיעוד Markdown עם פרויקטים, מצב בהיר
 # enum.StrEnum, שבשימוש ב-app/models.py, קיים רק מ-3.11 ומעלה.
 requires-python = ">=3.11"
 
+[tool.ruff.lint]
+# ruff מסמן אותיות עבריות שדומות בצורתן לאותיות לטיניות: ו נראית כמו l,
+# ט כמו v, ס כמו o. בפרויקט שבו ההערות בעברית והמזהים באנגלית (ראו
+# CLAUDE.md) הצירוף "ו-updated_at" הוא הכתיב הנכון, לא תקלה — והכלל
+# מייצר עשרות התרעות שווא שמסתירות ממצאים אמיתיים.
+#
+# ההיתר הוא על ארבע האותיות האלה ולא ביטול הכלל: תו קירילי שנשתל בשם
+# משתנה עדיין ייתפס, וזה מה ש-RUF001 באמת נועד לתפוס.
+allowed-confusables = ["ו", "ט", "ס", "י"]
+
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "session"

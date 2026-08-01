@@ -38,10 +38,15 @@ mapfile -t URLS < <(grep -oE 'https://fonts\.gstatic\.com/[^)]+' "$TMP/source.cs
 echo "  · ${#URLS[@]} קובצי גופן"
 cp "$TMP/source.css" "$TMP/fonts.css"
 
+# השמות נאספים כאן ומשמשים שוב בלולאת ההעברה. חישוב הנוסחה פעמיים היה
+# מתפצל בשקט ברגע שכלל השמות משתנה במקום אחד בלבד.
+NAMES=()
+
 for url in "${URLS[@]}"; do
   # s/heebo/v26/AbC.woff2 → heebo-v26-AbC.woff2. שטוח כדי שהגיליון יוכל
   # להצביע על ספרייה אחת, וייחודי כי הנתיב המקורי כבר ייחודי.
   name=$(printf '%s' "${url#https://fonts.gstatic.com/s/}" | tr '/' '-')
+  NAMES+=("$name")
   curl -fsS "$url" -o "$TMP/$name"
 
   # שם הקובץ לבדו, בלי נתיב. url() ב-CSS נפתר יחסית לקובץ ה-CSS עצמו,
@@ -65,8 +70,7 @@ fi
 } > "$TMP/final.css"
 
 mv "$TMP/final.css" "$OUT/fonts.css"
-for url in "${URLS[@]}"; do
-  name=$(printf '%s' "${url#https://fonts.gstatic.com/s/}" | tr '/' '-')
+for name in "${NAMES[@]}"; do
   mv "$TMP/$name" "$OUT/$name"
 done
 

@@ -65,11 +65,15 @@ curl -fsS "$REACT_DOM_URL" -o "$TMP/react-dom.js"
 # ── אימות מול הסכומים השמורים ────────────────────────────────────────
 # רק אחרי שכל ההורדות הצליחו. הקובץ CHECKSUMS מקובע בריפו, ולכן CDN
 # שמגיש תוכן אחר נתפס כאן במקום להיכנס בשקט.
-CHECKSUMS=assets/vendor/CHECKSUMS
+# נתיב מוחלט שנגזר מ-$OUT, ולא נתיב שנכתב שוב ביד ועוד אחד שמחושב
+# מחדש דרך `cd ..` מתוך $TMP. שתי הצורות ההן הניחו ש-$TMP יושב בדיוק
+# בתוך $OUT, ושינוי אחד ב-mktemp היה משתיק את האימות בלי סימן — כלומר
+# מבטל בדיוק את מה שהאימות נועד לתפוס.
+CHECKSUMS="$(cd "$OUT" && pwd)/CHECKSUMS"
 if [ -f "$CHECKSUMS" ] && [ "${REFRESH_CHECKSUMS:-0}" != "1" ]; then
   echo
   echo "מאמת מול $CHECKSUMS"
-  ( cd "$TMP" && sha256sum -c "$(cd .. && pwd)/CHECKSUMS" ) || {
+  ( cd "$TMP" && sha256sum -c "$CHECKSUMS" ) || {
     echo
     echo "אימות נכשל. אם זה שדרוג גרסה מכוון: REFRESH_CHECKSUMS=1 $0"
     exit 1
@@ -83,4 +87,6 @@ done
 ( cd "$OUT" && sha256sum prism.js mermaid.js react.js react-dom.js > CHECKSUMS )
 
 echo
-ls -la "$OUT" | awk 'NR>3 && $9 !~ /^\./ {printf "  %-16s %s\n", $9, $5}'
+# find ולא `ls | awk`: העמודות של ls נחתכות לפי רווחים, ושם קובץ עם רווח
+# מזיז את כולן. -printf מחזיר את השם והגודל ישירות.
+find "$OUT" -maxdepth 1 -type f ! -name '.*' -printf '  %-16f %s\n' | sort

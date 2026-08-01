@@ -3,7 +3,8 @@
   "private": true,
   "description": "בדיקות דפדפן בלבד. האפליקציה עצמה היא Python — ראו requirements.txt",
   "scripts": {
-    "check:offline": "node scripts/check-offline.js /tmp"
+    "check:offline": "node scripts/check-offline.js /tmp",
+    "check:ui": "node scripts/check-ui.js http://127.0.0.1:8070 /tmp"
   },
   "devDependencies": {
     "playwright": "^1.56.1"

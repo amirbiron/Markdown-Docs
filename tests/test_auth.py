@@ -16,6 +16,7 @@ from app.config import get_settings
 from app.db import SessionLocal
 from app.main import app
 from app.seed import seed_admin
+from app.middleware import _is_loopback_origin
 from app.security import COOKIE_NAME, issue_token, login_limiter, read_token
 
 from tests.conftest import EMAIL, ORIGIN, PASSWORD, WRITE  # noqa: F401
@@ -114,7 +115,11 @@ async def test_expired_token_rejected_even_with_valid_signature(client):
     assert read_token(stale) is None, "read_token קיבל טוקן שפג"
 
     client.cookies.set(COOKIE_NAME, stale)
-    assert (await client.get("/api/auth/me")).json()["authenticated"] is False
+    # גם הסטטוס וגם התוכן. תשובת שגיאה שבמקרה נושאת אותו payload הייתה
+    # עוברת בדיקה שמסתכלת על ה-JSON בלבד.
+    response = await client.get("/api/auth/me")
+    assert response.status_code == 200
+    assert response.json()["authenticated"] is False
 
     # ואותו טוקן, נחתם עכשיו, כן עובד — כלומר הדחייה הייתה בגלל exp
     # ולא בגלל שהחתימה נשברה.
@@ -135,9 +140,9 @@ async def test_bumping_session_version_invalidates_cookie(client):
         )
         await session.commit()
 
-    assert (await client.get("/api/auth/me")).json()["authenticated"] is False, (
-        "cookie שרד העלאת session_version"
-    )
+    response = await client.get("/api/auth/me")
+    assert response.status_code == 200
+    assert response.json()["authenticated"] is False, "cookie שרד העלאת session_version"
 
 
 # ── מדד 4: Origin חסר או זר מקבל 403 ──────────────────────────────────
@@ -150,6 +155,43 @@ async def test_bumping_session_version_invalidates_cookie(client):
 async def test_mutating_request_rejects_bad_origin(client, headers, label):
     response = await client.post("/api/auth/login", json={"email": EMAIL, "password": PASSWORD}, headers=headers)
     assert response.status_code == 403, f"Origin {label} לא נחסם"
+
+
+@pytest.mark.parametrize(
+    "malformed",
+    [
+        "http://[::1",       # סוגר מרובע חסר — urlsplit זורק ValueError
+        "http://[",
+        "://localhost",      # בלי סכימה
+        "http://",           # בלי מארח
+        "%%%",
+        "http://localhost\x00.evil.example",
+    ],
+)
+async def test_malformed_origin_is_403_not_500(client, malformed):
+    """Origin פגום הוא קלט מהרשת, ולכן תשובה ולא קריסה.
+
+    urlsplit זורק ValueError על כתובת IPv6 שבורה. בלי תפיסה החריגה
+    מטפסת דרך ה-middleware והופכת ל-500 — כלומר מחרוזת אחת מספיקה כדי
+    להפיל מסלול שגיאה ולקבל דף שגיאה במקום דחייה.
+    """
+    response = await client.post(
+        "/api/auth/login",
+        json={"email": EMAIL, "password": PASSWORD},
+        headers={"Origin": malformed},
+    )
+    assert response.status_code == 403, f"{malformed!r} החזיר {response.status_code}"
+
+
+@pytest.mark.parametrize("origin", ["http://localhost:99999999999999", "http://[::1]:bad]"])
+async def test_loopback_host_is_what_counts_not_the_port(client, origin):
+    """פורט מוזר על מארח מקומי מתקבל בפיתוח, וזו החלטה ולא פספוס.
+
+    ההיתר נשען על המארח: מי שכבר מריץ קוד על loopback של המכונה הזאת
+    אינו "מקור זר", ובכל פורט שהוא. מה שנבדק כאן הוא שהמסלול לא קורס —
+    שתי הכתובות האלה מתפרקות למארח מקומי חוקי ולכן אינן "פגומות".
+    """
+    assert _is_loopback_origin(origin) is True
 
 
 async def test_get_does_not_require_origin(client):

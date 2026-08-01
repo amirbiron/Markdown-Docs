@@ -1,0 +1,7 @@
+# נכסים שנוצרים אוטומטית ואין לערוך ביד. הערות סגנון עליהם הן רעש
+# שמסתיר ממצאים בקוד שכן נכתב כאן.
+#
+# assets/fonts  — נוצר על ידי scripts/vendor-fonts.sh מפלט Google
+# assets/vendor — נוצר על ידי scripts/vendor.sh מחבילות צד-שלישי
+assets/fonts/
+assets/vendor/

@@ -30,7 +30,13 @@ def _is_loopback_origin(origin: str) -> bool:
     של IPv6 ואת האותיות הגדולות, ומחזיר None כשה-Origin מעוות. השוואת
     startswith הייתה מאשרת גם http://localhost.evil.example.
     """
-    parts = urlsplit(origin)
+    try:
+        parts = urlsplit(origin)
+    except ValueError:
+        # "http://[::1" — סוגר מרובע חסר — מפיל את urlsplit. ה-Origin מגיע
+        # מהרשת, ולכן קלט פסול חייב להיות תשובת 403 ולא חריגה שמטפסת
+        # החוצה והופכת ל-500.
+        return False
     if parts.scheme not in ("http", "https"):
         return False
     return (parts.hostname or "").lower() in LOOPBACK_HOSTS

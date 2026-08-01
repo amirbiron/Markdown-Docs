@@ -58,7 +58,7 @@ def backup_dir() -> Path:
     return Path(get_settings().backup_dir)
 
 
-def _stamp_of(path: Path) -> datetime | None:
+def stamp_of(path: Path) -> datetime | None:
     """קורא את הזמן מתוך שם הקובץ.
 
     מ-mtime ולא משם הקובץ היה נשבר בהעתקה או בשחזור של הדיסק, ששניהם
@@ -82,7 +82,7 @@ def existing_backups(directory: Path | None = None) -> list[Path]:
     target = directory or backup_dir()
     if not target.is_dir():
         return []
-    dated = [(stamp, path) for path in target.iterdir() if (stamp := _stamp_of(path)) is not None]
+    dated = [(stamp, path) for path in target.iterdir() if (stamp := stamp_of(path)) is not None]
     dated.sort(key=lambda pair: (pair[0], pair[1].name), reverse=True)
     return [path for _, path in dated]
 
@@ -181,18 +181,28 @@ def _due(now: datetime, last: datetime | None, every_hours: int) -> bool:
 async def run_guarded(force: bool = False) -> dict:
     """נקודת הכניסה היחידה שמריצה גיבוי, ולעולם לא זורקת.
 
-    הבדיקה `is_running()` נעשית *לפני* התפיסה ולא במקומה. `async with`
-    לבדו היה גורם לקריאה שנייה להמתין לסיום הראשונה ואז להריץ גיבוי
-    נוסף — בקשת HTTP שתקועה שתי דקות ומייצרת עבודה כפולה. כאן היא
-    חוזרת מיד, וה-router מתרגם את זה ל-409 ולא ל-500: "תפוס, נסה עוד
-    רגע" הוא מצב אחר לגמרי מ"משהו נשבר".
+    התפיסה אינה חוסמת. `async with _lock` לבדו היה גורם לקריאה שנייה
+    להמתין לסיום הראשונה ואז להריץ גיבוי נוסף — בקשת HTTP שתקועה שתי
+    דקות ומייצרת עבודה כפולה. כאן היא חוזרת מיד, וה-router מתרגם את זה
+    ל-409 ולא ל-500: "תפוס, נסה עוד רגע" הוא מצב אחר לגמרי מ"משהו נשבר".
     """
     global _last_run
 
-    if is_running():
+    # בדיקה ואז תפיסה, וזה נכון כאן למרות שכלל 2 מזהיר מהצירוף הזה.
+    #
+    # ל-asyncio.Lock אין try-acquire, ו-`wait_for(acquire(), timeout=0)`
+    # אינו תחליף: timeout=0 מבטל את המשימה לפני שהיא רצה, ולכן הוא נכשל
+    # *תמיד* — גם כשהנעילה פנויה. כלומר שום גיבוי לא היה רץ יותר.
+    #
+    # מה שהופך את הצירוף לבטוח הוא שאין כאן נקודת השהיה: acquire של
+    # asyncio.Lock חוזר בלי להשתהות כשהנעילה פנויה, ולולאת האירועים היא
+    # חד-חוטית. מה שמאמת את זה הוא בדיקה שיורה 20 קריאות במקביל ומוודאת
+    # שרצה בדיוק אחת — לא הנימוק הזה.
+    if _lock.locked():
         return {"ok": False, "error": ALREADY_RUNNING}
 
-    async with _lock:
+    await _lock.acquire()
+    try:
         started = datetime.now(UTC)
         try:
             path = await run_once(force=force)
@@ -214,6 +224,10 @@ async def run_guarded(force: bool = False) -> dict:
             "skipped": path is None,
         }
         return {"ok": True, "file": path.name if path else None, "skipped": path is None}
+    finally:
+        # ב-finally ולא בסוף הבלוק: גם כישלון וגם ביטול המשימה חייבים
+        # לשחרר, אחרת כל ניסיון עתידי יקבל "תפוס" לנצח.
+        _lock.release()
 
 
 async def run_once(force: bool = False) -> Path | None:
@@ -225,7 +239,7 @@ async def run_once(force: bool = False) -> Path | None:
     now = datetime.now(UTC)
 
     latest = existing_backups()
-    last = _stamp_of(latest[0]) if latest else None
+    last = stamp_of(latest[0]) if latest else None
     if not force and not _due(now, last, settings.backup_every_hours):
         return None
 
@@ -277,7 +291,7 @@ def next_run_at() -> str | None:
     latest = existing_backups()
     if not latest:
         return None
-    last = _stamp_of(latest[0])
+    last = stamp_of(latest[0])
     if last is None:
         return None
     return (last + timedelta(hours=get_settings().backup_every_hours)).isoformat()

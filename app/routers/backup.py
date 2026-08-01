@@ -41,7 +41,22 @@ async def backup_status(user: User = Depends(require_user)) -> JSONResponse:
     לעבוד — וה-log של Render אינו מקום שבודקים בו כל יום.
     """
     settings = get_settings()
-    files = scheduler.existing_backups()
+
+    # מעבר אחד ו-stat אחד לכל קובץ. שני מעברים הרחיבו את החלון שבו קובץ
+    # נמחק בין אחד לשני — גיזום, שחזור, או ניקוי ידני — ואז הקריאה
+    # השנייה זורקת והמסך שאמור לדווח על מצב הגיבוי מחזיר 500.
+    entries = []
+    total = 0
+    for path in scheduler.existing_backups():
+        try:
+            size = path.stat().st_size
+        except OSError:
+            continue
+        total += size
+        stamp = scheduler.stamp_of(path)
+        entries.append(
+            {"name": path.name, "bytes": size, "at": stamp.isoformat() if stamp else None}
+        )
 
     return JSONResponse(
         {
@@ -52,15 +67,8 @@ async def backup_status(user: User = Depends(require_user)) -> JSONResponse:
             "offsite_enabled": settings.backup_telegram_enabled,
             "last_run": scheduler.last_run(),
             "next_run_at": scheduler.next_run_at(),
-            "total_bytes": sum(path.stat().st_size for path in files),
-            "backups": [
-                {
-                    "name": path.name,
-                    "bytes": path.stat().st_size,
-                    "at": stamp.isoformat() if (stamp := scheduler._stamp_of(path)) else None,
-                }
-                for path in files
-            ],
+            "total_bytes": total,
+            "backups": entries,
         }
     )
 

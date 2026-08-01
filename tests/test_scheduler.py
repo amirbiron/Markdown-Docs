@@ -309,4 +309,69 @@ async def test_two_backups_in_the_same_second_do_not_overwrite(owner, tmp_path):
     assert first.exists() and second.exists()
     assert len(scheduler.existing_backups(tmp_path)) == 2
     # ושניהם עדיין מזוהים כגיבויים לצורך הרוטציה
-    assert all(scheduler._stamp_of(p) is not None for p in (first, second))
+    assert all(scheduler.stamp_of(p) is not None for p in (first, second))
+
+
+async def test_status_with_no_backups_yet(owner, tmp_path, monkeypatch):
+    """התקנה טרייה: אין קבצים, ואין ריצה הבאה לגזור ממנה."""
+    monkeypatch.setattr(scheduler, "backup_dir", lambda: tmp_path)
+
+    body = (await owner.get("/api/backup")).json()
+    assert body["backups"] == []
+    assert body["total_bytes"] == 0
+    assert body["next_run_at"] is None, "אין ממה לגזור ריצה הבאה"
+
+
+async def test_status_survives_a_file_that_vanishes(owner, tmp_path, monkeypatch):
+    """גיזום או ניקוי ידני באמצע — המסך מדווח, לא מחזיר 500."""
+    _seed(tmp_path, 3)
+    listed = scheduler.existing_backups(tmp_path)
+
+    def racy(directory=None):
+        # מחזירים גם קובץ שכבר לא קיים
+        return listed + [tmp_path / "backup-20991231-235959.zip"]
+
+    monkeypatch.setattr(scheduler, "backup_dir", lambda: tmp_path)
+    monkeypatch.setattr(scheduler, "existing_backups", racy)
+
+    response = await owner.get("/api/backup")
+    assert response.status_code == 200
+    assert len(response.json()["backups"]) == 3
+
+
+async def test_run_returns_500_when_the_backup_fails(owner, monkeypatch):
+    """כישלון אמיתי מתורגם ל-500, להבדיל מ-409 של "תפוס"."""
+
+    async def failing(force=False):
+        return {"ok": False, "error": "הגיבוי נכשל"}
+
+    monkeypatch.setattr(scheduler, "run_guarded", failing)
+
+    response = await owner.post("/api/backup/run", headers=WRITE)
+    assert response.status_code == 500
+    assert response.json()["detail"] == "הגיבוי נכשל"
+
+
+async def test_only_one_of_many_concurrent_runs_executes(tmp_path, monkeypatch):
+    """התפיסה עצמה היא הבדיקה — לא בדיקה שקודמת לה."""
+    monkeypatch.setattr(scheduler, "backup_dir", lambda: tmp_path)
+
+    import asyncio as _asyncio
+
+    ran = 0
+
+    async def slow(force=False):
+        nonlocal ran
+        ran += 1
+        await _asyncio.sleep(0.05)
+        return None
+
+    monkeypatch.setattr(scheduler, "run_once", slow)
+
+    results = await _asyncio.gather(*[scheduler.run_guarded(force=True) for _ in range(20)])
+    assert ran == 1, f"רצו {ran} גיבויים במקביל"
+    assert sum(1 for r in results if r["ok"]) == 1
+    assert all(
+        r["error"] == scheduler.ALREADY_RUNNING for r in results if not r["ok"]
+    ), "מי שנדחה קיבל סיבה אחרת מ'תפוס'"
+    assert scheduler.is_running() is False, "הנעילה לא שוחררה"

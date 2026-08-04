@@ -48,7 +48,12 @@ function bigDocument(lines) {
 
 (async () => {
   const browser = await chromium.launch();
-  const ctx = await browser.newContext({ viewport: { width: 1600, height: 1000 } });
+  /* הרשאות הלוח נדרשות לבדיקת כפתור ההעתקה: בלעדיהן readText נדחה,
+     והבדיקה הייתה מאשרת "הועתק" בלי לדעת מה באמת נכנס ללוח. */
+  const ctx = await browser.newContext({
+    viewport: { width: 1600, height: 1000 },
+    permissions: ['clipboard-read', 'clipboard-write'],
+  });
   const p = await ctx.newPage();
   const errs = [];
   p.on('console', (m) => { if (m.type() === 'error') errs.push(m.text()); });
@@ -265,6 +270,102 @@ function bigDocument(lines) {
     !!afterFail && afterFail.indexOf(failMarker) >= 0,
     JSON.stringify((afterFail || '').slice(0, 40)));
 
+
+  // ── מסך היצירה ────────────────────────────────────────────────────
+  // רענון מלא: הבדיקות שלמעלה השאירו את הדף עם visibilityState מזויף
+  // ועם נתב שהוסר, ומצב כזה מסתיר רגרסיות במקום לחשוף אותן.
+  await p.reload({ waitUntil: 'load' });
+  await p.waitForSelector('#dc-root', { timeout: 20000 });
+  await p.waitForTimeout(3000);
+  await p.getByText(NAME).first().click();
+  await p.waitForTimeout(2500);
+
+  // הכפתור בסרגל פותח את אותו מסך מפוצל של העריכה — גם כשאין מסמך
+  // פתוח. קודם הוא היה מקונן בתוך בלוק המסמך ולא נפתח כלל.
+  await p.getByRole('button', { name: /כתיבת מסמך חדש|new document/i }).click();
+  await p.waitForTimeout(1200);
+
+  const createPane = await p.evaluate(() => {
+    const ta = document.querySelector('textarea');
+    return {
+      textareaHeight: ta ? Math.round(ta.getBoundingClientRect().height) : 0,
+      hasNameField: !!document.querySelector('input[placeholder^="שם המסמך"]'),
+      hasToolbar: !!document.querySelector('button[title]'),
+    };
+  });
+  check('מסך היצירה נפתח כמסך מפוצל',
+    createPane.textareaHeight > 300 && createPane.hasNameField,
+    JSON.stringify(createPane));
+
+  const draft = '# כותרת הטיוטה\n\nפסקה.\n\n## תת פרק\n\n1. פריט ראשון';
+  await p.fill('textarea', draft);
+  await p.waitForTimeout(1500);
+
+  // כותרת רמה 1 חייבת להופיע בפריוויו של מסך היצירה: אין כאן כותרת
+  // עמוד שתציג אותה, ובלי הדגל היא נבלעה בשקט.
+  const previewTags = await p.evaluate(() => {
+    const head = [...document.querySelectorAll('div')].filter((d) => d.textContent.trim() === 'תצוגה')[0];
+    const box = head && head.parentElement;
+    return box ? [...box.querySelectorAll('h1,h2,p,li')].map((e) => e.tagName) : [];
+  });
+  check('הפריוויו מציג גם כותרת רמה 1', previewTags.indexOf('H1') >= 0, previewTags.join(','));
+
+  // Enter בסוף פריט ממשיך את הרשימה במספר הבא
+  await p.click('textarea');
+  await p.keyboard.press('End');
+  await p.keyboard.press('Enter');
+  await p.keyboard.type('פריט שני');
+  await p.waitForTimeout(400);
+  const continued = await p.inputValue('textarea');
+  check('Enter ממשיך רשימה ממוספרת',
+    continued.indexOf('2. פריט שני') >= 0,
+    JSON.stringify(continued.slice(-24)));
+
+  // Enter על פריט ריק יוצא מהרשימה במקום לייצר עוד "3."
+  await p.keyboard.press('Enter');
+  await p.waitForTimeout(200);
+  await p.keyboard.press('Enter');
+  await p.waitForTimeout(300);
+  const exited = await p.inputValue('textarea');
+  check('פריט ריק יוצא מהרשימה', !/3\./.test(exited), JSON.stringify(exited.slice(-20)));
+
+  // ניווט החוצה עם טיוטה פתוחה מבקש אישור, וביטול משאיר את הטקסט.
+  // הטיוטה חיה בזיכרון בלבד — יציאה שקטה היא אובדן נתונים.
+  let prompts = 0;
+  const dismiss = async (d) => { prompts++; await d.dismiss(); };
+  p.on('dialog', dismiss);
+  await p.getByRole('link', { name: /כל הפרויקטים/ }).click();
+  await p.waitForTimeout(1200);
+  const kept = await p.evaluate(() => {
+    const ta = document.querySelector('textarea');
+    return { stillHere: !!document.querySelector('input[placeholder^="שם המסמך"]'), val: ta ? ta.value : '' };
+  });
+  p.off('dialog', dismiss);
+  check('יציאה עם טיוטה פתוחה מבקשת אישור, וביטול משמר אותה',
+    prompts === 1 && kept.stillHere && kept.val.indexOf('כותרת הטיוטה') >= 0,
+    `${prompts} אישורים`);
+
+  await p.fill('input[placeholder^="שם המסמך"]', 'מסמך ממסך היצירה');
+  await p.getByRole('button', { name: 'הוספה לפרויקט' }).click();
+  await p.waitForTimeout(2500);
+  const createdText = await p.evaluate(() => document.body.innerText);
+  check('הטיוטה נוספה לפרויקט',
+    createdText.indexOf('מסמך ממסך היצירה') >= 0 && createdText.indexOf('תת פרק') >= 0);
+  await p.screenshot({ path: SHOTS + '/editor-create.png' });
+
+  // ── כפתור ההעתקה ──────────────────────────────────────────────────
+  // מה שנבדק הוא תוכן הלוח ולא הסימן שהתחלף: כפתור שמצייר ✓ בלי
+  // להעתיק דבר עובר כל בדיקה שמסתכלת רק על הסימן.
+  await p.locator('button[title="העתקת המסמך"]').click();
+  await p.waitForTimeout(500);
+  const clip = await p.evaluate(() => navigator.clipboard.readText());
+  check('כפתור ההעתקה מעתיק את מקור המסמך',
+    clip.indexOf('# כותרת הטיוטה') >= 0 && clip.indexOf('2. פריט שני') >= 0,
+    JSON.stringify(clip.slice(0, 24)));
+  const copiedGlyph = await p.evaluate(
+    () => (document.querySelector('button[title="הועתק"]') || {}).textContent
+  );
+  check('הכפתור מסמן שההעתקה בוצעה', copiedGlyph === '✓', JSON.stringify(copiedGlyph));
 
   // ── ניקוי ─────────────────────────────────────────────────────────
   const removed = await p.evaluate(async (slug) => {

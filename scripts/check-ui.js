@@ -57,16 +57,27 @@ const check = (label, ok, extra) => {
 
   // זו הבדיקה שמוכיחה ש-Origin נשלח בבקשות שמשנות מצב. אילו לא היה
   // נשלח, OriginGuard היה מחזיר 403 וכלום לא היה נוצר.
+  const DESC = 'תיאור מהטופס ' + process.pid;
   await p.fill('input[placeholder="שם הפרויקט החדש"]', NAME);
+  await p.fill('input[placeholder="תיאור קצר (לא חובה)"]', DESC);
   await p.getByRole('button', { name: 'יצירת פרויקט' }).click();
   await p.waitForTimeout(2500);
   const inProject = await p.evaluate(() => document.body.innerText);
   check('הפרויקט נוצר ונפתח', inProject.includes(NAME), NAME);
+
+  // התיאור נבדק מול השרת ולא מול המסך: כרטיס שמציג את מה שהוקלד
+  // ייראה תקין גם אם השדה מעולם לא נשלח ב-POST.
+  const storedDesc = await p.evaluate(async (name) => {
+    const list = await (await fetch('/api/projects', { credentials: 'same-origin' })).json();
+    const mine = list.find((x) => x.name === name);
+    return mine ? mine.description : null;
+  }, NAME);
+  check('התיאור נשמר בשרת', storedDesc === DESC, JSON.stringify(storedDesc));
   await p.screenshot({ path: SHOTS + '/ui-project.png' });
 
-  // מסמך דרך הדבקה
-  await p.getByRole('button', { name: /paste markdown|הדבקת Markdown ידנית/i }).click();
-  await p.waitForTimeout(500);
+  // מסמך דרך מסך הכתיבה — המסך המפוצל שנפתח מכפתור הסרגל
+  await p.getByRole('button', { name: /new document|כתיבת מסמך חדש/i }).click();
+  await p.waitForTimeout(800);
   await p.fill('textarea', '# מדריך התקנה\n\nפסקת פתיחה.\n\n## שלב ראשון\n\n- פריט\n- פריט נוסף\n');
   await p.getByRole('button', { name: 'הוספה לפרויקט' }).click();
   await p.waitForTimeout(2500);

@@ -89,10 +89,6 @@ body, aside, header, section, main { transition: background-color 0.2s ease, bor
     <button onClick="{{ toggleBackupPanel }}" title="מצב הגיבוי" style="{{ chrome.srcBtn }}">גיבוי</button>
     </sc-if>
 
-    <sc-if value="{{ canOpenEditor }}" hint-placeholder-val="{{ false }}">
-    <button onClick="{{ toggleEditing }}" style="{{ chrome.srcBtn }}">{{ editLabel }}</button>
-    </sc-if>
-
     <sc-if value="{{ onDoc }}" hint-placeholder-val="{{ false }}">
     <button onClick="{{ toggleSource }}" style="{{ chrome.srcBtn }}">{{ srcLabel }}</button>
     </sc-if>
@@ -160,7 +156,7 @@ body, aside, header, section, main { transition: background-color 0.2s ease, bor
       <input dir="ltr" type="email" placeholder="כתובת מייל" value="{{ loginEmail }}" onChange="{{ onLoginEmail }}" style="{{ chrome.field }}" />
       <input dir="ltr" type="password" placeholder="סיסמה" value="{{ loginPassword }}" onChange="{{ onLoginPassword }}" onKeyDown="{{ onLoginKey }}" style="{{ chrome.field }}" />
       <button onClick="{{ submitLogin }}" style="{{ chrome.ctaBtn }}">{{ loginLabel }}</button>
-      <button onClick="{{ closeLogin }}" style="{{ chrome.pasteBtn }}">ביטול</button>
+      <button onClick="{{ closeLogin }}" style="{{ chrome.quietBtn }}">ביטול</button>
     </div>
   </div>
 </div>
@@ -205,14 +201,7 @@ body, aside, header, section, main { transition: background-color 0.2s ease, bor
         <label for="md-file" style="{{ chrome.dropzone }}">
           גררו לכאן קבצי <span dir="ltr" style="font-family:var(--mono);font-size:12.5px">.md</span><br />או לחצו לבחירה
         </label>
-        <button onClick="{{ togglePaste }}" style="{{ chrome.pasteBtn }}">{{ pasteLabel }}</button>
-
-        <sc-if value="{{ pasting }}" hint-placeholder-val="{{ false }}">
-        <div style="margin:10px 0 0;display:flex;flex-direction:column;gap:9px">
-          <textarea dir="auto" placeholder="# כותרת המסמך…" value="{{ draft }}" onChange="{{ onDraft }}" style="width:100%;box-sizing:border-box;min-height:120px;padding:11px;background:var(--card);border:1px solid var(--line);border-radius:var(--r-sm);color:var(--head);font-family:var(--mono);font-size:12.5px;line-height:1.7;outline:none;resize:vertical" style-focus="border-color:var(--accent)"></textarea>
-          <button onClick="{{ addDraft }}" style="{{ chrome.addBtn }}">הוספה לפרויקט</button>
-        </div>
-        </sc-if>
+        <button onClick="{{ openCreate }}" style="{{ chrome.quietBtn }}">{{ newDocLabel }}</button>
       </div>
       </sc-if>
     </div>
@@ -319,20 +308,24 @@ body, aside, header, section, main { transition: background-color 0.2s ease, bor
 
       <sc-if value="{{ canEdit }}" hint-placeholder-val="{{ false }}">
       <div style="display:flex;flex-wrap:wrap;gap:10px;margin:0 0 26px;padding:16px 18px;border:1px dashed var(--rule);border-radius:var(--r-md)">
-        <input dir="auto" placeholder="שם הפרויקט החדש" value="{{ newProjectName }}" onChange="{{ onNewProjectName }}" onKeyDown="{{ onNewProjectKey }}" style="{{ chrome.field }};flex:1;min-width:220px" />
+        <input dir="auto" placeholder="שם הפרויקט החדש" value="{{ newProjectName }}" onChange="{{ onNewProjectName }}" onKeyDown="{{ onNewProjectKey }}" style="{{ chrome.field }};flex:1;min-width:200px" />
+        <input dir="auto" placeholder="תיאור קצר (לא חובה)" value="{{ newProjectDesc }}" onChange="{{ onNewProjectDesc }}" onKeyDown="{{ onNewProjectKey }}" style="{{ chrome.field }};flex:1;min-width:200px" />
         <button onClick="{{ createProject }}" style="{{ chrome.ctaBtn }}">יצירת פרויקט</button>
       </div>
       </sc-if>
 
-      <div style="display:flex;flex-direction:column;gap:12px">
+      <!-- הכרטיס בשתי שורות לכל היותר: השם, המטא והתג יושבים על אותו קו,
+           ושורת התיאור נעלמת לגמרי כשאין תיאור (מחרוזת ריקה, לא "בלי
+           תיאור"). כך רשימה של עשרה פרויקטים נכנסת למסך אחד. -->
+      <div style="display:flex;flex-direction:column;gap:8px">
         <sc-for list="{{ projects }}" as="p" hint-placeholder-count="3">
-          <a href="#top" onClick="{{ p.open }}" style="display:block;padding:18px 20px;border:1px solid var(--line);border-radius:var(--r-md);background:var(--panel);text-decoration:none" style-hover="border-color:var(--accent)">
-            <span style="display:flex;align-items:baseline;justify-content:space-between;gap:12px">
-              <span style="font-family:var(--display);font-size:20px;font-weight:700;color:var(--ink)">{{ p.name }}</span>
+          <a href="#top" onClick="{{ p.open }}" style="display:block;padding:11px 16px;border:1px solid var(--line);border-radius:var(--r-md);background:var(--panel);text-decoration:none" style-hover="border-color:var(--accent)">
+            <span style="display:flex;flex-wrap:wrap;align-items:baseline;gap:6px 12px">
+              <span style="font-family:var(--display);font-size:17px;font-weight:700;color:var(--ink)">{{ p.name }}</span>
+              <span style="flex:1;min-width:0;font-family:var(--mono);font-size:11px;color:var(--faint)">{{ p.meta }}</span>
               <span style="flex:none;font-family:var(--mono);font-size:10.5px;letter-spacing:0.1em;text-transform:uppercase;padding:2px 8px;border-radius:var(--r-pill);background:{{ p.badgeBg }};color:{{ p.badgeFg }}">{{ p.badge }}</span>
             </span>
-            <span style="display:block;margin-top:6px;font-size:14.5px;line-height:1.7;color:var(--soft)">{{ p.description }}</span>
-            <span style="display:block;margin-top:10px;font-family:var(--mono);font-size:11.5px;color:var(--faint)">{{ p.meta }}</span>
+            <span style="display:block;font-size:13.5px;line-height:1.6;color:var(--soft)">{{ p.description }}</span>
           </a>
         </sc-for>
       </div>
@@ -352,12 +345,28 @@ body, aside, header, section, main { transition: background-color 0.2s ease, bor
         <div style="margin:0 0 22px;padding:22px;border:2px dashed var(--accent);border-radius:var(--r-md);background:var(--accent-soft);text-align:center;font-size:15.5px;color:var(--accent-text)">שחררו כאן כדי להוסיף לפרויקט</div>
       </sc-if>
 
+      <!-- מסך היצירה יושב ברמת הפרויקט ולא בתוך בלוק המסמך: הוא נפתח
+           מכפתור בסרגל, ובפרויקט ריק אין מסמך פתוח שיארח אותו. -->
+      <sc-if value="{{ creating }}" hint-placeholder-val="{{ false }}">
+      <div>{{ createPane }}</div>
+      </sc-if>
+
       <sc-if value="{{ onDoc }}" hint-placeholder-val="{{ true }}">
       <div>
         <header style="margin:0 0 var(--doc-head-gap)">
           <div style="display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin:0 0 14px">
             <span dir="ltr" style="{{ chrome.fileBadge }}">{{ fileName }}</span>
             <span style="font-size:13px;color:var(--faint)">{{ meta }}</span>
+
+            <span style="flex:1"></span>
+
+            <sc-if value="{{ onDoc }}" hint-placeholder-val="{{ false }}">
+            <button onClick="{{ copyDocument }}" title="{{ copyDocTitle }}" aria-label="{{ copyDocTitle }}" style="{{ chrome.iconBtn }}">{{ copyDocGlyph }}</button>
+            </sc-if>
+
+            <sc-if value="{{ canOpenEditor }}" hint-placeholder-val="{{ false }}">
+            <button onClick="{{ toggleEditing }}" title="{{ editLabel }}" aria-label="{{ editLabel }}" style="{{ chrome.iconBtn }}">{{ editGlyph }}</button>
+            </sc-if>
           </div>
           <h1 style="margin:0 0 12px;font-family:var(--display);font-size:var(--h1-size);font-weight:800;line-height:1.14;color:var(--ink);text-wrap:balance">{{ title }}</h1>
           <p style="margin:0;font-size:var(--lead-size);line-height:1.75;color:var(--soft);max-width:62ch;text-wrap:pretty">{{ lead }}</p>
@@ -1005,6 +1014,9 @@ const DARK = {
 
   green: "#2ecc71", "green-soft": "rgba(46,204,113,0.12)", "green-ring": "rgba(46,204,113,0.28)", "green-on": "#06210f", "green-text": "#88e0ab",
   amber: "#f39c12", "amber-soft": "rgba(243,156,18,0.12)", "amber-ring": "rgba(243,156,18,0.28)", "amber-on": "#241300",
+  /* ההדגשה ==כך== היא סימון שנועד לקפוץ לעין. amber-soft הוא 10-12%
+     אלפא — מספיק לרקע של בלוק שלם, וכמעט בלתי נראה על מילה אחת. */
+  "mark-bg": "rgba(243,156,18,0.38)", "mark-fg": "#fff3d6",
   red: "#e74c3c", "red-soft": "rgba(231,76,60,0.12)", "red-ring": "rgba(231,76,60,0.28)", "red-on": "#2b0703", "red-text": "#ffb3aa", "red-text-2": "#f0918a",
   purple: "#9b59b6", "purple-soft": "rgba(155,89,182,0.12)", "purple-soft-2": "rgba(155,89,182,0.16)", "purple-ring": "rgba(155,89,182,0.28)", "purple-on": "#160521", "purple-text": "#c39bd8", "purple-text-2": "#dcb6ee",
 
@@ -1056,6 +1068,7 @@ const LIGHT = {
 
   green: "#3f7d4f", "green-soft": "rgba(63,125,79,0.09)", "green-ring": "rgba(63,125,79,0.3)", "green-on": "#f7f5f1", "green-text": "#3f7d4f",
   amber: "#9a6b16", "amber-soft": "rgba(154,107,22,0.1)", "amber-ring": "rgba(154,107,22,0.3)", "amber-on": "#f7f5f1",
+  "mark-bg": "#ffe9a8", "mark-fg": "#3d2c00",
   red: "#a33327", "red-soft": "rgba(163,51,39,0.09)", "red-ring": "rgba(163,51,39,0.3)", "red-on": "#f7f5f1", "red-text": "#a33327", "red-text-2": "#8f2a20",
   purple: "#6b4a8f", "purple-soft": "rgba(107,74,143,0.09)", "purple-soft-2": "rgba(107,74,143,0.13)", "purple-ring": "rgba(107,74,143,0.3)", "purple-on": "#f7f5f1", "purple-text": "#6b4a8f", "purple-text-2": "#57397a",
 
@@ -1117,6 +1130,7 @@ const DIM = {
 
   green: "#7fa86a", "green-soft": "rgba(127,168,106,0.12)", "green-ring": "rgba(127,168,106,0.3)", "green-on": "#16210f", "green-text": "#a3c78e",
   amber: "#d9a05b", "amber-soft": "rgba(217,160,91,0.12)", "amber-ring": "rgba(217,160,91,0.3)", "amber-on": "#241a08",
+  "mark-bg": "rgba(217,160,91,0.42)", "mark-fg": "#fff1dc",
   red: "#cf6a5a", "red-soft": "rgba(207,106,90,0.12)", "red-ring": "rgba(207,106,90,0.3)", "red-on": "#2a0d08", "red-text": "#e79a8c", "red-text-2": "#dd8878",
   purple: "#a98cc0", "purple-soft": "rgba(169,140,192,0.12)", "purple-soft-2": "rgba(169,140,192,0.16)", "purple-ring": "rgba(169,140,192,0.3)", "purple-on": "#1c1327", "purple-text": "#c4aed6", "purple-text-2": "#d6c6e4",
 
@@ -1292,14 +1306,14 @@ const CHROME = {
     mark: true,
     wordmark: false,
     srcLabel: "</> מקור",
-    pasteLabel: "הדבקת Markdown ידנית",
+    newDocLabel: "כתיבת מסמך חדש",
     srcBtn: "padding:6px 12px;border:1px solid var(--rule);border-radius:var(--r-sm);background:none;font-family:var(--mono);font-size:12px;color:var(--text);cursor:pointer",
     uploadBtn: "display:flex;align-items:center;gap:7px;padding:6px 14px;border:1px solid var(--accent);border-radius:var(--r-sm);background:var(--accent);color:var(--accent-on);font-size:13px;font-weight:600;cursor:pointer",
     search: "width:100%;box-sizing:border-box;margin:0 0 18px;padding:9px 12px;background:var(--tint);border:1px solid var(--line);border-radius:var(--r-sm);color:var(--head);font-size:14px;outline:none",
     searchK: "width:100%;box-sizing:border-box;padding:9px 12px;padding-inline-end:52px;background:var(--tint);border:1px solid var(--line);border-radius:var(--r-sm);color:var(--head);font-size:14px;outline:none",
     railLabel: "padding:0 4px 8px;font-family:var(--mono);font-size:11px;font-weight:500;letter-spacing:0.1em;text-transform:uppercase;color:var(--faint)",
     dropzone: "display:block;margin:16px 0 10px;padding:16px 14px;border:1px dashed var(--rule);border-radius:var(--r-md);text-align:center;font-size:13.5px;color:var(--muted);cursor:pointer",
-    pasteBtn: "width:100%;padding:8px;border:none;border-radius:var(--r-sm);background:none;color:var(--faint);font-family:inherit;font-size:13px;cursor:pointer",
+    quietBtn: "width:100%;padding:8px;border:none;border-radius:var(--r-sm);background:none;color:var(--faint);font-family:inherit;font-size:13px;cursor:pointer",
     addBtn: "padding:8px;border:1px solid var(--accent);border-radius:var(--r-sm);background:var(--accent);color:var(--accent-on);font-family:inherit;font-size:13.5px;font-weight:600;cursor:pointer",
     fileBadge: "font-family:var(--mono);font-size:11px;font-weight:500;letter-spacing:0.1em;padding:4px 10px;border-radius:var(--r-pill);background:var(--accent-soft);color:var(--accent-text)",
     ctaBtn: "padding:11px 22px;border-radius:var(--r-sm);background:var(--accent);color:var(--accent-on);font-size:14.5px;font-weight:600;cursor:pointer",
@@ -1311,20 +1325,21 @@ const CHROME = {
     navLinkMono: "padding:7px 12px;border-radius:var(--r-sm);font-family:var(--mono);font-size:13px;color:var(--soft)",
     navSub: "padding:4px 12px;font-size:13px;color:var(--faint-2)",
     field: "box-sizing:border-box;padding:9px 12px;background:var(--tint);border:1px solid var(--line);border-radius:var(--r-sm);color:var(--head);font-family:inherit;font-size:14px;outline:none",
-    ghostBtnSm: "padding:6px 12px;border:1px solid var(--rule);border-radius:var(--r-sm);background:none;color:var(--text);font-family:inherit;font-size:12.5px;cursor:pointer"
+    ghostBtnSm: "padding:6px 12px;border:1px solid var(--rule);border-radius:var(--r-sm);background:none;color:var(--text);font-family:inherit;font-size:12.5px;cursor:pointer",
+    iconBtn: "display:grid;place-items:center;width:30px;height:28px;border:1px solid var(--rule);border-radius:var(--r-sm);background:none;color:var(--muted);font-size:14px;line-height:1;cursor:pointer"
   },
   light: {
     mark: false,
     wordmark: true,
     srcLabel: "source",
-    pasteLabel: "paste markdown",
+    newDocLabel: "new document",
     srcBtn: "padding:0;border:none;background:none;font-family:var(--mono);font-size:11.5px;letter-spacing:0.06em;text-transform:uppercase;color:var(--soft);cursor:pointer;border-bottom:1px solid var(--rule)",
     uploadBtn: "display:flex;align-items:center;gap:7px;padding:7px 16px;border:1px solid var(--accent);border-radius:var(--r-sm);background:var(--accent);color:var(--accent-on);font-size:13.5px;font-weight:600;cursor:pointer",
     search: "width:100%;box-sizing:border-box;margin:0 0 24px;padding:7px 2px;background:none;border:none;border-bottom:1px solid var(--rule);color:var(--ink);font-size:14.5px;outline:none",
     searchK: "width:100%;box-sizing:border-box;padding:7px 2px;padding-inline-end:52px;background:none;border:none;border-bottom:1px solid var(--rule);color:var(--ink);font-size:14.5px;outline:none",
     railLabel: "padding:0 0 10px;font-family:var(--mono);font-size:10.5px;font-weight:500;letter-spacing:0.14em;text-transform:uppercase;color:var(--faint)",
     dropzone: "display:block;margin:0 0 10px;padding:18px 14px;border:1px dashed var(--rule);border-radius:var(--r-sm);text-align:center;font-size:13.5px;color:var(--soft);cursor:pointer",
-    pasteBtn: "width:100%;padding:4px 0;border:none;background:none;font-family:var(--mono);font-size:11px;letter-spacing:0.08em;text-transform:uppercase;color:var(--faint);cursor:pointer",
+    quietBtn: "width:100%;padding:4px 0;border:none;background:none;font-family:var(--mono);font-size:11px;letter-spacing:0.08em;text-transform:uppercase;color:var(--faint);cursor:pointer",
     addBtn: "padding:9px;border:1px solid var(--accent);border-radius:var(--r-sm);background:var(--accent);color:var(--accent-on);font-family:inherit;font-size:13.5px;font-weight:600;cursor:pointer",
     fileBadge: "font-family:var(--mono);font-size:10.5px;font-weight:600;letter-spacing:0.12em;text-transform:uppercase;padding:3px 0;border-bottom:1px solid var(--rule);color:var(--soft)",
     ctaBtn: "padding:11px 24px;border:1px solid var(--accent);border-radius:var(--r-sm);background:var(--accent);color:var(--accent-on);font-size:14.5px;font-weight:600;cursor:pointer",
@@ -1336,7 +1351,8 @@ const CHROME = {
     navLinkMono: "padding:6px 0;font-family:var(--mono);font-size:12.5px;color:var(--text)",
     navSub: "padding:4px 12px;font-size:13px;color:var(--soft)",
     field: "box-sizing:border-box;padding:8px 2px;background:none;border:none;border-bottom:1px solid var(--rule);color:var(--ink);font-family:inherit;font-size:14.5px;outline:none",
-    ghostBtnSm: "padding:0;border:none;background:none;font-family:var(--mono);font-size:11.5px;letter-spacing:0.06em;text-transform:uppercase;color:var(--soft);cursor:pointer;border-bottom:1px solid var(--rule)"
+    ghostBtnSm: "padding:0;border:none;background:none;font-family:var(--mono);font-size:11.5px;letter-spacing:0.06em;text-transform:uppercase;color:var(--soft);cursor:pointer;border-bottom:1px solid var(--rule)",
+    iconBtn: "display:grid;place-items:center;width:30px;height:28px;border:1px solid var(--rule);border-radius:2px;background:none;color:var(--soft);font-size:14px;line-height:1;cursor:pointer"
   }
 };
 
@@ -1408,15 +1424,16 @@ class Component extends DCLogic {
     doc: null,          // המסמך הפתוח, עם התוכן המלא
 
     loginOpen: false, loginEmail: "", loginPassword: "", loggingIn: false,
-    newProjectName: "", newLinkTitle: "", newLinkUrl: "",
-    migrating: false, migrateNote: "",
+    newProjectName: "", newProjectDesc: "", newLinkTitle: "", newLinkUrl: "",
+    migrating: false, migrateNote: "", copiedDoc: false,
+    creating: false, draftTitle: "",
     backupOpen: false, backupBusy: false, backupState: null,
-    q: "", pasting: false, draft: "", dragging: false,
+    q: "", dragging: false,
 
-    /* editing — האם המסך המפוצל פתוח. editBuf הוא מקור האמת של תיבת
-       הטקסט, ו-editView הוא מה שמרונדר בפועל: הוא מפגר אחרי editBuf
-       ברוחב ה-debounce, וזה בדיוק מה שמונע רינדור בכל תו.
-       (draft למעלה הוא תיבת ההדבקה — שדה אחר לגמרי.) */
+    /* editing — האם המסך המפוצל פתוח, creating — אותו מסך במצב יצירה.
+       editBuf הוא מקור האמת של תיבת הטקסט בשני המצבים, ו-editView הוא
+       מה שמרונדר בפועל: הוא מפגר אחרי editBuf ברוחב ה-debounce, וזה
+       בדיוק מה שמונע רינדור בכל תו. */
     editing: false, editBuf: "", editView: "", saveState: "",
 
     showSource: null, copied: false, codeCopied: "", openMap: {},
@@ -1580,7 +1597,14 @@ class Component extends DCLogic {
     const project = this.state.project;
     if (!project) return;
     const fresh = await this.guard(() => this.api("/projects/" + encodeURIComponent(project.slug)));
-    if (fresh) this.setState({ project: fresh });
+    if (!fresh) return;
+    /* גם הרשימה מתעדכנת, ולא רק הפרויקט הפתוח: שני העותקים מגיעים
+       מאותו payload, ובלי זה מונה המסמכים בכרטיס נשאר על הערך שהיה
+       בטעינת הרשימה עד לרענון הדף. */
+    this.setState({
+      project: fresh,
+      projects: this.state.projects.map((p) => (p.slug === fresh.slug ? fresh : p))
+    });
   }
 
   /* ---------- מצב הגיבוי ---------- */
@@ -1782,6 +1806,55 @@ class Component extends DCLogic {
 
   /* ---------- העורך ---------- */
 
+  /* פתיחת מסך יצירה. אותו מסך מפוצל של העריכה, עם שדה שם וכפתור
+     הוספה במקום מחוון השמירה — במקום עורך שני שיתפצל ממנו בשקט.
+     ה-buffer משותף (editBuf), ולכן גם הפריוויו וגם סרגל התבניות
+     והמשך הרשימות עובדים כאן בלי שורה נוספת.
+
+     ה-buffer המשותף הוא גם הסיבה להברחת השמירה: פתיחת מסך היצירה
+     באמצע חלון ה-debounce הייתה מוחקת את מה שהוקלד בעורך. */
+  async startCreating() {
+    if (this.state.editing) await this.flushSave();
+    this.setState({
+      creating: true, editing: false,
+      editBuf: "", editView: "", draftTitle: "", saveState: ""
+    });
+  }
+
+  cancelCreating() {
+    this.setState({ creating: false, editBuf: "", editView: "", draftTitle: "" });
+  }
+
+  /* ניווט החוצה ממסך היצירה. הטיוטה חיה רק בזיכרון, ולכן מעבר למסמך
+     אחר או לרשימת הפרויקטים מוחק אותה — מאשרים לפני, ורק כשיש בה
+     תוכן. מחזיר false כשהמשתמש ביטל, וכל קורא חייב לעצור אז. */
+  confirmLeaveCreating() {
+    if (!this.state.creating) return true;
+    const dirty = this.state.editBuf.trim() || this.state.draftTitle.trim();
+    if (dirty && !window.confirm("הטיוטה שנכתבה כאן תימחק. להמשיך?")) return false;
+    this.setState({ creating: false, editBuf: "", editView: "", draftTitle: "" });
+    return true;
+  }
+
+  async submitDraft() {
+    const content = this.state.editBuf.trim();
+    if (!content) return;
+    const title = this.state.draftTitle.trim();
+    await this.createDocuments([{ title: title || this.titleFromMarkdown(content), content: content }]);
+    this.setState({ creating: false, editBuf: "", editView: "", draftTitle: "" });
+  }
+
+  /* עברית מבחינה בין יחיד לרבים: "1 מסמכים" קריא כשגיאה. */
+  docCountLabel(n) {
+    return n === 1 ? "מסמך אחד" : n + " מסמכים";
+  }
+
+  /* הכותרת מהשורה הראשונה שמתחילה ב-#, ובהיעדרה טקסט ניטרלי. */
+  titleFromMarkdown(text) {
+    const m = String(text || "").match(/^#\s+(.*)$/m);
+    return (m ? m[1] : "").trim() || "מסמך חדש";
+  }
+
   /* פתיחה וסגירה של המסך המפוצל. הסגירה מבריחה שמירה ממתינה — אחרת
      לחיצה על "סיום" מיד אחרי הקלדה מאבדת את התו האחרון. */
   async toggleEditing() {
@@ -1821,7 +1894,7 @@ class Component extends DCLogic {
 
   /* המסך המפוצל, בנוי כרכיבי React ולא בתבנית — הוא צריך ref לתיבת
      הטקסט כדי לקרוא ולהזיז את הבחירה, וזה מה שסרגל הכפתורים עומד עליו. */
-  editorPane(parsed, leadIdx) {
+  editorPane(parsed) {
     const s = this.state;
     const label = { dirty: "לא נשמר", saving: "שומר…", saved: "נשמר", failed: "השמירה נכשלה" }[s.saveState] || "";
     const labelColor = s.saveState === "failed" ? "var(--red)" : s.saveState === "saved" ? "var(--green)" : "var(--muted)";
@@ -1890,12 +1963,18 @@ class Component extends DCLogic {
       spellCheck: false,
       value: s.editBuf,
       onChange: (e) => this.onEdit(e.target.value),
+      onKeyDown: (e) => this.onEditorKey(e),
       onScroll: () => this.syncScroll(),
       style: {
         flex: 1, width: "100%", boxSizing: "border-box", minHeight: 0,
         padding: "18px 20px", border: "none", outline: "none", resize: "none",
         background: "var(--card)", color: "var(--head)",
-        fontFamily: "var(--mono)", fontSize: 13, lineHeight: 1.8
+        fontFamily: "var(--mono)", fontSize: 13, lineHeight: 1.8,
+        /* כיוון לכל שורה בנפרד, לפי התו החזק הראשון שבה.
+           dir="auto" לבדו קובע כיוון אחד לכל השדה, ואז בקובץ מעורב
+           סימני פיסוק ניטרליים בסוף שורה — נקודות, סוגריים, מרכאות —
+           נזרקים לקצה ההפוך ונראים כאילו נפתח לפניהם רווח. */
+        unicodeBidi: "plaintext"
       }
     });
 
@@ -1905,7 +1984,14 @@ class Component extends DCLogic {
       key: "pv",
       ref: (el) => { this.previewRef = el; },
       style: { flex: 1, minHeight: 0, overflowY: "auto", padding: "18px 22px", background: "var(--panel)" }
-    }, this.render_blocks(parsed, this.props.numberedHeadings ?? true, leadIdx));
+       /* skipIdx = -1 ולא leadIdx: בתצוגה הפסקה הראשונה עולה לכותרת
+          העמוד ולכן מדולגת בגוף, אבל בעורך זה נראה כאילו השורה שהרגע
+          הוקלדה נעלמה מהפריוויו וקפצה למקום אחר. כאן מציגים את המסמך
+          כפי שהוא.
+
+          keepH1 רק במצב יצירה: בעריכה כותרת רמה 1 מוצגת בכותרת העמוד
+          שמעל המסך המפוצל, ובמסך היצירה אין כותרת כזאת. */
+    }, this.render_blocks(parsed, this.props.numberedHeadings ?? true, -1, false, s.creating));
 
     const pane = (children, title) => React.createElement("div", {
       style: {
@@ -1920,15 +2006,48 @@ class Component extends DCLogic {
       children
     ]);
 
+    /* השורה העליונה שונה בין המצבים: בעריכה היא מחוון שמירה, וביצירה
+       היא שם המסמך ושני הכפתורים. כל השאר — הסרגל, התיבה, הפריוויו —
+       זהה, וזו כל הסיבה ששני המסכים הם רכיב אחד. */
+    const creating = s.creating;
+    const topRow = creating
+      ? React.createElement("div", {
+          key: "bar",
+          style: { display: "flex", flexWrap: "wrap", alignItems: "center", gap: 10 }
+        }, [
+          React.createElement("input", {
+            key: "name",
+            dir: "auto",
+            placeholder: "שם המסמך (ברירת מחדל: הכותרת הראשונה)",
+            value: s.draftTitle,
+            onChange: (e) => this.setState({ draftTitle: e.target.value }),
+            style: { flex: "1 1 260px", minWidth: 0, boxSizing: "border-box", padding: "8px 12px",
+              background: "var(--tint)", border: "1px solid var(--line)", borderRadius: "var(--r-sm)",
+              color: "var(--head)", fontFamily: "inherit", fontSize: 14, outline: "none" }
+          }),
+          React.createElement("button", {
+            key: "add", type: "button", onClick: () => this.submitDraft(),
+            style: { padding: "8px 18px", border: "1px solid var(--accent)", borderRadius: "var(--r-sm)",
+              background: "var(--accent)", color: "var(--accent-on)", fontFamily: "inherit",
+              fontSize: 13.5, fontWeight: 600, cursor: "pointer" }
+          }, "הוספה לפרויקט"),
+          React.createElement("button", {
+            key: "cancel", type: "button", onClick: () => this.cancelCreating(),
+            style: { padding: "8px 14px", border: "1px solid var(--rule)", borderRadius: "var(--r-sm)",
+              background: "none", color: "var(--muted)", fontFamily: "inherit", fontSize: 13.5, cursor: "pointer" }
+          }, "ביטול")
+        ])
+      : React.createElement("div", {
+          key: "bar",
+          style: { display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }
+        }, [
+          React.createElement("span", { key: "st", style: { fontSize: 12.5, color: labelColor } }, label),
+          React.createElement("span", { key: "sp", style: { fontSize: 12.5, color: "var(--faint)" } },
+            s.editBuf.split("\n").length + " שורות")
+        ]);
+
     return React.createElement("div", { style: { display: "flex", flexDirection: "column", gap: 12 } }, [
-      React.createElement("div", {
-        key: "bar",
-        style: { display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }
-      }, [
-        React.createElement("span", { key: "st", style: { fontSize: 12.5, color: labelColor } }, label),
-        React.createElement("span", { key: "sp", style: { fontSize: 12.5, color: "var(--faint)" } },
-          s.editBuf.split("\n").length + " שורות")
-      ]),
+      topRow,
       React.createElement("div", {
         key: "split",
         style: {
@@ -1936,15 +2055,78 @@ class Component extends DCLogic {
           flexDirection: s.narrow ? "column" : "row"
         }
       }, [
-        /* התצוגה משמאל והמקור מימין: במסך RTL הצד הימני הוא זה שהעין
-           מתחילה ממנו, ושם צריכה להיות התיבה שמקלידים בה. */
-        React.createElement("div", { key: "l", style: { display: "flex", flex: "1 1 0", minWidth: 0 } }, pane(preview, "תצוגה")),
+        /* ההקלדה מימין והתצוגה משמאל. במסך RTL הצד הימני הוא זה שהעין
+           מתחילה ממנו, ושם צריכה להיות התיבה שכותבים בה — הסדר ההפוך
+           הכריח את המבט לקפוץ לצד השני בכל הקלדה.
+           הסדר בקוד הוא סדר ה-DOM; ב-flex תחת dir=rtl הפריט הראשון
+           יושב מימין. */
         React.createElement("div", { key: "r", style: { display: "flex", flex: "1 1 0", minWidth: 0 } },
           React.createElement("div", {
             style: { display: "flex", flexDirection: "column", flex: 1, minWidth: 0, border: "1px solid var(--line)", borderRadius: "var(--r-md)", overflow: "hidden" }
-          }, [toolbar, editor]))
+          }, [toolbar, editor])),
+        React.createElement("div", { key: "l", style: { display: "flex", flex: "1 1 0", minWidth: 0 } }, pane(preview, "תצוגה"))
       ])
     ]);
+  }
+
+  /* המשך אוטומטי של רשימה בלחיצת Enter.
+
+     חמש צורות: "1." · "-" · "1)" · "א)" · "א'". התבנית לוכדת גם את
+     ההזחה, כדי שרשימה מקוננת תמשיך באותו עומק. */
+  listContinuation(line) {
+    const m = line.match(/^(\s*)(?:([-*+])|(\d+)([.)])|([\u05d0-\u05ea])([)'׳]))(\s+)(.*)$/);
+    if (!m) return null;
+
+    const [, indent, bullet, num, numSep, heb, hebSep, gap, rest] = m;
+    let next;
+    if (bullet) {
+      next = bullet;
+    } else if (num) {
+      next = String(parseInt(num, 10) + 1) + numSep;
+    } else {
+      /* אותיות עבריות: המשך לפי מיקום באלף-בית. ת היא הסוף — אחריה
+         נעצרים במקום לגלוש לתווים שאינם אותיות. */
+      const code = heb.charCodeAt(0);
+      if (code >= 0x05ea) return null;
+      next = String.fromCharCode(code + 1) + hebSep;
+    }
+    return { indent: indent, marker: next, gap: gap, empty: rest.trim() === "" };
+  }
+
+  /* Enter בתוך רשימה. שני מקרים שקל לפספס:
+
+     פריט ריק מסיים את הרשימה במקום להוסיף עוד אחד — אחרת אי אפשר
+     לצאת ממנה בלי למחוק ידנית. ו-Enter באמצע שורה מפצל אותה, ולכן
+     הסימון נכנס לפני מה שנשאר ולא בסוף השורה כולה. */
+  onEditorKey(e) {
+    if (e.key !== "Enter" || e.shiftKey || e.ctrlKey || e.metaKey || e.altKey) return;
+    const el = this.editRef;
+    if (!el || el.selectionStart !== el.selectionEnd) return;
+
+    const value = this.state.editBuf;
+    const at = el.selectionStart;
+    const lineStart = value.lastIndexOf("\n", at - 1) + 1;
+    const current = value.slice(lineStart, at);
+
+    const cont = this.listContinuation(current);
+    if (!cont) return;
+
+    e.preventDefault();
+
+    if (cont.empty) {
+      // יציאה מהרשימה: מוחקים את הסימון הריק ומשאירים שורה ריקה
+      const next = value.slice(0, lineStart) + "\n" + value.slice(at);
+      this.onEdit(next);
+      const to = lineStart + 1;
+      requestAnimationFrame(() => { el.focus(); el.setSelectionRange(to, to); });
+      return;
+    }
+
+    const insert = "\n" + cont.indent + cont.marker + cont.gap;
+    const next = value.slice(0, at) + insert + value.slice(at);
+    this.onEdit(next);
+    const to = at + insert.length;
+    requestAnimationFrame(() => { el.focus(); el.setSelectionRange(to, to); });
   }
 
   /* הזרקת תבנית מהסרגל.
@@ -2103,7 +2285,7 @@ class Component extends DCLogic {
       toggleTheme: () => this.toggleTheme(),
       chrome: chrome,
       srcLabel: chrome.srcLabel,
-      pasteLabel: chrome.pasteLabel,
+      newDocLabel: chrome.newDocLabel,
 
       /* --- מצב כללי --- */
       shellVisible: !s.loginOpen,
@@ -2135,27 +2317,36 @@ class Component extends DCLogic {
       onProjects: onProjects,
       onProject: onProject,
       onReference: onReference,
-      onDoc: onProject && !!doc,
-      noDoc: onProject && !doc,
+      /* מסך היצירה תופס את שטח התוכן: כשהוא פתוח, לא המסמך ולא מסך
+         "אין מסמכים" מוצגים מתחתיו. */
+      onDoc: onDocNow && !s.creating,
+      noDoc: onProject && !doc && !s.creating,
       screenTab: {
         projects: onReference ? tabOff : tabOn,
         reference: onReference ? tabOn : tabOff
       },
       goProjects: (e) => {
         if (e) e.preventDefault();
+        if (!this.confirmLeaveCreating()) return;
         this.setState({ screen: "projects", project: null, doc: null, docSlug: null, active: 0 });
         window.scrollTo({ top: 0 });
       },
-      goReference: () => { this.setState({ screen: "reference", active: 0 }); window.scrollTo({ top: 0 }); },
+      goReference: () => {
+        if (!this.confirmLeaveCreating()) return;
+        this.setState({ screen: "reference", active: 0 });
+        window.scrollTo({ top: 0 });
+      },
 
       /* --- מסך הפרויקטים --- */
       projects: s.projects.map((p) => ({
         name: p.name,
-        description: p.description || "בלי תיאור.",
+        /* מחרוזת ריקה ולא "בלי תיאור" — span ריק מתכווץ לגובה אפס,
+           וכרטיס בלי תיאור נשאר בשורה אחת. */
+        description: p.description || "",
         badge: p.visibility === "public" ? "פומבי" : "פרטי",
         badgeBg: p.visibility === "public" ? "var(--green-soft)" : "var(--tint)",
         badgeFg: p.visibility === "public" ? "var(--green)" : "var(--faint)",
-        meta: p.documents.length + " מסמכים · " + p.slug,
+        meta: this.docCountLabel(p.documents.length) + " · " + p.slug,
         open: (e) => { if (e) e.preventDefault(); this.openProject(p.slug); }
       })),
       noProjects: s.ready && !s.projects.length,
@@ -2167,16 +2358,18 @@ class Component extends DCLogic {
         : "אין פרויקטים פומביים להצגה.",
       newProjectName: s.newProjectName,
       onNewProjectName: (e) => this.setState({ newProjectName: e.target.value }),
+      newProjectDesc: s.newProjectDesc,
+      onNewProjectDesc: (e) => this.setState({ newProjectDesc: e.target.value }),
       onNewProjectKey: (e) => { if (e.key === "Enter") this.createProject(); },
       createProject: () => this.createProject(),
 
       /* --- מסך הפרויקט --- */
       projectName: project ? project.name : "",
       visibilityLabel: project && project.visibility === "public" ? "פומבי" : "פרטי",
-      docCount: allDocs.length + " מסמכים",
+      docCount: this.docCountLabel(allDocs.length),
       noDocs: onProject && !docList.length,
       emptyDocsText: canEdit
-        ? "אין עדיין מסמכים. גררו לכאן קובץ Markdown, או הדביקו אחד מהסרגל."
+        ? "אין עדיין מסמכים. גררו לכאן קובץ Markdown, או פתחו מסך כתיבה מהסרגל."
         : "אין מסמכים בפרויקט הזה.",
       q: s.q,
       onSearch: (e) => this.setState({ q: e.target.value }),
@@ -2194,7 +2387,7 @@ class Component extends DCLogic {
           linkStyle: ed
             ? "flex:1;min-width:0;font-size:14.5px;font-weight:" + (on ? "700" : "400") + ";color:" + (on ? "var(--accent-text)" : "var(--text)") + ";white-space:nowrap;overflow:hidden;text-overflow:ellipsis"
             : "flex:1;min-width:0;padding:8px 11px;font-size:14px;color:" + (on ? "var(--accent-hover)" : "var(--soft)") + ";white-space:nowrap;overflow:hidden;text-overflow:ellipsis",
-          open: (e) => { if (e) e.preventDefault(); this.openDoc(d.slug); },
+          open: (e) => { if (e) e.preventDefault(); if (this.confirmLeaveCreating()) this.openDoc(d.slug); },
           remove: async () => {
             await this.guard(() =>
               this.api("/projects/" + encodeURIComponent(project.slug) + "/docs/" + encodeURIComponent(d.slug), { method: "DELETE" })
@@ -2261,11 +2454,22 @@ class Component extends DCLogic {
       canOpenEditor: onDocNow && canEdit,
       editing: onDocNow && s.editing,
       viewingDoc: onDocNow && !s.editing,
-      editLabel: s.editing ? "סיום עריכה" : "עריכה",
+      /* אייקונים בלי טקסט: עיפרון לעריכה, דיסקט לשמירה. הכותרת נושאת
+         את המשמעות לקורא מסך ולריחוף. */
+      editLabel: s.editing ? "שמירה" : "עריכה",
+      editGlyph: s.editing ? "🖫" : "✎",
+      copyDocGlyph: s.copiedDoc ? "✓" : "⧉",
+      copyDocTitle: s.copiedDoc ? "הועתק" : "העתקת המסמך",
+      copyDocument: () => this.copyDocument(),
       toggleEditing: () => this.toggleEditing(),
-      /* אותו parsed ואותו leadIdx שהתצוגה הרגילה משתמשת בהם — הפריוויו
-         חייב להיות זהה לתוצאה, אחרת הוא משקר. */
-      editorPane: editingDoc ? this.editorPane(parsed, leadIdx) : null,
+      /* אותו parsed שהתצוגה הרגילה מקבלת — הפריוויו חייב לצאת מאותו
+         עץ בלוקים, אחרת הוא משקר. */
+      editorPane: editingDoc ? this.editorPane(parsed) : null,
+
+      /* מסך היצירה חי באזור התוכן הראשי ולא בסיידבר הצר, ולכן הוא
+         מקבל את אותו רוחב ואת אותו גובה של מסך העריכה. */
+      creating: onProject && canEdit && s.creating,
+      createPane: onProject && canEdit && s.creating ? this.editorPane(this.parse(s.editView)) : null,
 
       toc: toc,
       tocEmpty: !toc.length,
@@ -2290,17 +2494,7 @@ class Component extends DCLogic {
         setTimeout(() => URL.revokeObjectURL(url), 2000);
       },
 
-      pasting: s.pasting,
-      togglePaste: () => this.setState({ pasting: !s.pasting }),
-      draft: s.draft,
-      onDraft: (e) => this.setState({ draft: e.target.value }),
-      addDraft: async () => {
-        const src = s.draft.trim();
-        if (!src) return;
-        const heading = src.match(/^#\s+(.*)$/m);
-        await this.createDocuments([{ title: (heading ? heading[1] : "מסמך חדש").trim(), content: src }]);
-        this.setState({ draft: "", pasting: false });
-      },
+      openCreate: () => { this.startCreating(); },
       /* Array.from ולא הפניה ל-e.target.files: איפוס value מרוקן את אותו
          FileList עצמו, ומי שמחזיק אותו נשאר עם רשימה ריקה. העותק חייב
          להילקח לפני האיפוס. */
@@ -2362,11 +2556,16 @@ class Component extends DCLogic {
   async createProject() {
     const name = this.state.newProjectName.trim();
     if (!name) return;
+    /* description נשלח רק כשהוקלד — שדה ריק אינו "תיאור ריק" אלא
+       היעדר תיאור, וה-API מבדיל בין השניים. */
+    const desc = this.state.newProjectDesc.trim();
+    const body = { name: name };
+    if (desc) body.description = desc;
     const project = await this.guard(() =>
-      this.api("/projects", { method: "POST", body: { name: name } })
+      this.api("/projects", { method: "POST", body: body })
     );
     if (!project) return;
-    this.setState({ newProjectName: "" });
+    this.setState({ newProjectName: "", newProjectDesc: "" });
     await this.reloadProjects();
     await this.openProject(project.slug);
   }
@@ -2434,6 +2633,17 @@ class Component extends DCLogic {
     set("marker path, marker polygon, .arrowMarkerPath, .marker path, .marker polygon", (el) => { el.style.fill = P.line; el.style.stroke = P.line; });
     set("text, tspan, .nodeLabel, .edgeLabel, .label, .titleText", (el) => { el.style.fill = P.text; el.style.color = P.text; });
     set(".edgeLabel rect, .labelBkg, .edgeLabel .label-container", (el) => { el.style.fill = P.edgeBg; el.style.background = P.edgeBg; el.style.backgroundColor = P.edgeBg; });
+  }
+
+  /* העתקת המסמך כולו. משתמשת באותו מסלול של העתקת בלוק קוד, כולל
+     הנפילה ל-textarea זמני כשה-clipboard API חסום. */
+  async copyDocument() {
+    const doc = this.state.doc;
+    if (!doc) return;
+    await this.copyText(doc.content || "", "doc")();
+    this.setState({ copiedDoc: true });
+    clearTimeout(this.docCopyTimer);
+    this.docCopyTimer = setTimeout(() => this.setState({ copiedDoc: false }), 1600);
   }
 
   copyText(text, key) {
@@ -2570,13 +2780,30 @@ class Component extends DCLogic {
       }
       if (/^[-*+]\s+/.test(line) || /^\d+[.)]\s+/.test(line)) {
         const ordered = /^\d+[.)]\s+/.test(line);
+        /* המספר שהכותב כתב, ולא 1 קבוע. רשימה שמתחילה ב-2 או ב-5 היא
+           המשך של משהו, והצגתה מ-1 משנה את המשמעות. */
+        const startAt = ordered ? parseInt(line.match(/^(\d+)/)[1], 10) : 1;
         const items = [];
-        while (i < lines.length && lines[i].trim() && (/^\s*[-*+]\s+/.test(lines[i]) || /^\s*\d+[.)]\s+/.test(lines[i]))) {
-          const indent = lines[i].match(/^\s*/)[0].length;
-          items.push({ depth: indent >= 2 ? 1 : 0, text: lines[i].trim().replace(/^([-*+]|\d+[.)])\s+/, "") });
-          i++;
+        const isItem = (l) => /^\s*[-*+]\s+/.test(l) || /^\s*\d+[.)]\s+/.test(l);
+
+        while (i < lines.length) {
+          if (isItem(lines[i])) {
+            const indent = lines[i].match(/^\s*/)[0].length;
+            items.push({ depth: indent >= 2 ? 1 : 0, text: lines[i].trim().replace(/^([-*+]|\d+[.)])\s+/, "") });
+            i++;
+            continue;
+          }
+          /* שורה ריקה בודדת אינה מסיימת רשימה — היא הופכת אותה ל"רופפת",
+             וזה כתיב תקני ונפוץ. הקוד הקודם עצר בה, וכל פריט הפך לרשימה
+             נפרדת שמתחילה מחדש מ-1: "1. 2. 3." הוצג כ-"1. 1. 1.".
+             שתי שורות ריקות כן מסיימות, כמו בכל פרסר Markdown. */
+          if (!lines[i].trim() && i + 1 < lines.length && isItem(lines[i + 1])) {
+            i++;
+            continue;
+          }
+          break;
         }
-        blocks.push({ t: "list", ordered: ordered, items: items });
+        blocks.push({ t: "list", ordered: ordered, start: startAt, items: items });
         continue;
       }
       if (line.indexOf("|") === 0 || (line.indexOf("|") > 0 && /\|\s*$/.test(line))) {
@@ -2632,7 +2859,7 @@ class Component extends DCLogic {
       } else if (s.indexOf("~~") === 0) {
         out.push(React.createElement("del", { key: k, style: { color: "var(--faint)" } }, this.kids(s.slice(2, -2))));
       } else if (s.indexOf("==") === 0) {
-        out.push(React.createElement("mark", { key: k, style: { background: "var(--amber-soft)", color: "var(--ink)", borderRadius: "var(--r-sm)", padding: "1px 4px" } }, this.kids(s.slice(2, -2))));
+        out.push(React.createElement("mark", { key: k, style: { background: "var(--mark-bg)", color: "var(--mark-fg)", borderRadius: "var(--r-sm)", padding: "1px 5px", fontWeight: 500 } }, this.kids(s.slice(2, -2))));
       } else {
         const mm = s.match(/^\[([^\]]+)\]\(([^)]+)\)$/);
         out.push(React.createElement("a", { key: k, href: safeHref(mm[2]), rel: "noopener noreferrer", style: { color: "var(--accent-text)", borderBottom: "1px solid var(--accent-ring)" } }, mm[1]));
@@ -2677,7 +2904,10 @@ class Component extends DCLogic {
     });
   }
 
-  render_blocks(parsed, numbered, skipIdx, nested) {
+  /* keepH1 — האם לרנדר גם כותרת רמה 1. בתצוגת המסמך היא מוצגת בכותרת
+     העמוד ולכן מושמטת מהגוף, אבל במסך היצירה אין כותרת עמוד: בלי הדגל
+     הזה השורה הראשונה של הטיוטה פשוט נעלמת מהפריוויו. */
+  render_blocks(parsed, numbered, skipIdx, nested, keepH1) {
     /* התמה מצהירה על צורת הבלוקים שלה במקום שנשווה שמות. עם השוואה
        ל-"light", כל תמה חדשה נכנסת אוטומטית למשפחת הכהים — וזה נכון
        ל-dim במקרה, לא בכוונה. */
@@ -2694,9 +2924,17 @@ class Component extends DCLogic {
       }
 
       if (b.t === "h") {
-        if (b.level === 1) return;
+        if (b.level === 1 && !keepH1) return;
         hi++;
-        if (b.level === 2) {
+        if (b.level === 1) {
+          /* אותו משקל של כותרת העמוד, כדי שהפריוויו של מסך היצירה
+             ייראה כמו המסמך שייווצר ממנו. */
+          out.push(React.createElement("h1", { key: key, id: "h-" + hi, style: {
+            margin: out.length ? "36px 0 16px" : "0 0 16px",
+            fontFamily: "var(--display)", fontSize: 30, fontWeight: 800, lineHeight: 1.2,
+            color: "var(--ink)", scrollMarginTop: 90
+          } }, this.inline(b.text)));
+        } else if (b.level === 2) {
           h2++;
           const num = ("0" + h2).slice(-2);
           if (ed) {
@@ -2799,7 +3037,9 @@ class Component extends DCLogic {
           if (it.depth === 1 && top.length) top[top.length - 1].children.push(it.text);
           else top.push({ text: it.text, children: [] });
         });
-        out.push(React.createElement(tag, { key: key, style: ed
+        /* start עובר ל-<ol> כדי שהמספור יתחיל היכן שהכותב התחיל.
+           React מתעלם מ-start על <ul>, ולכן אין צורך בתנאי. */
+        out.push(React.createElement(tag, { key: key, start: b.ordered && b.start > 1 ? b.start : undefined, style: ed
           ? { margin: "0 0 24px", paddingInlineStart: 24, fontSize: 17, lineHeight: 1.9, color: "var(--text)", maxWidth: "66ch" }
           : { margin: "0 0 20px", paddingInlineStart: 22, fontSize: 16.5, lineHeight: 1.9, color: "var(--text)" } },
           top.map((it, k) => React.createElement("li", { key: k, style: { margin: ed ? "7px 0" : "6px 0", paddingInlineStart: ed ? 4 : 0 } },

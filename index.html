@@ -960,7 +960,7 @@ console.<span style="color:var(--tok-fn)">log</span>(doc.<span style="color:var(
 </div>
 
 </x-dc>
-<script type="text/x-dc" data-dc-script data-props="{&quot;showToc&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:true,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;פריסה&quot;},&quot;numberedHeadings&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:true,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;תוכן&quot;},&quot;showSourceByDefault&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:false,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;תוכן&quot;},&quot;defaultTheme&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;auto&quot;,&quot;dark&quot;,&quot;light&quot;],&quot;default&quot;:&quot;auto&quot;,&quot;tsType&quot;:&quot;'auto' | 'dark' | 'light'&quot;,&quot;section&quot;:&quot;עיצוב&quot;},&quot;defaultCodeTab&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;javascript&quot;,&quot;python&quot;,&quot;curl&quot;],&quot;default&quot;:&quot;javascript&quot;,&quot;tsType&quot;:&quot;'javascript' | 'python' | 'curl'&quot;,&quot;section&quot;:&quot;תוכן&quot;}}">
+<script type="text/x-dc" data-dc-script data-props="{&quot;showToc&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:true,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;פריסה&quot;},&quot;numberedHeadings&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:true,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;תוכן&quot;},&quot;showSourceByDefault&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:false,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;תוכן&quot;},&quot;defaultTheme&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;auto&quot;,&quot;dark&quot;,&quot;dim&quot;,&quot;light&quot;],&quot;default&quot;:&quot;auto&quot;,&quot;tsType&quot;:&quot;'auto' | 'dark' | 'dim' | 'light'&quot;,&quot;section&quot;:&quot;עיצוב&quot;},&quot;defaultCodeTab&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;javascript&quot;,&quot;python&quot;,&quot;curl&quot;],&quot;default&quot;:&quot;javascript&quot;,&quot;tsType&quot;:&quot;'javascript' | 'python' | 'curl'&quot;,&quot;section&quot;:&quot;תוכן&quot;}}">
 const KEY = "md-docs-site-v1";
 const THEME_KEY = "md-docs-theme";
 
@@ -1351,6 +1351,14 @@ const THEMES = { dark: DARK, dim: DIM, light: LIGHT };
    מבחינת בהירות, וזה מה שהופך את הלחיצה הבאה לצפויה. */
 const THEME_ORDER = ["dark", "dim", "light"];
 const THEME_LABEL = { dark: "כהה", dim: "עמום", light: "בהיר" };
+
+/* שדות שהם מטא-דאטה של התמה ולא משתני CSS. רשימה אחת ולא בדיקת שם
+   מפוזרת ב-applyTheme: שדה חדש שיתווסף לערכות צריך שורה כאן, אחרת הוא
+   ידלוף כ---something שאיש לא קורא. */
+const THEME_META_KEYS = ["scheme", "editorial"];
+
+/* color-scheme מקבל את שני אלה בלבד. */
+const COLOR_SCHEMES = ["dark", "light"];
 
 const REF_SECTIONS = [
   { id: "sec-01", label: "טיפוגרפיה וכותרות" },
@@ -2916,13 +2924,15 @@ class Component extends DCLogic {
     root.setAttribute("data-theme", mode);
     /* color-scheme מקבל dark או light בלבד. "dim" אינו ערך חוקי, ופסי
        הגלילה, פקדי הטפסים וההשלמה האוטומטית של הדפדפן היו נופלים
-       לברירת מחדל שגויה בשקט. */
-    root.style.colorScheme = c.scheme || "dark";
-    /* scheme ו-editorial הם מטא-דאטה של התמה ולא משתני CSS. בלי
-       הסינון הזה היו נוצרים --scheme ו--editorial שאיש לא קורא, ו-
-       --editorial היה המחרוזת "false" — ערך שנראה אמיתי בכל בדיקה. */
+       לברירת מחדל שגויה בשקט.
+       הערך נבדק ולא רק נלקח: ערכה שתצהיר משהו אחר תקבל dark במקום
+       להזליג ערך פסול שהדפדפן מתעלם ממנו — שוב, בשקט. */
+    root.style.colorScheme = COLOR_SCHEMES.indexOf(c.scheme) >= 0 ? c.scheme : "dark";
+    /* המטא-דאטה מסונן לפי THEME_META_KEYS. בלי הסינון היו נוצרים
+       --scheme ו---editorial שאיש לא קורא, והשני היה המחרוזת "false" —
+       ערך שנראה אמיתי בכל בדיקה. */
     Object.keys(c).forEach((k) => {
-      if (k === "scheme" || k === "editorial") return;
+      if (THEME_META_KEYS.indexOf(k) >= 0) return;
       root.style.setProperty("--" + k, c[k]);
     });
     this.setState({ theme: mode });

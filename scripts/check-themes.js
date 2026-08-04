@@ -28,14 +28,42 @@ const EMAIL = process.env.ADMIN_EMAIL || 'admin@example.com';
 const PASSWORD = process.env.ADMIN_PASSWORD || 'correct-horse-battery';
 const NAME = 'בדיקת תמות ' + process.pid;
 
-/* מה שכל תמה חייבת לקיים. הערכים נלקחים מהערכות עצמן — אם מישהו ישנה
-   גוון, הבדיקה תיפול ותדרוש עדכון מודע, וזו המטרה. */
+/* מה שכל תמה חייבת לקיים.
+
+   הערכים כאן קשיחים **בכוונה**, ולא נקראים מהערכות. אילו הבדיקה הייתה
+   שואבת אותם מ-index.html היא הייתה משווה את הקוד לעצמו ועוברת תמיד;
+   מה שהיא בודקת הוא שהגוון, הגופן והמשפחה לא השתנו בלי שאיש התכוון.
+   שינוי מכוון דורש עדכון של השורה כאן, וזו בדיוק המטרה. */
 const EXPECTED = {
   dark: { scheme: 'dark', bg: '#0e1022', accent: '#0088cc', font: 'Heebo', editorial: false },
   dim: { scheme: 'dark', bg: '#2f3338', accent: '#c8823c', font: 'Rubik', editorial: false },
   light: { scheme: 'light', bg: '#f7f5f1', accent: '#9c3b2e', font: 'Assistant', editorial: true },
 };
-const ORDER = ['dark', 'dim', 'light'];
+
+/* סדר המחזור, לעומת זאת, כן נקרא מהמקור. הוא מטא-דאטה ולא ערך שנבדק,
+   ורשימה שנייה כאן הייתה מתפצלת בשקט: תמה שתתווסף ל-index.html ולא
+   לכאן פשוט לא הייתה נבדקת, וההרצה הייתה ירוקה. */
+function themeOrderFromSource() {
+  const fs = require('fs');
+  const path = require('path');
+  const html = fs.readFileSync(path.join(__dirname, '..', 'index.html'), 'utf8');
+  const m = html.match(/const THEME_ORDER = \[([^\]]+)\]/);
+  if (!m) {
+    console.error('FATAL לא נמצא THEME_ORDER ב-index.html — האם השם השתנה?');
+    process.exit(1);
+  }
+  return m[1].split(',').map((x) => x.trim().replace(/^["']|["']$/g, '')).filter(Boolean);
+}
+
+const ORDER = themeOrderFromSource();
+
+/* הגשר בין השניים: תמה שנוספה ל-index.html ואין לה שורה ב-EXPECTED
+   הייתה נבדקת ריק. כאן זה נכשל ברעש. */
+const missing = ORDER.filter((t) => !EXPECTED[t]);
+if (missing.length) {
+  console.error(`FATAL אין ציפיות לתמות: ${missing.join(', ')} — הוסיפו אותן ל-EXPECTED`);
+  process.exit(1);
+}
 
 const results = [];
 const check = (label, ok, extra) => {
@@ -106,6 +134,13 @@ const snapshot = (page) =>
   }, [EMAIL, PASSWORD, NAME]);
   if (setup.error) { console.error('FATAL ' + setup.error); await browser.close(); process.exit(1); }
 
+  /* ה-slug נשמר מיד, וכל השאר רץ בתוך try. בלי זה, בדיקה שזורקת
+     באמצע מדלגת על המחיקה ומשאירה פרויקט במסד — ודווקא בהרצות
+     הכושלות, שבהן מריצים שוב ושוב, הזבל מצטבר הכי מהר. */
+  const slug = setup.slug;
+  let removed = 'לא רץ';
+
+  try {
   await p.reload({ waitUntil: 'load' });
   await p.waitForSelector('#dc-root', { timeout: 20000 });
   const link = p.getByText(NAME).first();
@@ -122,7 +157,17 @@ const snapshot = (page) =>
   }
 
   const cycle = seen.slice(0, ORDER.length).map((s) => s.theme);
-  check('המחזור עובר בכל שלוש התמות', new Set(cycle).size === 3, cycle.join(' → '));
+
+  /* לא רק "כל התמות הופיעו". סדר כמו dark → light → dim מכסה את
+     שלושתן ועדיין אינו הסדר שהוגדר, והמשתמש היה מקבל קפיצות בלתי
+     צפויות. משווים לסיבוב של ORDER שמתחיל מהתמה שנצפתה ראשונה. */
+  const start = ORDER.indexOf(cycle[0]);
+  const rotated = start >= 0
+    ? ORDER.slice(start).concat(ORDER.slice(0, start))
+    : [];
+  check('המחזור עובר בכל התמות, לפי הסדר שהוגדר',
+    rotated.length === cycle.length && rotated.every((t, i) => t === cycle[i]),
+    `${cycle.join(' → ')}  (צפוי ${rotated.join(' → ') || '?'})`);
   check('והוא חוזר להתחלה', seen[ORDER.length].theme === seen[0].theme,
     `${seen[0].theme} … ${seen[ORDER.length].theme}`);
 
@@ -178,14 +223,25 @@ const snapshot = (page) =>
 
   check('אין שגיאות קונסולה', errs.length === 0, errs.slice(0, 3).join(' | '));
 
-  const removed = await p.evaluate(async (slug) => {
-    const r = await fetch('/api/projects/' + encodeURIComponent(slug),
-      { method: 'DELETE', credentials: 'same-origin' });
-    return r.status;
-  }, setup.slug);
+  } finally {
+    /* רץ גם כשבדיקה זרקה. אם גם המחיקה נכשלת, זה מדווח ולא מסתיר את
+       השגיאה המקורית. */
+    if (slug) {
+      try {
+        removed = await p.evaluate(async (s) => {
+          const r = await fetch('/api/projects/' + encodeURIComponent(s),
+            { method: 'DELETE', credentials: 'same-origin' });
+          return r.status;
+        }, slug);
+      } catch (e) {
+        removed = 'שגיאה: ' + e.message;
+      }
+    }
+    await browser.close();
+  }
+
   check('הפרויקט נמחק בסיום', removed === 204, 'status ' + removed);
 
-  await browser.close();
   const failed = results.filter((r) => !r.ok);
   console.log(failed.length ? `\nנכשלו ${failed.length}` : '\nהכול עבר');
   process.exit(failed.length ? 1 : 0);

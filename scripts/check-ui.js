@@ -78,11 +78,50 @@ const check = (label, ok, extra) => {
   // מסמך דרך מסך הכתיבה — המסך המפוצל שנפתח מכפתור הסרגל
   await p.getByRole('button', { name: /new document|כתיבת מסמך חדש/i }).click();
   await p.waitForSelector('input[placeholder^="שם המסמך"]', { timeout: 15000 });
-  await p.fill('textarea', '# מדריך התקנה\n\nפסקת פתיחה.\n\n## שלב ראשון\n\n- פריט\n- פריט נוסף\n');
+  // הטבלה כאן רחבה בכוונה: היא מה שמוודא שטבלה שאינה נכנסת ברוחב
+  // גוללת בתוך מעטפת במקום להיחתך.
+  await p.fill('textarea', [
+    '# מדריך התקנה', '', 'פסקת פתיחה.', '', '## שלב ראשון', '', '- פריט', '- פריט נוסף', '',
+    '## טבלה רחבה', '',
+    '| מזהה | שם הפרויקט | בעלים | נראות | מסמכים | קישורים | נוצר בתאריך | עודכן לאחרונה |',
+    '| --- | --- | --- | --- | --- | --- | --- | --- |',
+    '| a1b2c3 | תיעוד המוצר הראשי | admin@example.com | פומבי | 42 | 7 | 2024-01-15 | 2026-08-04 |',
+    '',
+  ].join('\n'));
   await p.getByRole('button', { name: 'הוספה לפרויקט' }).click();
   await p.waitForTimeout(2500);
   const docText = await p.evaluate(() => document.body.innerText);
   check('המסמך נוצר ומרונדר', docText.includes('מדריך התקנה') && docText.includes('שלב ראשון'));
+
+  // נמדד ברוחב צר, כי שם טבלה של שמונה עמודות באמת לא נכנסת. הבדיקה
+  // היא שהמעטפת גוללת ולא שהטבלה צרה — overflow:hidden על המעטפת חתך
+  // את העמודות האחרונות בלי שום סימן שהן קיימות.
+  //
+  // overflowX נבדק במפורש ולא רק scrollWidth > clientWidth: תיבה עם
+  // overflow:hidden עדיין מדווחת scrollWidth גדול יותר, וגם עדיין ניתן
+  // לגלול אותה מקוד. מה שהיא לא מאפשרת הוא גלילה של המשתמש — גלגלת,
+  // מגע או Shift+גלילה — וזו בדיוק ההצהרה שקובעת אותה.
+  await p.setViewportSize({ width: 430, height: 900 });
+  await p.waitForTimeout(800);
+  const wide = await p.evaluate(() => {
+    const t = [...document.querySelectorAll('table')].sort((a, b) => b.scrollWidth - a.scrollWidth)[0];
+    if (!t) return null;
+    const box = t.parentElement;
+    return {
+      overflowX: getComputedStyle(box).overflowX,
+      tableW: Math.round(t.scrollWidth),
+      boxW: Math.round(box.clientWidth),
+      scrolls: box.scrollWidth > box.clientWidth + 1,
+      pageOverflow: document.documentElement.scrollWidth > document.documentElement.clientWidth + 1,
+    };
+  });
+  check('טבלה רחבה גוללת ואינה נחתכת',
+    !!wide && wide.overflowX === 'auto' && wide.scrolls
+      && wide.tableW > wide.boxW && !wide.pageOverflow,
+    JSON.stringify(wide));
+  await p.screenshot({ path: SHOTS + '/ui-table-narrow.png' });
+  await p.setViewportSize({ width: 1500, height: 1000 });
+  await p.waitForTimeout(600);
 
   // מסמך דרך העלאת קובץ. מסלול נפרד לגמרי מההדבקה — הוא עובר דרך
   // readFiles, ואיפוס value של ה-input מרוקן את אותו FileList שמחזיקים.

@@ -3114,23 +3114,46 @@ class Component extends DCLogic {
       } else if (b.t === "table") {
         const head = b.rows[0], body = b.rows.slice(1);
         const numeric = (v) => /^[\d.,%+\-]+$/.test(v.replace(/\s/g, ""));
+
+        /* טבלה רחבה גוללת בתוך עצמה במקום להיחתך.
+
+           width:100% לבדו נראה כאילו הוא פותר את זה, אבל הוא רק דוחס:
+           טבלה בת שש עמודות נדחסת עד שאי אפשר לקרוא אותה, ותא עם קוד או
+           כתובת שאי אפשר לשבור גולש החוצה ונחתך. max-content נותן לטבלה
+           את הרוחב הטבעי שלה, min-width:100% מותח אותה כשהיא צרה, והמעטפת
+           גוללת אופקית. אותו פתרון כבר קיים בבלוקי הקוד ובתרשימים.
+
+           TD_MAX על התאים מונע את הקצה השני: עמודה של פסקאות הייתה
+           נמתחת לאלפי פיקסלים במקום לשבור שורה. הוא תלוי גם ברוחב המסך
+           ולא רק בקבוע — 420px על מסך של 360px היו מכריחים גלילה על
+           טבלה של שתי עמודות שיכולה פשוט לשבור שורה. */
+        const scroller = (child, extra) => React.createElement("div", {
+          key: key,
+          style: Object.assign({ overflowX: "auto", maxWidth: "100%" }, extra || {})
+        }, child);
+        const TD_MAX = "min(420px, 55vw)";
+
         if (ed) {
-          out.push(React.createElement("table", { key: key, style: { width: "100%", borderCollapse: "collapse", margin: "0 0 28px", fontSize: 16 } },
+          out.push(scroller(React.createElement("table", { style: { width: "max-content", minWidth: "100%", borderCollapse: "collapse", fontSize: 16 } },
             React.createElement("thead", { key: "h" }, React.createElement("tr", null,
               head.map((c, k) => React.createElement("th", { key: k, style: { padding: "0 14px 9px", textAlign: "start", borderBottom: "1.5px solid var(--ink)", fontFamily: "var(--mono)", fontSize: 10.5, fontWeight: 600, letterSpacing: "0.12em", textTransform: "uppercase", color: "var(--soft)" } }, this.inline(c))))),
             React.createElement("tbody", { key: "b" }, body.map((row, k) => React.createElement("tr", { key: k },
               row.map((c, j) => numeric(c)
                 ? React.createElement("td", { key: j, dir: "ltr", style: { padding: "11px 14px", textAlign: "end", borderBottom: "1px solid var(--line-2)", fontFamily: "var(--mono)", fontSize: 14.5, color: "var(--text)" } }, c)
-                : React.createElement("td", { key: j, style: { padding: "11px 14px", borderBottom: "1px solid var(--line-2)", color: j === 0 ? "var(--ink)" : "var(--muted)", fontWeight: j === 0 ? 600 : 400 } }, this.inline(c))))))));
+                : React.createElement("td", { key: j, style: { padding: "11px 14px", maxWidth: TD_MAX, borderBottom: "1px solid var(--line-2)", color: j === 0 ? "var(--ink)" : "var(--muted)", fontWeight: j === 0 ? 600 : 400 } }, this.inline(c))))))), { margin: "0 0 28px" }));
         } else {
-          out.push(React.createElement("div", { key: key, style: { border: "1px solid var(--line)", borderRadius: "var(--r-md)", overflow: "hidden", margin: "0 0 22px" } },
-            React.createElement("table", { style: { width: "100%", borderCollapse: "collapse", background: "var(--card)", fontSize: 15 } },
+          out.push(scroller(
+            React.createElement("table", { style: { width: "max-content", minWidth: "100%", borderCollapse: "collapse", background: "var(--card)", fontSize: 15 } },
               React.createElement("thead", { key: "h" }, React.createElement("tr", { style: { background: "var(--accent)" } },
                 head.map((c, k) => React.createElement("th", { key: k, style: { padding: "12px 16px", textAlign: "start", fontWeight: 600, color: "var(--accent-on)" } }, this.inline(c))))),
               React.createElement("tbody", { key: "b" }, body.map((row, k) => React.createElement("tr", { key: k, style: { borderBottom: k === body.length - 1 ? "none" : "1px solid var(--hair)" } },
                 row.map((c, j) => numeric(c)
                   ? React.createElement("td", { key: j, dir: "ltr", style: { padding: "12px 16px", textAlign: "end", fontFamily: "var(--mono)", color: "var(--text)" } }, c)
-                  : React.createElement("td", { key: j, style: { padding: "12px 16px", color: j === 0 ? "var(--head)" : "var(--muted)" } }, this.inline(c)))))))));
+                  : React.createElement("td", { key: j, style: { padding: "12px 16px", maxWidth: TD_MAX, color: j === 0 ? "var(--head)" : "var(--muted)" } }, this.inline(c))))))),
+            /* overflow-x:auto ולא overflow:hidden. hidden נועד לחתוך את
+               הפינות לפי ה-radius, אבל הוא חתך גם את הטבלה עצמה — וזה
+               בדיוק הבאג. auto חותך לפינות ומוסיף גלילה. */
+            { border: "1px solid var(--line)", borderRadius: "var(--r-md)", margin: "0 0 22px" }));
         }
 
       } else if (b.t === "img") {

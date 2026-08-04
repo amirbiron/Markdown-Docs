@@ -8,7 +8,8 @@
     "check:ui": "node scripts/check-ui.js http://127.0.0.1:8070 /tmp",
     "check:editor": "node scripts/check-editor.js http://127.0.0.1:8070 /tmp",
     "check:backup": "node scripts/check-backup.js http://127.0.0.1:8070 /tmp",
-    "check:themes": "node scripts/check-themes.js http://127.0.0.1:8070 /tmp"
+    "check:themes": "node scripts/check-themes.js http://127.0.0.1:8070 /tmp",
+    "check:mermaid": "node scripts/check-mermaid.js http://127.0.0.1:8070 /tmp"
   },
   "devDependencies": {
     "playwright": "^1.56.1"

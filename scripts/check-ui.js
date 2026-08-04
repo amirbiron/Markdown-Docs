@@ -133,6 +133,66 @@ const check = (label, ok, extra) => {
   const uploaded = await p.evaluate(() => document.body.innerText);
   check('העלאת קובץ יוצרת מסמך', uploaded.includes('מסמך מקובץ') && uploaded.includes('תוכן שהועלה'));
 
+  // ── מסך מלא ───────────────────────────────────────────────────────
+  // שלושת המסלולים, כי כל אחד נשבר אחרת. המסלול השלישי — יציאה שלא דרך
+  // הכפתור — הוא זה שקל לפספס: בלי האזנה ל-fullscreenchange, ה-state
+  // ממשיך להצהיר "במסך מלא" אחרי שהמשתמש כבר יצא ב-Esc.
+  await p.locator('button[title="מסך מלא"]').click();
+  await p.waitForTimeout(700);
+  const fsOn = await p.evaluate(() => {
+    const el = document.querySelector('[data-doc]');
+    return {
+      isFsElement: document.fullscreenElement === el,
+      bg: getComputedStyle(el).backgroundColor,
+      exitTitle: !!document.querySelector('button[title="יציאה ממסך מלא"]'),
+    };
+  });
+  check('מסך מלא נפתח על מכל המסמך',
+    fsOn.isFsElement && fsOn.exitTitle && fsOn.bg !== 'rgba(0, 0, 0, 0)',
+    JSON.stringify(fsOn));
+  await p.screenshot({ path: SHOTS + '/ui-fullscreen.png' });
+
+  // יציאה שלא דרך הכפתור. ב-headless מקש Escape אינו מפעיל את יציאת
+  // הדפדפן ממסך מלא — זו התנהגות של כרום הדפדפן ולא אירוע DOM — ולכן
+  // נבדק כאן אותו אות בדיוק שהיא מייצרת.
+  await p.evaluate(() => document.exitFullscreen());
+  await p.waitForTimeout(700);
+  const fsOff = await p.evaluate(() => ({
+    fs: !!document.fullscreenElement,
+    style: document.querySelector('[data-doc]').getAttribute('style') || '',
+    backToTitle: !!document.querySelector('button[title="מסך מלא"]'),
+  }));
+  check('יציאה שלא דרך הכפתור מסונכרנת חזרה',
+    !fsOff.fs && fsOff.style === '' && fsOff.backToTitle, JSON.stringify(fsOff));
+
+  // ה-fallback. Safari ב-iOS אינו תומך ב-requestFullscreen על אלמנט,
+  // ובלי המסלול הזה הכפתור שם נלחץ ולא קורה כלום.
+  await p.evaluate(() => {
+    Element.prototype.requestFullscreen = undefined;
+    Element.prototype.webkitRequestFullscreen = undefined;
+  });
+  await p.locator('button[title="מסך מלא"]').click();
+  await p.waitForTimeout(700);
+  const fb = await p.evaluate(() => {
+    const el = document.querySelector('[data-doc]');
+    const r = el.getBoundingClientRect();
+    return {
+      position: getComputedStyle(el).position,
+      covers: Math.round(r.width) === window.innerWidth && Math.round(r.height) === window.innerHeight,
+      exitTitle: !!document.querySelector('button[title="יציאה ממסך מלא"]'),
+    };
+  });
+  check('בלי Fullscreen API נכנס מצב מיקוד',
+    fb.position === 'fixed' && fb.covers && fb.exitTitle, JSON.stringify(fb));
+
+  await p.keyboard.press('Escape');
+  await p.waitForTimeout(500);
+  const fbOff = await p.evaluate(() => ({
+    style: document.querySelector('[data-doc]').getAttribute('style') || '',
+    backToTitle: !!document.querySelector('button[title="מסך מלא"]'),
+  }));
+  check('Escape יוצא ממצב המיקוד', fbOff.style === '' && fbOff.backToTitle, JSON.stringify(fbOff));
+
   // קישור
   await p.fill('input[placeholder="שם הקישור"]', 'CodeKeeper');
   await p.fill('input[placeholder="https://…"]', 'https://codekeeper.com');

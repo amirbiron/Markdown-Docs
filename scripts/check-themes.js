@@ -38,6 +38,10 @@ const EXPECTED = {
   dark: { scheme: 'dark', bg: '#0e1022', accent: '#0088cc', font: 'Heebo', editorial: false },
   dim: { scheme: 'dark', bg: '#2f3338', accent: '#c8823c', font: 'Rubik', editorial: false },
   light: { scheme: 'light', bg: '#f7f5f1', accent: '#9c3b2e', font: 'Assistant', editorial: true },
+  /* שתי ערכות Coast הן זהות אחת בשתי בהירויות, ולכן שתיהן editorial
+     ושתיהן על אותו סולם גופנים. מה שנבדל הוא scheme, הרקע והאקסנט. */
+  coast: { scheme: 'light', bg: '#f9f4e8', accent: '#1e5f8c', font: 'Heebo', editorial: true },
+  'coast-dark': { scheme: 'dark', bg: '#0a1828', accent: '#76b5d9', font: 'Heebo', editorial: true },
 };
 
 /* סדר המחזור, לעומת זאת, כן נקרא מהמקור. הוא מטא-דאטה ולא ערך שנבדק,
@@ -207,9 +211,13 @@ const snapshot = (page) =>
   // ── הכותרת אומרת לאן הלחיצה תוביל ─────────────────────────────────
   const titles = seen.slice(0, ORDER.length).map((s) => `${s.theme}:${s.title}`);
   const distinct = new Set(seen.slice(0, ORDER.length).map((s) => s.title));
-  check('לכל תמה כותרת אחרת בכפתור', distinct.size === 3, titles.join(' | '));
+  /* המספר נגזר מ-ORDER ואינו קבוע. קבוע 3 כאן היה בדיוק אותה בעיה
+     שהתגובה למעלה מזהירה ממנה, רק בכיוון ההפוך: תמה רביעית עם כותרת
+     תקינה לגמרי הייתה מפילה את הבדיקה, ותמה רביעית שחולקת כותרת עם
+     אחרת הייתה עוברת. */
+  check('לכל תמה כותרת אחרת בכפתור', distinct.size === ORDER.length, titles.join(' | '));
   const glyphs = new Set(seen.slice(0, ORDER.length).map((s) => s.glyph));
-  check('ולכל תמה סמל אחר', glyphs.size === 3, [...glyphs].join(' '));
+  check('ולכל תמה סמל אחר', glyphs.size === ORDER.length, [...glyphs].join(' '));
 
   // ── ערך פסול ב-localStorage לא מפיל ולא נדבק ──────────────────────
   await p.evaluate(() => localStorage.setItem('md-docs-theme', 'אין-כזו'));

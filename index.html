@@ -1202,6 +1202,37 @@ const MERMAID = {
       clusterBkg: "#f7f5f1", clusterBorder: "#cfc8bb", edgeLabelBackground: "#fffdf9", titleColor: "#1c1b18",
       noteBkgColor: "#f6efd9", noteBorderColor: "#c9a227", fontSize: "16px"
     }
+  },
+  /* הערכים כאן לקוחים ישירות ממקטע ה-Mermaid של docs/Fourth_design.md
+     ולא נגזרו מחדש. actorBkg ו-noteBkgColor הם מה שהיה חסר בשאר
+     הערכות ותוקן בנפרד — כאן הם ניתנים במפורש. */
+  coast: {
+    node: "#e8f0f6", nodeBorder: "#1e5f8c", cluster: "#f1ede1", clusterBorder: "#e3dcc9",
+    line: "#1e5f8c", text: "#2a3540", edgeBg: "#f9f4e8", surface: "#ffffff",
+    vars: {
+      darkMode: false, background: "#f9f4e8", primaryColor: "#e8f0f6", primaryBorderColor: "#1e5f8c", primaryTextColor: "#2a3540",
+      secondaryColor: "#faf0dc", secondaryBorderColor: "#d4906b", secondaryTextColor: "#2a3540",
+      tertiaryColor: "#e4f2f4", tertiaryBorderColor: "#5ba8b8", tertiaryTextColor: "#2a3540",
+      lineColor: "#1e5f8c", textColor: "#2a3540", mainBkg: "#ffffff", nodeBorder: "#1e5f8c",
+      clusterBkg: "#f1ede1", clusterBorder: "#e3dcc9", edgeLabelBackground: "#f9f4e8", titleColor: "#16496b",
+      actorBkg: "#ffffff", actorBorder: "#1e5f8c", actorTextColor: "#2a3540",
+      signalColor: "#1e5f8c", signalTextColor: "#2a3540",
+      noteBkgColor: "#faf0dc", noteTextColor: "#2a3540", noteBorderColor: "#d4906b", fontSize: "16px"
+    }
+  },
+  "coast-dark": {
+    node: "#12283c", nodeBorder: "#76b5d9", cluster: "#101f30", clusterBorder: "#1e3550",
+    line: "#76b5d9", text: "#f9f4e8", edgeBg: "#0a1828", surface: "#142a40",
+    vars: {
+      darkMode: true, background: "#0a1828", primaryColor: "#12283c", primaryBorderColor: "#76b5d9", primaryTextColor: "#f9f4e8",
+      secondaryColor: "#2e2415", secondaryBorderColor: "#e0ae5e", secondaryTextColor: "#f9f4e8",
+      tertiaryColor: "#122c33", tertiaryBorderColor: "#7dc4ce", tertiaryTextColor: "#f9f4e8",
+      lineColor: "#76b5d9", textColor: "#f9f4e8", mainBkg: "#142a40", nodeBorder: "#76b5d9",
+      clusterBkg: "#101f30", clusterBorder: "#1e3550", edgeLabelBackground: "#0a1828", titleColor: "#a8d2ea",
+      actorBkg: "#142a40", actorBorder: "#76b5d9", actorTextColor: "#f9f4e8",
+      signalColor: "#76b5d9", signalTextColor: "#f9f4e8",
+      noteBkgColor: "#2e2415", noteTextColor: "#f9f4e8", noteBorderColor: "#e0ae5e", fontSize: "16px"
+    }
   }
 };
 
@@ -1247,6 +1278,8 @@ const CALLOUT = {
 
 /* אלף-בית ללא סופיות, לפי סדר הקריאה ולא לפי סדר יוניקוד. משמש
    להמשך רשימות ממוספרות באותיות: "א)" · "ב)" · "ג)". */
+const BOX_TICK = "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M3.5 8.5l3 3 6-6' fill='none' stroke='white' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E\")";
+
 const HEB_ALPHABET = "אבגדהוזחטיכלמנסעפצקרשת";
 
 /* ═══════════════════════════════════════════════════════════════════
@@ -1309,6 +1342,131 @@ function hue(name) {
 
 /* חלקי הממשק שצורתם — לא רק צבעם — שונה בין העיצובים.
    כל צבע כאן הוא var(), כך שגם הרצועות האלה מתעדכנות עם המצב. */
+/* ═══════════════════════════════════════════════════════════════════
+   COAST — העיצוב הרביעי (docs/Fourth_design.md)
+
+   בניגוד לשלוש הקודמות, המקור כאן הוא מפרט טוקנים ולא מוקאפ מרונדר,
+   והוא מגדיר פלטה בהירה ופלטה כהה לאותה זהות. לכן זו לא ערכה אחת אלא
+   שתיים — coast ו-coast-dark — ושתיהן במשפחת ה-Editorial.
+
+   המפרט מרחיב "Coast 0.1.2" שאינו בריפו. הבסיס שוחזר מהמקומות שבהם
+   הוא מודלף: מקטע ה-Mermaid נותן את הרקע (עצם #f9f4e8), את האוקיינוס
+   (#1e5f8c), את הים-קצף (#5ba8b8) ואת הדיו (#2a3540), וה-frontmatter
+   נותן את השאר.
+
+   שבעת הגוונים של המפרט ממופים לשמות הגוונים שכבר קיימים כאן, כדי
+   שטבלת CALLOUT תמשיך לעבוד בלי שינוי: מידע→accent, הצלחה→green,
+   אזהרה→amber, סכנה→red, הדגשה→purple, טיפ→teal, מעומעם→gray.
+   ═══════════════════════════════════════════════════════════════════ */
+const COAST = {
+  scheme: "light", editorial: true,
+
+  sans: "'Heebo','Assistant',sans-serif",
+  display: "'Frank Ruhl Libre','Georgia',serif",
+  mono: "'IBM Plex Mono','Consolas',monospace",
+
+  bg: "#f9f4e8", rail: "#f4eee0", bar: "rgba(249,244,232,0.92)",
+  panel: "#ffffff", "panel-2": "#fbf8f0", card: "#ffffff",
+  tint: "#f1ede1", "tint-2": "#e9e3d3", hover: "#f1ede1",
+  line: "#e3dcc9", "line-2": "#ebe5d6", hair: "#e3dcc9",
+  rule: "#d6cdb6", "rule-2": "#c4b99e", "rule-strong": "#a89c80",
+
+  ink: "#2a3540", head: "#2a3540", text: "#3b4753", "text-2": "#44505c",
+  soft: "#4e5865", muted: "#4e5865", faint: "#6b7785", "faint-2": "#8b97a5",
+  "code-text": "#3b4753", "code-inline": "#16496b", "code-well": "rgba(42,53,64,0.06)",
+
+  accent: "#1e5f8c", "accent-text": "#16496b", "accent-hover": "#5ba8b8", "accent-on": "#ffffff",
+  "accent-soft": "#e8f0f6", "accent-soft-2": "rgba(30,95,140,0.06)", "accent-ring": "rgba(30,95,140,0.3)",
+
+  green: "#3e8e6e", "green-soft": "#e5f2ed", "green-ring": "rgba(62,142,110,0.3)", "green-on": "#ffffff", "green-text": "#2f7358",
+  amber: "#c88a2e", "amber-soft": "#faf0dc", "amber-ring": "rgba(200,138,46,0.3)", "amber-on": "#ffffff",
+  "mark-bg": "#f5dfc8", "mark-fg": "#2a3540",
+  red: "#c1503e", "red-soft": "#fae8e5", "red-ring": "rgba(193,80,62,0.3)", "red-on": "#ffffff", "red-text": "#9a3d2d", "red-text-2": "#8a3527",
+  purple: "#7a5c9e", "purple-soft": "#f0eaf6", "purple-soft-2": "rgba(122,92,158,0.1)", "purple-ring": "rgba(122,92,158,0.3)", "purple-on": "#ffffff", "purple-text": "#5f4680", "purple-text-2": "#523c6f",
+
+  pink: "#a8536b", "pink-soft": "rgba(168,83,107,0.09)", "pink-on": "#ffffff",
+  sky: "#1e5f8c", "sky-soft": "#e8f0f6", "sky-on": "#ffffff",
+  teal: "#4a97a8", "teal-soft": "#e4f2f4", "teal-on": "#ffffff",
+  gray: "#6b7785", "gray-soft": "#f0efea", "gray-on": "#ffffff",
+  brown: "#a06a44", "brown-soft": "rgba(160,106,68,0.1)", "brown-on": "#ffffff",
+  steel: "#5c7086", "steel-soft": "rgba(92,112,134,0.09)", "steel-on": "#ffffff",
+  steelblue: "#2f6f9a", "steelblue-soft": "rgba(47,111,154,0.09)", "steelblue-on": "#ffffff",
+
+  hatch: "rgba(42,53,64,0.05)", sel: "#cfe2ee", scroll: "#d6cdb6",
+  shadow: "0 1px 2px rgba(42,53,64,0.06)", "shadow-2": "0 2px 12px rgba(42,53,64,0.09)",
+
+  "tok-comment": "#8b97a5", "tok-punct": "#6b7785", "tok-kw": "#7a5c9e", "tok-kw-weight": "500",
+  "tok-str": "#3e8e6e", "tok-fn": "#1e5f8c", "tok-num": "#4a97a8", "tok-var": "#c1503e",
+  "tok-tag": "#c1503e", "tok-type": "#4a97a8", "tok-ins": "#3e8e6e", "tok-del": "#c1503e",
+
+  /* rounded.xs מהמפרט הוא 4px, והשאר נגזר ממנו כלפי מעלה. Coast הוא
+     "editorial and airy", ולכן הפינות רכות ולא מרובעות כמו ב-light. */
+  "r-sm": "4px", "r-md": "8px", "r-lg": "12px", "r-pill": "999px",
+  "bar-h": "58px", "bar-pad": "26px", "bar-gap": "14px",
+  "rail-w": "272px", "rail-pad": "32px 24px 40px", "rail-head-gap": "24px",
+  "rail-title-size": "22px", "rail-sub-gap": "6px", "rail-sub-track": "0.06em", "rail-sub-case": "none",
+  "crumb-font": "'Heebo','Assistant',sans-serif", "crumb-size": "13px", "crumb-track": "0",
+  "shell-w": "1580px", "main-w": "940px", "main-pad": "48px 38px 100px",
+  "doc-gap": "0px", "doc-list-rule": "1px solid #e3dcc9", "doc-head-gap": "34px",
+  "h1-size": "50px", "lead-size": "19px",
+  "ref-h1": "48px", "ref-h2": "29px", "ref-h3": "22px"
+};
+
+/* הרקעים הכהים של הגוונים הם גוני-כמעט-שחור של אותה גוון, ולא הבהרה
+   של המשטח. זו הנחיה מפורשת במפרט, והסיבה היא שהתראה בתוך תצוגה כהה
+   לא אמורה לזהור. */
+const COAST_DARK = {
+  scheme: "dark", editorial: true,
+
+  sans: "'Heebo','Assistant',sans-serif",
+  display: "'Frank Ruhl Libre','Georgia',serif",
+  mono: "'IBM Plex Mono','Consolas',monospace",
+
+  bg: "#0a1828", rail: "#0c1c2e", bar: "rgba(10,24,40,0.92)",
+  panel: "#142a40", "panel-2": "#101f30", card: "#142a40",
+  tint: "#101f30", "tint-2": "#16283c", hover: "#16283c",
+  line: "#1e3550", "line-2": "#1a2e46", hair: "#1e3550",
+  rule: "#2a4666", "rule-2": "#35547a", "rule-strong": "#476b94",
+
+  ink: "#f9f4e8", head: "#f9f4e8", text: "#dfe6ee", "text-2": "#cfd9e4",
+  soft: "#b4bec9", muted: "#b4bec9", faint: "#8b97a5", "faint-2": "#75818f",
+  "code-text": "#dfe6ee", "code-inline": "#a8d2ea", "code-well": "rgba(249,244,232,0.06)",
+
+  accent: "#76b5d9", "accent-text": "#a8d2ea", "accent-hover": "#7dc4ce", "accent-on": "#0a1828",
+  "accent-soft": "#12283c", "accent-soft-2": "rgba(118,181,217,0.1)", "accent-ring": "rgba(118,181,217,0.32)",
+
+  green: "#66b894", "green-soft": "#122e26", "green-ring": "rgba(102,184,148,0.32)", "green-on": "#0a1828", "green-text": "#9ad6ba",
+  amber: "#e0ae5e", "amber-soft": "#2e2415", "amber-ring": "rgba(224,174,94,0.32)", "amber-on": "#0a1828",
+  "mark-bg": "#3d2e1c", "mark-fg": "#f9f4e8",
+  red: "#e08574", "red-soft": "#311915", "red-ring": "rgba(224,133,116,0.32)", "red-on": "#0a1828", "red-text": "#f0b3a6", "red-text-2": "#e8a394",
+  purple: "#a98fc9", "purple-soft": "#231c33", "purple-soft-2": "rgba(169,143,201,0.14)", "purple-ring": "rgba(169,143,201,0.32)", "purple-on": "#0a1828", "purple-text": "#c9b6e0", "purple-text-2": "#d6c8e8",
+
+  pink: "#d492a6", "pink-soft": "rgba(212,146,166,0.12)", "pink-on": "#0a1828",
+  sky: "#76b5d9", "sky-soft": "#12283c", "sky-on": "#0a1828",
+  teal: "#7dc4ce", "teal-soft": "#122c33", "teal-on": "#0a1828",
+  gray: "#8b97a5", "gray-soft": "#16202c", "gray-on": "#0a1828",
+  brown: "#c99a72", "brown-soft": "rgba(201,154,114,0.12)", "brown-on": "#0a1828",
+  steel: "#8fa4ba", "steel-soft": "rgba(143,164,186,0.12)", "steel-on": "#0a1828",
+  steelblue: "#6fa8d0", "steelblue-soft": "rgba(111,168,208,0.12)", "steelblue-on": "#0a1828",
+
+  hatch: "rgba(249,244,232,0.05)", sel: "#1b3d57", scroll: "#2a4666",
+  shadow: "0 1px 2px rgba(0,0,0,0.35)", "shadow-2": "0 2px 12px rgba(0,0,0,0.45)",
+
+  "tok-comment": "#75818f", "tok-punct": "#8b97a5", "tok-kw": "#a98fc9", "tok-kw-weight": "500",
+  "tok-str": "#66b894", "tok-fn": "#76b5d9", "tok-num": "#7dc4ce", "tok-var": "#e08574",
+  "tok-tag": "#e08574", "tok-type": "#7dc4ce", "tok-ins": "#66b894", "tok-del": "#e08574",
+
+  "r-sm": "4px", "r-md": "8px", "r-lg": "12px", "r-pill": "999px",
+  "bar-h": "58px", "bar-pad": "26px", "bar-gap": "14px",
+  "rail-w": "272px", "rail-pad": "32px 24px 40px", "rail-head-gap": "24px",
+  "rail-title-size": "22px", "rail-sub-gap": "6px", "rail-sub-track": "0.06em", "rail-sub-case": "none",
+  "crumb-font": "'Heebo','Assistant',sans-serif", "crumb-size": "13px", "crumb-track": "0",
+  "shell-w": "1580px", "main-w": "940px", "main-pad": "48px 38px 100px",
+  "doc-gap": "0px", "doc-list-rule": "1px solid #1e3550", "doc-head-gap": "34px",
+  "h1-size": "50px", "lead-size": "19px",
+  "ref-h1": "48px", "ref-h2": "29px", "ref-h3": "22px"
+};
+
 const CHROME = {
   dark: {
     mark: true,
@@ -1369,12 +1527,36 @@ const CHROME = {
    שלישי שנשאר מאחור בכל שינוי עיצוב בשניים האחרים. */
 CHROME.dim = Object.assign({}, CHROME.dark);
 
-const THEMES = { dark: DARK, dim: DIM, light: LIGHT };
+/* Coast חולק את הצורות של light — שתיהן במשפחת ה-Editorial — עם שני
+   שינויים שהמפרט דורש במפורש.
+
+   uppercase יורד מהתוויות: לעברית אין רישיות, ולכן ההמרה לא עושה כלום
+   לעברית וצועקת בלטינית, ומייצרת רמת כותרת שנראית שונה בין שתי
+   השפות באותה שורה. הריווח והמשקל נושאים את ההדגשה במקומה.
+
+   והתוויות עצמן בעברית: ה-wordmark של light כתוב באנגלית כבחירה
+   טיפוגרפית, ו-Coast הוא מערכת עברית-תחילה. */
+const COAST_CHROME = Object.assign({}, CHROME.light, {
+  srcLabel: "מקור",
+  newDocLabel: "מסמך חדש",
+  railLabel: "padding:0 0 10px;font-family:var(--sans);font-size:12px;font-weight:600;letter-spacing:0.06em;color:var(--faint)",
+  groupBtn: "display:flex;align-items:center;justify-content:space-between;width:100%;padding:0 0 10px;background:none;border:none;cursor:pointer;font-family:var(--sans);font-size:12px;font-weight:600;letter-spacing:0.06em;color:var(--faint)",
+  fileBadge: "font-family:var(--mono);font-size:11px;font-weight:500;letter-spacing:0.04em;padding:3px 10px;border-radius:var(--r-pill);background:var(--accent-soft);color:var(--accent-text)"
+});
+CHROME.coast = COAST_CHROME;
+CHROME["coast-dark"] = COAST_CHROME;
+
+const THEMES = { dark: DARK, dim: DIM, light: LIGHT, coast: COAST, "coast-dark": COAST_DARK };
 
 /* סדר המחזור של הכפתור. dim יושב בין הכהה לבהיר כי הוא באמצע
-   מבחינת בהירות, וזה מה שהופך את הלחיצה הבאה לצפויה. */
-const THEME_ORDER = ["dark", "dim", "light"];
-const THEME_LABEL = { dark: "כהה", dim: "עמום", light: "בהיר" };
+   מבחינת בהירות, וזה מה שהופך את הלחיצה הבאה לצפויה. שתי ערכות
+   Coast יושבות בסוף וצמודות זו לזו, כי הן זהות בזהותן ונבדלות רק
+   בבהירות — הפרדה ביניהן הייתה מסתירה את זה. */
+const THEME_ORDER = ["dark", "dim", "light", "coast", "coast-dark"];
+const THEME_LABEL = {
+  dark: "כהה", dim: "עמום", light: "בהיר",
+  coast: "Coast בהיר", "coast-dark": "Coast כהה"
+};
 
 /* שדות שהם מטא-דאטה של התמה ולא משתני CSS. רשימה אחת ולא בדיקת שם
    מפוזרת ב-applyTheme: שדה חדש שיתווסף לערכות צריך שורה כאן, אחרת הוא
@@ -2350,7 +2532,12 @@ class Component extends DCLogic {
       theme: s.theme,
       /* הסמל מייצג את התמה הפעילה, והכותרת אומרת לאן הלחיצה תוביל.
          בלי הכותרת, מחזור בן שלושה מצבים הוא ניחוש. */
-      themeGlyph: { dark: "☾", dim: "◐", light: "☀" }[s.theme] || "☾",
+      /* כל הסמלים הם תווי טקסט ולא אמוג'י. ⛵ ו-⚓ הם Emoji_Presentation
+         כברירת מחדל, כלומר הדפדפן מצייר אותם בצבע קבוע משלו — והם היו
+         מופיעים כשתי תמונות צבעוניות בשורה שכולה סמלים חד-גוניים.
+         ◇ ו-◆ הם אותה צורה בשני משקלים, וזה בדיוק מה ששתי ערכות
+         Coast הן זו לזו. */
+      themeGlyph: { dark: "☾", dim: "◐", light: "☀", coast: "◇", "coast-dark": "◆" }[s.theme] || "☾",
       themeTitle: "מעבר למצב " + (THEME_LABEL[this.nextTheme()] || ""),
       toggleTheme: () => this.toggleTheme(),
       chrome: chrome,
@@ -2769,6 +2956,41 @@ class Component extends DCLogic {
     this.setState({ fullscreen: on, fsFallback: on });
   }
 
+
+  /* תיבת סימון אמיתית ברשימת משימות.
+
+     span עם ✓ נראה זהה ואינו נגיש: קורא מסך אינו מכריז עליו כתיבת
+     סימון ואינו יודע לומר אם היא מסומנת. input אמיתי עם appearance:none
+     נותן את שתי התכונות — המראה שלנו והסמנטיקה של הדפדפן.
+
+     nested מגיע מרינדור בתוך מכולה, שם השורה אינה לחיצה. שם התיבה
+     disabled ולא pointer-events:none, כדי שהמצב עדיין יוכרז.
+
+     stopPropagation נדרש כי השורה כולה לחיצה: בלעדיו לחיצה על התיבה
+     הייתה נספרת פעמיים ומתקזזת לאפס. */
+  taskBox(it, nested, size) {
+    return React.createElement("input", {
+      key: "x",
+      type: "checkbox",
+      checked: !!it.done,
+      disabled: !!nested,
+      "aria-label": it.text,
+      onChange: nested ? undefined : this.toggleTaskLine(it.line),
+      onClick: (e) => e.stopPropagation(),
+      style: {
+        flex: "none", width: size, height: size, margin: 0, boxSizing: "border-box",
+        appearance: "none", WebkitAppearance: "none",
+        borderRadius: "var(--r-sm)",
+        border: it.done ? "1px solid var(--green)" : "1.5px solid var(--rule-strong)",
+        background: it.done ? "var(--green)" : "var(--card)",
+        backgroundImage: it.done ? BOX_TICK : "none",
+        backgroundRepeat: "no-repeat", backgroundPosition: "center",
+        backgroundSize: "80% 80%",
+        cursor: nested ? "default" : "pointer"
+      }
+    });
+  }
+
   /* העתקת המסמך כולו. משתמשת באותו מסלול של העתקת בלוק קוד, כולל
      הנפילה ל-textarea זמני כשה-clipboard API חסום. */
   async copyDocument() {
@@ -2993,10 +3215,27 @@ class Component extends DCLogic {
       } else if (s.indexOf("~~") === 0) {
         out.push(React.createElement("del", { key: k, style: { color: "var(--faint)" } }, this.kids(s.slice(2, -2))));
       } else if (s.indexOf("==") === 0) {
-        out.push(React.createElement("mark", { key: k, style: { background: "var(--mark-bg)", color: "var(--mark-fg)", borderRadius: "var(--r-sm)", padding: "1px 5px", fontWeight: 500 } }, this.kids(s.slice(2, -2))));
+        /* box-decoration-break: clone — הדגשה שנשברת בין שתי שורות מקבלת
+           בלעדיו ריפוד ופינות רק במקטע הראשון ובאחרון, והצורה שנוצרת
+           ב-RTL נראית כמו באג רינדור ולא כמו הדגשה. */
+        out.push(React.createElement("mark", { key: k, style: { background: "var(--mark-bg)", color: "var(--mark-fg)", borderRadius: "var(--r-sm)", padding: "1px 5px", fontWeight: 500, boxDecorationBreak: "clone", WebkitBoxDecorationBreak: "clone" } }, this.kids(s.slice(2, -2))));
       } else {
         const mm = s.match(/^\[([^\]]+)\]\(([^)]+)\)$/);
-        out.push(React.createElement("a", { key: k, href: safeHref(mm[2]), rel: "noopener noreferrer", style: { color: "var(--accent-text)", borderBottom: "1px solid var(--accent-ring)" } }, mm[1]));
+        /* קו תחתון אמיתי ולא border-bottom.
+
+           border-bottom נמתח לכל רוחב תיבת התוכן ואינו יודע דבר על
+           הכתב שמעליו. text-decoration כן: skip-ink שובר את הקו סביב
+           האותיות היורדות, ו-underline-offset מרחיק אותו מהן מלכתחילה.
+           בעברית זה לא נוי — ק, ן, ץ, ך יורדות מתחת לקו הבסיס מספיק
+           כדי להתנגש בקו במרחק ברירת המחדל, והקישור נראה מרוח. */
+        out.push(React.createElement("a", { key: k, href: safeHref(mm[2]), rel: "noopener noreferrer", style: {
+          color: "var(--accent-text)",
+          textDecorationLine: "underline",
+          textDecorationColor: "var(--accent-ring)",
+          textDecorationThickness: "1px",
+          textUnderlineOffset: "0.25em",
+          textDecorationSkipInk: "auto"
+        } }, mm[1]));
       }
       last = m.index + s.length;
     }
@@ -3196,17 +3435,13 @@ class Component extends DCLogic {
         if (ed) {
           out.push(React.createElement("div", { key: key, style: { display: "flex", flexDirection: "column", margin: "0 0 24px", borderTop: "1px solid var(--line-2)", maxWidth: "66ch" } },
             b.items.map((it, k) => React.createElement("div", { key: k, onClick: nested ? null : this.toggleTaskLine(it.line), style: { display: "flex", alignItems: "center", gap: 12, padding: "10px 2px", borderBottom: "1px solid var(--line-2)", fontSize: 16.5, color: it.done ? "var(--faint)" : "var(--text)", cursor: nested ? "default" : "pointer", userSelect: "none" } },
-              React.createElement("span", { key: "x", style: it.done
-                ? { flex: "none", display: "grid", placeItems: "center", width: 17, height: 17, border: "1px solid var(--accent)", background: "var(--accent)", color: "var(--accent-on)", fontSize: 11, lineHeight: 1 }
-                : { flex: "none", width: 17, height: 17, border: "1px solid var(--rule)", background: "var(--card)", boxSizing: "border-box" } }, it.done ? "✓" : ""),
-              React.createElement("span", { key: "t", style: it.done ? { textDecoration: "line-through" } : null }, this.inline(it.text))))));
+              this.taskBox(it, nested, 17),
+              React.createElement("span", { key: "t" }, this.inline(it.text))))));
         } else {
           out.push(React.createElement("div", { key: key, style: { display: "flex", flexDirection: "column", gap: 10, padding: "18px 20px", background: "var(--card)", border: "1px solid var(--line-2)", borderRadius: "var(--r-md)", margin: "0 0 20px" } },
             b.items.map((it, k) => React.createElement("div", { key: k, onClick: nested ? null : this.toggleTaskLine(it.line), style: { display: "flex", alignItems: "center", gap: 11, fontSize: 16, color: it.done ? "var(--faint-2)" : "var(--text)", cursor: nested ? "default" : "pointer", userSelect: "none" } },
-              React.createElement("span", { key: "x", style: it.done
-                ? { flex: "none", display: "grid", placeItems: "center", width: 19, height: 19, borderRadius: "var(--r-sm)", background: "var(--green)", color: "var(--green-on)", fontSize: 12, fontWeight: 700 }
-                : { flex: "none", width: 19, height: 19, borderRadius: "var(--r-sm)", border: "1.5px solid var(--rule-strong)", boxSizing: "border-box" } }, it.done ? "✓" : ""),
-              React.createElement("span", { key: "t", style: it.done ? { textDecoration: "line-through" } : null }, this.inline(it.text))))));
+              this.taskBox(it, nested, 19),
+              React.createElement("span", { key: "t" }, this.inline(it.text))))));
         }
 
       } else if (b.t === "table") {

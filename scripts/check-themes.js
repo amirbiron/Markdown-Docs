@@ -61,6 +61,19 @@ function themeOrderFromSource() {
 
 const ORDER = themeOrderFromSource();
 
+/* data-props הוא החוזה המוצהר של הרכיב — ממנו נגזרים ה-enum בעורך
+   והטיפוס. הוא נכתב ביד ואינו נגזר מ-THEME_ORDER, ולכן תמה חדשה
+   שנוספת לקוד ולא שם עובדת בזמן ריצה ואינה קיימת לפי המטא-דאטה.
+   זה בדיוק מה שקרה עם coast, ולכן הבדיקה כאן. */
+function declaredThemes() {
+  const fs = require('fs');
+  const path = require('path');
+  const html = fs.readFileSync(path.join(__dirname, '..', 'index.html'), 'utf8');
+  const m = html.match(/defaultTheme&quot;:\{[^}]*&quot;options&quot;:\[([^\]]+)\]/);
+  if (!m) return null;
+  return m[1].split(',').map((x) => x.replace(/&quot;/g, '').trim());
+}
+
 /* הגשר בין השניים: תמה שנוספה ל-index.html ואין לה שורה ב-EXPECTED
    הייתה נבדקת ריק. כאן זה נכשל ברעש. */
 const missing = ORDER.filter((t) => !EXPECTED[t]);
@@ -218,6 +231,12 @@ const snapshot = (page) =>
   check('לכל תמה כותרת אחרת בכפתור', distinct.size === ORDER.length, titles.join(' | '));
   const glyphs = new Set(seen.slice(0, ORDER.length).map((s) => s.glyph));
   check('ולכל תמה סמל אחר', glyphs.size === ORDER.length, [...glyphs].join(' '));
+
+  const declared = declaredThemes();
+  const undeclared = declared ? ORDER.filter((t) => declared.indexOf(t) < 0) : ORDER;
+  check('כל תמה מוצהרת גם ב-data-props',
+    !!declared && undeclared.length === 0,
+    declared ? `חסרות: ${undeclared.join(', ') || 'אין'}` : 'לא נמצא defaultTheme.options');
 
   // ── ערך פסול ב-localStorage לא מפיל ולא נדבק ──────────────────────
   await p.evaluate(() => localStorage.setItem('md-docs-theme', 'אין-כזו'));

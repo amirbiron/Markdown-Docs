@@ -39,6 +39,23 @@ body {
 a { color: var(--accent-text, #45b6ec); text-decoration: none; }
 a:hover { color: var(--accent-hover, #8ad3f7); }
 ::selection { background: var(--sel, rgba(0,136,204,0.35)); }
+
+/* טבעת מיקוד לכל פקד אינטראקטיבי, דרך focus-visible בלבד.
+
+   appearance:none על תיבת הסימון מוחק גם את טבעת המיקוד של הדפדפן,
+   ובלי הכלל הזה מסלול המקלדת דרך רשימת משימות הוא בלתי נראה לגמרי.
+   focus-visible ולא focus: לחיצת עכבר לא אמורה לצייר טבעת.
+
+   הכלל חל על הכול ולא רק על תיבות הסימון, כי אותה בעיה קיימת בכל
+   פקד שהעיצוב מסיר ממנו את המסגרת. */
+:focus-visible {
+  /* accent ולא accent-ring. accent-ring הוא אלפא 30%, ומעל משטח בהיר
+     הוא יוצא ביחס של 1.6:1 — טבעת שקיימת בקוד ואי אפשר לראות אותה.
+     accent המלא עובר 3:1 בכל חמש הערכות. */
+  outline: 2px solid var(--accent, #0088cc);
+  outline-offset: 2px;
+  border-radius: var(--r-sm, 3px);
+}
 * { scrollbar-width: thin; scrollbar-color: var(--scroll, #2a3860) transparent; }
 input, textarea { font-family: inherit; }
 
@@ -556,20 +573,7 @@ dir: rtl
       </div>
       <div style="margin:24px 0 0;padding:18px 20px;background:var(--card);border:1px solid var(--line-2);border-radius:var(--r-md)">
         <div style="margin:0 0 12px;font-family:var(--mono);font-size:11px;letter-spacing:0.1em;text-transform:uppercase;color:var(--faint)">רשימת משימות</div>
-        <div style="display:flex;flex-direction:column;gap:10px">
-          <div onClick="{{ task.t0 }}" style="display:flex;align-items:center;gap:11px;cursor:pointer;font-size:16px;color:var(--faint-2)">
-            <span style="flex:none;display:grid;place-items:center;width:19px;height:19px;border-radius:var(--r-sm);background:var(--green);color:var(--green-on);font-size:12px;font-weight:700"><sc-if value="{{ tasks.t0 }}" hint-placeholder-val="{{ true }}"><span>✓</span></sc-if></span>
-            <span style="text-decoration:line-through">הגדרת <span dir="ltr">dir="rtl"</span> על שורש המסמך</span>
-          </div>
-          <div onClick="{{ task.t1 }}" style="display:flex;align-items:center;gap:11px;cursor:pointer;font-size:16px;color:var(--faint-2)">
-            <span style="flex:none;display:grid;place-items:center;width:19px;height:19px;border-radius:var(--r-sm);background:var(--green);color:var(--green-on);font-size:12px;font-weight:700"><sc-if value="{{ tasks.t1 }}" hint-placeholder-val="{{ true }}"><span>✓</span></sc-if></span>
-            <span style="text-decoration:line-through">מעבר לתכונות לוגיות בכל הפריסה</span>
-          </div>
-          <div onClick="{{ task.t2 }}" style="display:flex;align-items:center;gap:11px;cursor:pointer;font-size:16px;color:var(--text)">
-            <span style="flex:none;display:grid;place-items:center;width:19px;height:19px;border-radius:var(--r-sm);border:1.5px solid var(--rule-strong);box-sizing:border-box;color:var(--green);font-size:12px;font-weight:700"><sc-if value="{{ tasks.t2 }}" hint-placeholder-val="{{ false }}"><span>✓</span></sc-if></span>
-            <span>שיקוף אייקוני ניווט בכיוון RTL</span>
-          </div>
-        </div>
+        <div>{{ referenceTasks }}</div>
       </div>
       <div style="margin:24px 0 0">
         <div style="margin:0 0 12px;font-family:var(--mono);font-size:11px;letter-spacing:0.1em;text-transform:uppercase;color:var(--faint)">רשימת הגדרות</div>
@@ -973,7 +977,7 @@ console.<span style="color:var(--tok-fn)">log</span>(doc.<span style="color:var(
 </div>
 
 </x-dc>
-<script type="text/x-dc" data-dc-script data-props="{&quot;showToc&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:true,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;פריסה&quot;},&quot;numberedHeadings&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:true,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;תוכן&quot;},&quot;showSourceByDefault&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:false,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;תוכן&quot;},&quot;defaultTheme&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;auto&quot;,&quot;dark&quot;,&quot;dim&quot;,&quot;light&quot;],&quot;default&quot;:&quot;auto&quot;,&quot;tsType&quot;:&quot;'auto' | 'dark' | 'dim' | 'light'&quot;,&quot;section&quot;:&quot;עיצוב&quot;},&quot;defaultCodeTab&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;javascript&quot;,&quot;python&quot;,&quot;curl&quot;],&quot;default&quot;:&quot;javascript&quot;,&quot;tsType&quot;:&quot;'javascript' | 'python' | 'curl'&quot;,&quot;section&quot;:&quot;תוכן&quot;}}">
+<script type="text/x-dc" data-dc-script data-props="{&quot;showToc&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:true,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;פריסה&quot;},&quot;numberedHeadings&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:true,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;תוכן&quot;},&quot;showSourceByDefault&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:false,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;תוכן&quot;},&quot;defaultTheme&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;auto&quot;,&quot;dark&quot;,&quot;dim&quot;,&quot;light&quot;,&quot;coast&quot;,&quot;coast-dark&quot;],&quot;default&quot;:&quot;auto&quot;,&quot;tsType&quot;:&quot;'auto' | 'dark' | 'dim' | 'light' | 'coast' | 'coast-dark'&quot;,&quot;section&quot;:&quot;עיצוב&quot;},&quot;defaultCodeTab&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;javascript&quot;,&quot;python&quot;,&quot;curl&quot;],&quot;default&quot;:&quot;javascript&quot;,&quot;tsType&quot;:&quot;'javascript' | 'python' | 'curl'&quot;,&quot;section&quot;:&quot;תוכן&quot;}}">
 const KEY = "md-docs-site-v1";
 const THEME_KEY = "md-docs-theme";
 
@@ -2797,8 +2801,7 @@ class Component extends DCLogic {
       copyPage: this.flash("page", "# רכיבי Markdown\n\nכל רכיב שהתיעוד יודע להציג, עם הסינטקס שמייצר אותו."),
       copiedPage: s.codeCopied === "page",
       notCopiedPage: s.codeCopied !== "page",
-      tasks: s.tasks,
-      task: { t0: this.toggleTask("t0"), t1: this.toggleTask("t1"), t2: this.toggleTask("t2") },
+      referenceTasks: this.referenceTasks(),
       voted: s.voted,
       voteYes: () => this.setState({ voted: true }),
       voteNo: () => this.setState({ voted: true })
@@ -2968,27 +2971,51 @@ class Component extends DCLogic {
 
      stopPropagation נדרש כי השורה כולה לחיצה: בלעדיו לחיצה על התיבה
      הייתה נספרת פעמיים ומתקזזת לאפס. */
-  taskBox(it, nested, size) {
+  taskBox(done, label, onToggle, size) {
     return React.createElement("input", {
       key: "x",
       type: "checkbox",
-      checked: !!it.done,
-      disabled: !!nested,
-      "aria-label": it.text,
-      onChange: nested ? undefined : this.toggleTaskLine(it.line),
+      checked: !!done,
+      disabled: !onToggle,
+      "aria-label": label,
+      onChange: onToggle || undefined,
       onClick: (e) => e.stopPropagation(),
       style: {
         flex: "none", width: size, height: size, margin: 0, boxSizing: "border-box",
         appearance: "none", WebkitAppearance: "none",
         borderRadius: "var(--r-sm)",
-        border: it.done ? "1px solid var(--green)" : "1.5px solid var(--rule-strong)",
-        background: it.done ? "var(--green)" : "var(--card)",
-        backgroundImage: it.done ? BOX_TICK : "none",
+        border: done ? "1px solid var(--green)" : "1.5px solid var(--rule-strong)",
+        background: done ? "var(--green)" : "var(--card)",
+        backgroundImage: done ? BOX_TICK : "none",
         backgroundRepeat: "no-repeat", backgroundPosition: "center",
         backgroundSize: "80% 80%",
-        cursor: nested ? "default" : "pointer"
+        cursor: onToggle ? "pointer" : "default"
       }
     });
+  }
+
+  /* שלוש משימות הדוגמה שבדף הרפרנס. הן נבנות מכאן ולא בתבנית, כדי
+     שיעברו באותו taskBox: תיבה מזויפת בדף שכל תפקידו להדגים את
+     הרינדור הנכון היא בדיוק המקום שבו אי-התאמה כזאת מתגלה מאוחר. */
+  referenceTasks() {
+    const s = this.state;
+    const rows = [
+      ["t0", "הגדרת dir=\"rtl\" על שורש המסמך"],
+      ["t1", "מעבר לתכונות לוגיות בכל הפריסה"],
+      ["t2", "שיקוף אייקוני ניווט בכיוון RTL"]
+    ];
+    return React.createElement("div", { style: { display: "flex", flexDirection: "column", gap: 10 } },
+      rows.map(([key, label]) => {
+        const done = !!s.tasks[key];
+        return React.createElement("div", {
+          key: key,
+          onClick: this.toggleTask(key),
+          style: { display: "flex", alignItems: "center", gap: 11, cursor: "pointer", fontSize: 16, color: done ? "var(--soft)" : "var(--text)", userSelect: "none" }
+        }, [
+          this.taskBox(done, label, this.toggleTask(key), 19),
+          React.createElement("span", { key: "t" }, label)
+        ]);
+      }));
   }
 
   /* העתקת המסמך כולו. משתמשת באותו מסלול של העתקת בלוק קוד, כולל
@@ -3434,13 +3461,13 @@ class Component extends DCLogic {
       } else if (b.t === "tasks") {
         if (ed) {
           out.push(React.createElement("div", { key: key, style: { display: "flex", flexDirection: "column", margin: "0 0 24px", borderTop: "1px solid var(--line-2)", maxWidth: "66ch" } },
-            b.items.map((it, k) => React.createElement("div", { key: k, onClick: nested ? null : this.toggleTaskLine(it.line), style: { display: "flex", alignItems: "center", gap: 12, padding: "10px 2px", borderBottom: "1px solid var(--line-2)", fontSize: 16.5, color: it.done ? "var(--faint)" : "var(--text)", cursor: nested ? "default" : "pointer", userSelect: "none" } },
-              this.taskBox(it, nested, 17),
+            b.items.map((it, k) => React.createElement("div", { key: k, onClick: nested ? null : this.toggleTaskLine(it.line), style: { display: "flex", alignItems: "center", gap: 12, padding: "10px 2px", borderBottom: "1px solid var(--line-2)", fontSize: 16.5, color: it.done ? "var(--soft)" : "var(--text)", cursor: nested ? "default" : "pointer", userSelect: "none" } },
+              this.taskBox(it.done, it.text, nested ? null : this.toggleTaskLine(it.line), 17),
               React.createElement("span", { key: "t" }, this.inline(it.text))))));
         } else {
           out.push(React.createElement("div", { key: key, style: { display: "flex", flexDirection: "column", gap: 10, padding: "18px 20px", background: "var(--card)", border: "1px solid var(--line-2)", borderRadius: "var(--r-md)", margin: "0 0 20px" } },
-            b.items.map((it, k) => React.createElement("div", { key: k, onClick: nested ? null : this.toggleTaskLine(it.line), style: { display: "flex", alignItems: "center", gap: 11, fontSize: 16, color: it.done ? "var(--faint-2)" : "var(--text)", cursor: nested ? "default" : "pointer", userSelect: "none" } },
-              this.taskBox(it, nested, 19),
+            b.items.map((it, k) => React.createElement("div", { key: k, onClick: nested ? null : this.toggleTaskLine(it.line), style: { display: "flex", alignItems: "center", gap: 11, fontSize: 16, color: it.done ? "var(--soft)" : "var(--text)", cursor: nested ? "default" : "pointer", userSelect: "none" } },
+              this.taskBox(it.done, it.text, nested ? null : this.toggleTaskLine(it.line), 19),
               React.createElement("span", { key: "t" }, this.inline(it.text))))));
         }
 

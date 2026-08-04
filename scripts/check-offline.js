@@ -73,7 +73,7 @@ if (!SP) {
   const dark = await probe();
 
   // ── אינטראקטיביות: זה מה שהיה נשבר אילו ה-casing של האטריביוטים אבד ──
-  await p.click('button[title="מעבר למצב בהיר"], button[title="מעבר למצב כהה"]');
+  await p.click('button[title^="מעבר למצב"]');
   await p.waitForTimeout(2500);
   const light = await probe();
 

@@ -960,7 +960,7 @@ console.<span style="color:var(--tok-fn)">log</span>(doc.<span style="color:var(
 </div>
 
 </x-dc>
-<script type="text/x-dc" data-dc-script data-props="{&quot;showToc&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:true,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;פריסה&quot;},&quot;numberedHeadings&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:true,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;תוכן&quot;},&quot;showSourceByDefault&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:false,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;תוכן&quot;},&quot;defaultTheme&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;auto&quot;,&quot;dark&quot;,&quot;light&quot;],&quot;default&quot;:&quot;auto&quot;,&quot;tsType&quot;:&quot;'auto' | 'dark' | 'light'&quot;,&quot;section&quot;:&quot;עיצוב&quot;},&quot;defaultCodeTab&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;javascript&quot;,&quot;python&quot;,&quot;curl&quot;],&quot;default&quot;:&quot;javascript&quot;,&quot;tsType&quot;:&quot;'javascript' | 'python' | 'curl'&quot;,&quot;section&quot;:&quot;תוכן&quot;}}">
+<script type="text/x-dc" data-dc-script data-props="{&quot;showToc&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:true,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;פריסה&quot;},&quot;numberedHeadings&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:true,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;תוכן&quot;},&quot;showSourceByDefault&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:false,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;תוכן&quot;},&quot;defaultTheme&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;auto&quot;,&quot;dark&quot;,&quot;dim&quot;,&quot;light&quot;],&quot;default&quot;:&quot;auto&quot;,&quot;tsType&quot;:&quot;'auto' | 'dark' | 'dim' | 'light'&quot;,&quot;section&quot;:&quot;עיצוב&quot;},&quot;defaultCodeTab&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;javascript&quot;,&quot;python&quot;,&quot;curl&quot;],&quot;default&quot;:&quot;javascript&quot;,&quot;tsType&quot;:&quot;'javascript' | 'python' | 'curl'&quot;,&quot;section&quot;:&quot;תוכן&quot;}}">
 const KEY = "md-docs-site-v1";
 const THEME_KEY = "md-docs-theme";
 
@@ -980,6 +980,12 @@ const THEME_KEY = "md-docs-theme";
    ═══════════════════════════════════════════════════════════════════ */
 
 const DARK = {
+  /* scheme — לאיזו משפחה התמה שייכת, עבור color-scheme של הדפדפן.
+     editorial — האם צורות הבלוקים הן של העיצוב ה-Editorial.
+     שניהם מוצהרים על התמה ולא נגזרים משמה, כי השוואת שם ("האם זה
+     light?") מחייבת כל תמה עתידית לזכור להיות "לא light". */
+  scheme: "dark", editorial: false,
+
   sans: "'Heebo','Assistant','Noto Sans Hebrew',sans-serif",
   display: "'Heebo','Assistant',sans-serif",
   mono: "'JetBrains Mono','Consolas',monospace",
@@ -1029,6 +1035,8 @@ const DARK = {
 };
 
 const LIGHT = {
+  scheme: "light", editorial: true,
+
   sans: "'Assistant','Heebo',sans-serif",
   display: "'Frank Ruhl Libre','Georgia',serif",
   mono: "'IBM Plex Mono','Consolas',monospace",
@@ -1077,9 +1085,82 @@ const LIGHT = {
   "ref-h1": "50px", "ref-h2": "31px", "ref-h3": "23px"
 };
 
+/* ═══════════════════════════════════════════════════════════════════
+   DIM — העיצוב השלישי (docs/Third_design.html)
+
+   אפור חמים עם אקסנט ענבר. משפחת הכהים, לא גרסה של הבהיר: הגיאומטריה
+   כאן זהה כמעט לגמרי ל-DARK, וההבדל הוא הטמפרטורה — בסיס אפרפר-חום
+   במקום כחול קר, וטקסט שנוטה לשמנת במקום ללבן.
+   ═══════════════════════════════════════════════════════════════════ */
+const DIM = {
+  /* scheme קובע ל-color-scheme של הדפדפן, ו-editorial קובע אם צורות
+     הבלוקים הן של העיצוב ה-Editorial. שניהם מוצהרים על התמה עצמה כדי
+     שהקוד לא ישאל "איזו תמה זו" — ראו applyTheme. */
+  scheme: "dark", editorial: false,
+
+  sans: "'Rubik','Heebo','Noto Sans Hebrew',sans-serif",
+  display: "'Rubik','Heebo',sans-serif",
+  mono: "'Source Code Pro','Consolas',monospace",
+
+  bg: "#2f3338", rail: "#292c31", bar: "rgba(41,44,49,0.92)",
+  panel: "#2a2d32", "panel-2": "#303439", card: "#2a2d32",
+  tint: "#303439", "tint-2": "#3a3f45", hover: "#3a3f45",
+  line: "#3b4046", "line-2": "#454a51", hair: "#3b4046",
+  rule: "#4a5057", "rule-2": "#5d646c", "rule-strong": "#6b737c",
+
+  ink: "#f7f4ef", head: "#f2efe9", text: "#dcd8d0", "text-2": "#e4e0d8",
+  soft: "#b8b2a9", muted: "#a8a29a", faint: "#837d75", "faint-2": "#9c968e",
+  "code-text": "#dcd8d0", "code-inline": "#e0a566", "code-well": "rgba(0,0,0,0.22)",
+
+  accent: "#c8823c", "accent-text": "#e0a566", "accent-hover": "#eec089", "accent-on": "#241505",
+  "accent-soft": "rgba(200,130,60,0.14)", "accent-soft-2": "rgba(200,130,60,0.07)", "accent-ring": "rgba(200,130,60,0.3)",
+
+  green: "#7fa86a", "green-soft": "rgba(127,168,106,0.12)", "green-ring": "rgba(127,168,106,0.3)", "green-on": "#16210f", "green-text": "#a3c78e",
+  amber: "#d9a05b", "amber-soft": "rgba(217,160,91,0.12)", "amber-ring": "rgba(217,160,91,0.3)", "amber-on": "#241a08",
+  red: "#cf6a5a", "red-soft": "rgba(207,106,90,0.12)", "red-ring": "rgba(207,106,90,0.3)", "red-on": "#2a0d08", "red-text": "#e79a8c", "red-text-2": "#dd8878",
+  purple: "#a98cc0", "purple-soft": "rgba(169,140,192,0.12)", "purple-soft-2": "rgba(169,140,192,0.16)", "purple-ring": "rgba(169,140,192,0.3)", "purple-on": "#1c1327", "purple-text": "#c4aed6", "purple-text-2": "#d6c6e4",
+
+  pink: "#d4749b", "pink-soft": "rgba(212,116,155,0.12)", "pink-on": "#2a1017",
+  sky: "#e0a566", "sky-soft": "rgba(224,165,102,0.12)", "sky-on": "#241505",
+  teal: "#6fae9f", "teal-soft": "rgba(111,174,159,0.12)", "teal-on": "#0f1f1c",
+  gray: "#9c968e", "gray-soft": "rgba(156,150,142,0.1)", "gray-on": "#2f3338",
+  brown: "#b98a5e", "brown-soft": "rgba(185,138,94,0.14)", "brown-on": "#241a08",
+  steel: "#7f92ad", "steel-soft": "rgba(127,146,173,0.12)", "steel-on": "#1b2028",
+  steelblue: "#7f9dc0", "steelblue-soft": "rgba(127,157,192,0.12)", "steelblue-on": "#241505",
+
+  hatch: "rgba(200,130,60,0.14)", sel: "rgba(200,130,60,0.35)", scroll: "#4a5057",
+  shadow: "0 6px 30px rgba(0,0,0,0.28)", "shadow-2": "0 10px 40px rgba(0,0,0,0.38)",
+
+  "tok-comment": "#8a9a75", "tok-punct": "#b8b2a9", "tok-kw": "#cb95c4", "tok-kw-weight": "400",
+  "tok-str": "#dba57f", "tok-fn": "#e4d69a", "tok-num": "#adc79a", "tok-var": "#a3c9d8",
+  "tok-tag": "#85a9c9", "tok-type": "#6fae9f", "tok-ins": "#7fa86a", "tok-del": "#cf6a5a",
+
+  "r-sm": "7px", "r-md": "10px", "r-lg": "12px", "r-pill": "20px",
+  "bar-h": "56px", "bar-pad": "22px", "bar-gap": "9px",
+  "rail-w": "280px", "rail-pad": "24px 18px 36px", "rail-head-gap": "20px",
+  "rail-title-size": "15.5px", "rail-sub-gap": "0px", "rail-sub-track": "0", "rail-sub-case": "none",
+  "crumb-font": "'Rubik','Heebo',sans-serif", "crumb-size": "13.5px", "crumb-track": "0",
+  "shell-w": "1560px", "main-w": "900px", "main-pad": "40px 30px 90px",
+  "doc-gap": "2px", "doc-list-rule": "0", "doc-head-gap": "30px",
+  "h1-size": "44px", "lead-size": "18.5px",
+  "ref-h1": "46px", "ref-h2": "27px", "ref-h3": "20px"
+};
+
 /* מפות mermaid — הערכים כאן חייבים להיות ממשיים ולא var(), כי mermaid
    מקבל אותם כאובייקט JS ומזריק אותם ל-SVG בעצמו. */
 const MERMAID = {
+  dim: {
+    node: "#3f4a52", nodeBorder: "#c8823c", cluster: "#2b2f34", clusterBorder: "#5d646c",
+    line: "#e0a566", text: "#f2efe9", edgeBg: "#2a2d32", surface: "#2a2d32",
+    vars: {
+      darkMode: true, background: "#2a2d32", primaryColor: "#3f4a52", primaryBorderColor: "#c8823c", primaryTextColor: "#f2efe9",
+      secondaryColor: "#3b4a3a", secondaryBorderColor: "#7fa86a", secondaryTextColor: "#f2efe9",
+      tertiaryColor: "#453a4d", tertiaryBorderColor: "#a98cc0", tertiaryTextColor: "#f2efe9",
+      lineColor: "#e0a566", textColor: "#dcd8d0", mainBkg: "#3f4a52", nodeBorder: "#c8823c",
+      clusterBkg: "#2b2f34", clusterBorder: "#5d646c", edgeLabelBackground: "#2a2d32", titleColor: "#f2efe9",
+      noteBkgColor: "#3d3524", noteBorderColor: "#d9a05b", fontSize: "16px"
+    }
+  },
   dark: {
     node: "#123950", nodeBorder: "#0088cc", cluster: "#101830", clusterBorder: "#3d5a80",
     line: "#45b6ec", text: "#e9edf7", edgeBg: "#0d1223", surface: "#0d1223",
@@ -1259,7 +1340,25 @@ const CHROME = {
   }
 };
 
-const THEMES = { dark: DARK, light: LIGHT };
+/* dim חולק את הצורות של dark — כל המחרוזות שם בנויות מ-var(), ולכן הן
+   כבר מקבלות את הצבעים של התמה הפעילה. העתקה שלהן הייתה יוצרת בלוק
+   שלישי שנשאר מאחור בכל שינוי עיצוב בשניים האחרים. */
+CHROME.dim = Object.assign({}, CHROME.dark);
+
+const THEMES = { dark: DARK, dim: DIM, light: LIGHT };
+
+/* סדר המחזור של הכפתור. dim יושב בין הכהה לבהיר כי הוא באמצע
+   מבחינת בהירות, וזה מה שהופך את הלחיצה הבאה לצפויה. */
+const THEME_ORDER = ["dark", "dim", "light"];
+const THEME_LABEL = { dark: "כהה", dim: "עמום", light: "בהיר" };
+
+/* שדות שהם מטא-דאטה של התמה ולא משתני CSS. רשימה אחת ולא בדיקת שם
+   מפוזרת ב-applyTheme: שדה חדש שיתווסף לערכות צריך שורה כאן, אחרת הוא
+   ידלוף כ---something שאיש לא קורא. */
+const THEME_META_KEYS = ["scheme", "editorial"];
+
+/* color-scheme מקבל את שני אלה בלבד. */
+const COLOR_SCHEMES = ["dark", "light"];
 
 const REF_SECTIONS = [
   { id: "sec-01", label: "טיפוגרפיה וכותרות" },
@@ -1357,6 +1456,9 @@ class Component extends DCLogic {
     this.onMq();
 
     this.mqDark = window.matchMedia("(prefers-color-scheme: dark)");
+    /* dim אינה נכנסת לזיהוי האוטומטי בכוונה: למערכת ההפעלה יש שתי
+       העדפות בלבד, ו-dim היא בחירה של המשתמש. מי שבחר בה שמור
+       ב-localStorage, ולכן התנאי כאן לא נוגע בו. */
     this.onScheme = () => { if (!this.storedTheme()) this.applyTheme(this.mqDark.matches ? "dark" : "light"); };
     this.mqDark.addEventListener("change", this.onScheme);
 
@@ -1994,8 +2096,10 @@ class Component extends DCLogic {
     return {
       /* --- ערכת עיצוב --- */
       theme: s.theme,
-      themeGlyph: ed ? "☾" : "☀",
-      themeTitle: ed ? "מעבר למצב כהה" : "מעבר למצב בהיר",
+      /* הסמל מייצג את התמה הפעילה, והכותרת אומרת לאן הלחיצה תוביל.
+         בלי הכותרת, מחזור בן שלושה מצבים הוא ניחוש. */
+      themeGlyph: { dark: "☾", dim: "◐", light: "☀" }[s.theme] || "☾",
+      themeTitle: "מעבר למצב " + (THEME_LABEL[this.nextTheme()] || ""),
       toggleTheme: () => this.toggleTheme(),
       chrome: chrome,
       srcLabel: chrome.srcLabel,
@@ -2508,7 +2612,10 @@ class Component extends DCLogic {
   }
 
   inline(text) {
-    const ed = this.state.theme === "light";
+    /* התמה מצהירה על צורת הבלוקים שלה במקום שנשווה שמות. עם השוואה
+       ל-"light", כל תמה חדשה נכנסת אוטומטית למשפחת הכהים — וזה נכון
+       ל-dim במקרה, לא בכוונה. */
+    const ed = this.editorial();
     const out = [];
     const re = /(`[^`]+`)|(\*\*[^*]+\*\*)|(\*[^*\n]+\*)|(~~[^~]+~~)|(==[^=]+==)|(\[[^\]]+\]\([^)]+\))/g;
     let last = 0, m, k = 0;
@@ -2571,7 +2678,10 @@ class Component extends DCLogic {
   }
 
   render_blocks(parsed, numbered, skipIdx, nested) {
-    const ed = this.state.theme === "light";
+    /* התמה מצהירה על צורת הבלוקים שלה במקום שנשווה שמות. עם השוואה
+       ל-"light", כל תמה חדשה נכנסת אוטומטית למשפחת הכהים — וזה נכון
+       ל-dim במקרה, לא בכוונה. */
+    const ed = this.editorial();
     const out = [];
     let h2 = 0, hi = 0;
     parsed.blocks.forEach((b, idx) => {
@@ -2783,17 +2893,26 @@ class Component extends DCLogic {
     return MERMAID[this.state.theme] || MERMAID.dark;
   }
 
+  /* האם התמה הפעילה משתמשת בצורות של העיצוב ה-Editorial. */
+  editorial() {
+    const theme = THEMES[this.state.theme] || DARK;
+    return theme.editorial === true;
+  }
+
   storedTheme() {
     let v = null;
     try { v = localStorage.getItem(THEME_KEY); } catch (e) { v = null; }
-    return v === "dark" || v === "light" ? v : null;
+    /* נבדק מול הרשימה בפועל ולא מול שמות כתובים. שם שהוסר בעתיד יחזור
+       ל-null ולברירת המחדל, במקום להגיע ל-applyTheme ולהיכתב כ-
+       data-theme שאין לו ערכה. */
+    return THEME_ORDER.indexOf(v) >= 0 ? v : null;
   }
 
   initialTheme() {
     const stored = this.storedTheme();
     if (stored) return stored;
     const prop = this.props.defaultTheme || "auto";
-    if (prop === "dark" || prop === "light") return prop;
+    if (THEME_ORDER.indexOf(prop) >= 0) return prop;
     try {
       return window.matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark";
     } catch (e) { return "dark"; }
@@ -2803,14 +2922,32 @@ class Component extends DCLogic {
     const c = THEMES[mode] || DARK;
     const root = document.documentElement;
     root.setAttribute("data-theme", mode);
-    root.style.colorScheme = mode;
-    Object.keys(c).forEach((k) => root.style.setProperty("--" + k, c[k]));
+    /* color-scheme מקבל dark או light בלבד. "dim" אינו ערך חוקי, ופסי
+       הגלילה, פקדי הטפסים וההשלמה האוטומטית של הדפדפן היו נופלים
+       לברירת מחדל שגויה בשקט.
+       הערך נבדק ולא רק נלקח: ערכה שתצהיר משהו אחר תקבל dark במקום
+       להזליג ערך פסול שהדפדפן מתעלם ממנו — שוב, בשקט. */
+    root.style.colorScheme = COLOR_SCHEMES.indexOf(c.scheme) >= 0 ? c.scheme : "dark";
+    /* המטא-דאטה מסונן לפי THEME_META_KEYS. בלי הסינון היו נוצרים
+       --scheme ו---editorial שאיש לא קורא, והשני היה המחרוזת "false" —
+       ערך שנראה אמיתי בכל בדיקה. */
+    Object.keys(c).forEach((k) => {
+      if (THEME_META_KEYS.indexOf(k) >= 0) return;
+      root.style.setProperty("--" + k, c[k]);
+    });
     this.setState({ theme: mode });
     this.repaintDiagrams();
   }
 
+  /* מחזור ולא החלפה. שלוש תמות אינן נכנסות לכפתור דו-מצבי, ופקד
+     מקטעים היה מצטופף בסרגל שכבר מחזיק חמישה פקדים. */
+  nextTheme() {
+    const at = THEME_ORDER.indexOf(this.state.theme);
+    return THEME_ORDER[(at + 1) % THEME_ORDER.length];
+  }
+
   toggleTheme() {
-    const next = this.state.theme === "dark" ? "light" : "dark";
+    const next = this.nextTheme();
     try { localStorage.setItem(THEME_KEY, next); } catch (e) { /* אחסון חסום */ }
     this.applyTheme(next);
   }

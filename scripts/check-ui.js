@@ -136,7 +136,7 @@ const check = (label, ok, extra) => {
 
   // ── מצב בהיר עדיין עובד ───────────────────────────────────────────
   const before = await p.evaluate(() => document.documentElement.getAttribute('data-theme'));
-  await p.click('button[title="מעבר למצב בהיר"], button[title="מעבר למצב כהה"]');
+  await p.click('button[title^="מעבר למצב"]');
   await p.waitForTimeout(1500);
   const after = await p.evaluate(() => document.documentElement.getAttribute('data-theme'));
   check('החלפת מצב עובדת', before !== after, `${before} → ${after}`);

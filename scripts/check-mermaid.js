@@ -107,7 +107,7 @@ function measure(minRatio) {
   const errs = [];
   let slug = null;
 
-  for (const theme of ['dark', 'dim', 'light']) {
+  for (const theme of ['dark', 'dim', 'light', 'coast', 'coast-dark']) {
     const ctx = await browser.newContext({ viewport: { width: 1500, height: 1000 } });
     const p = await ctx.newPage();
     p.on('console', (m) => { if (m.type() === 'error') errs.push(`${theme}: ${m.text()}`); });

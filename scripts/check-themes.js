@@ -38,6 +38,10 @@ const EXPECTED = {
   dark: { scheme: 'dark', bg: '#0e1022', accent: '#0088cc', font: 'Heebo', editorial: false },
   dim: { scheme: 'dark', bg: '#2f3338', accent: '#c8823c', font: 'Rubik', editorial: false },
   light: { scheme: 'light', bg: '#f7f5f1', accent: '#9c3b2e', font: 'Assistant', editorial: true },
+  /* שתי ערכות Coast הן זהות אחת בשתי בהירויות, ולכן שתיהן editorial
+     ושתיהן על אותו סולם גופנים. מה שנבדל הוא scheme, הרקע והאקסנט. */
+  coast: { scheme: 'light', bg: '#f9f4e8', accent: '#1e5f8c', font: 'Heebo', editorial: true },
+  'coast-dark': { scheme: 'dark', bg: '#0a1828', accent: '#76b5d9', font: 'Heebo', editorial: true },
 };
 
 /* סדר המחזור, לעומת זאת, כן נקרא מהמקור. הוא מטא-דאטה ולא ערך שנבדק,
@@ -56,6 +60,19 @@ function themeOrderFromSource() {
 }
 
 const ORDER = themeOrderFromSource();
+
+/* data-props הוא החוזה המוצהר של הרכיב — ממנו נגזרים ה-enum בעורך
+   והטיפוס. הוא נכתב ביד ואינו נגזר מ-THEME_ORDER, ולכן תמה חדשה
+   שנוספת לקוד ולא שם עובדת בזמן ריצה ואינה קיימת לפי המטא-דאטה.
+   זה בדיוק מה שקרה עם coast, ולכן הבדיקה כאן. */
+function declaredThemes() {
+  const fs = require('fs');
+  const path = require('path');
+  const html = fs.readFileSync(path.join(__dirname, '..', 'index.html'), 'utf8');
+  const m = html.match(/defaultTheme&quot;:\{[^}]*&quot;options&quot;:\[([^\]]+)\]/);
+  if (!m) return null;
+  return m[1].split(',').map((x) => x.replace(/&quot;/g, '').trim());
+}
 
 /* הגשר בין השניים: תמה שנוספה ל-index.html ואין לה שורה ב-EXPECTED
    הייתה נבדקת ריק. כאן זה נכשל ברעש. */
@@ -207,9 +224,19 @@ const snapshot = (page) =>
   // ── הכותרת אומרת לאן הלחיצה תוביל ─────────────────────────────────
   const titles = seen.slice(0, ORDER.length).map((s) => `${s.theme}:${s.title}`);
   const distinct = new Set(seen.slice(0, ORDER.length).map((s) => s.title));
-  check('לכל תמה כותרת אחרת בכפתור', distinct.size === 3, titles.join(' | '));
+  /* המספר נגזר מ-ORDER ואינו קבוע. קבוע 3 כאן היה בדיוק אותה בעיה
+     שהתגובה למעלה מזהירה ממנה, רק בכיוון ההפוך: תמה רביעית עם כותרת
+     תקינה לגמרי הייתה מפילה את הבדיקה, ותמה רביעית שחולקת כותרת עם
+     אחרת הייתה עוברת. */
+  check('לכל תמה כותרת אחרת בכפתור', distinct.size === ORDER.length, titles.join(' | '));
   const glyphs = new Set(seen.slice(0, ORDER.length).map((s) => s.glyph));
-  check('ולכל תמה סמל אחר', glyphs.size === 3, [...glyphs].join(' '));
+  check('ולכל תמה סמל אחר', glyphs.size === ORDER.length, [...glyphs].join(' '));
+
+  const declared = declaredThemes();
+  const undeclared = declared ? ORDER.filter((t) => declared.indexOf(t) < 0) : ORDER;
+  check('כל תמה מוצהרת גם ב-data-props',
+    !!declared && undeclared.length === 0,
+    declared ? `חסרות: ${undeclared.join(', ') || 'אין'}` : 'לא נמצא defaultTheme.options');
 
   // ── ערך פסול ב-localStorage לא מפיל ולא נדבק ──────────────────────
   await p.evaluate(() => localStorage.setItem('md-docs-theme', 'אין-כזו'));

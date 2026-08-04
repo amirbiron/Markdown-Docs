@@ -2,10 +2,11 @@
  *
  *   node scripts/check-syntax.js
  *
- * הקוד של הרכיב חי בתוך <script> ב-index.html, ו-dc-runtime מריץ אותו
- * דרך new Function. שגיאת תחביר שם לא מפילה את הדף בקול: ה-runtime תופס
- * אותה, מדפיס אזהרה לקונסולה, ומרנדר את התבנית עם props בלבד — כלומר
- * מסך שנראה כמעט תקין ולא מגיב לכלום.
+ * הקוד של הרכיב חי בתוך <script type="text/x-dc" data-dc-script>
+ * ב-index.html, ו-dc-runtime מריץ אותו דרך new Function. שגיאת תחביר שם
+ * לא מפילה את הדף בקול: ה-runtime תופס אותה, מדפיס אזהרה לקונסולה,
+ * ומרנדר את התבנית עם props בלבד — כלומר מסך שנראה כמעט תקין ולא מגיב
+ * לכלום.
  *
  * בדיקות הדפדפן כן תופסות את זה, כי הן נכשלות על שגיאת קונסולה. אבל הן
  * דורשות שרת, מסד נתונים ודפדפן, ולוקחות דקה — והבדיקה הזאת עושה את
@@ -17,12 +18,25 @@ const path = require('path');
 const vm = require('vm');
 
 const FILE = path.join(__dirname, '..', 'index.html');
-const START = 'class Component extends DCLogic';
+/* העוגן הוא תגית ה-script עצמה ולא `class Component`.
+
+   העיגון על המחלקה נראה מדויק יותר, והוא היה חור: כל מה שמעליה באותו
+   בלוק — הערכות, CHROME, SNIPPETS, MERMAID, הקבועים — לא נבדק כלל.
+   שגיאת תחביר שם עוברת את ה-runtime באותה דרך בדיוק, כלומר מרנדרת דף
+   שלא מגיב לכלום, ואת הבדיקה הזאת היא הייתה עוברת בשקט. */
+const START = '<script type="text/x-dc" data-dc-script';
 
 const html = fs.readFileSync(FILE, 'utf8');
-const from = html.indexOf(START);
-if (from < 0) {
-  console.error(`לא נמצא "${START}" ב-index.html — הבדיקה הזאת מסתמכת עליו כעוגן`);
+const tag = html.indexOf(START);
+if (tag < 0) {
+  console.error(`לא נמצאה התגית ${START} ב-index.html — הבדיקה מסתמכת עליה כעוגן`);
+  process.exit(1);
+}
+/* סוף תגית הפתיחה. data-props הוא JSON מקודד ב-entities ואין בו '>' גולמי,
+   ולכן הסוגר הראשון שאחרי תחילת התגית הוא הנכון. */
+const from = html.indexOf('>', tag) + 1;
+if (from === 0) {
+  console.error('תגית ה-script לא נסגרה');
   process.exit(1);
 }
 const to = html.indexOf('</script>', from);
@@ -45,4 +59,4 @@ try {
   process.exit(1);
 }
 
-console.log(`התחביר תקין (${source.split('\n').length} שורות לוגיקה)`);
+console.log(`התחביר תקין (${source.split('\n').length} שורות לוגיקה, כל הבלוק)`);

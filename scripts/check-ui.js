@@ -77,7 +77,7 @@ const check = (label, ok, extra) => {
 
   // מסמך דרך מסך הכתיבה — המסך המפוצל שנפתח מכפתור הסרגל
   await p.getByRole('button', { name: /new document|כתיבת מסמך חדש/i }).click();
-  await p.waitForTimeout(800);
+  await p.waitForSelector('input[placeholder^="שם המסמך"]', { timeout: 15000 });
   await p.fill('textarea', '# מדריך התקנה\n\nפסקת פתיחה.\n\n## שלב ראשון\n\n- פריט\n- פריט נוסף\n');
   await p.getByRole('button', { name: 'הוספה לפרויקט' }).click();
   await p.waitForTimeout(2500);

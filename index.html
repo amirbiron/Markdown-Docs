@@ -1241,6 +1241,10 @@ const CALLOUT = {
   details: { hue: "gray", g: "▸", label: "פרטים" }
 };
 
+/* אלף-בית ללא סופיות, לפי סדר הקריאה ולא לפי סדר יוניקוד. משמש
+   להמשך רשימות ממוספרות באותיות: "א)" · "ב)" · "ג)". */
+const HEB_ALPHABET = "אבגדהוזחטיכלמנסעפצקרשת";
+
 /* ═══════════════════════════════════════════════════════════════════
    תבניות סרגל העריכה — טבלה אחת
 
@@ -1814,34 +1818,57 @@ class Component extends DCLogic {
      ה-buffer המשותף הוא גם הסיבה להברחת השמירה: פתיחת מסך היצירה
      באמצע חלון ה-debounce הייתה מוחקת את מה שהוקלד בעורך. */
   async startCreating() {
+    /* גם לחיצה חוזרת על הכפתור בזמן שהמסך כבר פתוח מוחקת טיוטה, ולכן
+       היא עוברת באותו אישור. אחרי אישור מתחילים טיוטה חדשה ונשארים
+       במסך — הכפתור אומר "מסמך חדש", לא "סגירה". */
+    if (!this.mayDiscardDraft()) return;
     if (this.state.editing) await this.flushSave();
-    this.setState({
-      creating: true, editing: false,
-      editBuf: "", editView: "", draftTitle: "", saveState: ""
-    });
+    this.resetEditor({ creating: true, editing: false, saveState: "" });
   }
 
   cancelCreating() {
-    this.setState({ creating: false, editBuf: "", editView: "", draftTitle: "" });
+    if (!this.mayDiscardDraft()) return;
+    this.resetEditor({ creating: false });
   }
 
-  /* ניווט החוצה ממסך היצירה. הטיוטה חיה רק בזיכרון, ולכן מעבר למסמך
-     אחר או לרשימת הפרויקטים מוחק אותה — מאשרים לפני, ורק כשיש בה
-     תוכן. מחזיר false כשהמשתמש ביטל, וכל קורא חייב לעצור אז. */
-  confirmLeaveCreating() {
+  /* השאלה בלבד, בלי תופעות לוואי. הטיוטה חיה רק בזיכרון, ולכן כל
+     מסלול שמוחק אותה עובר כאן: מעבר מסך, מעבר מסמך, ביטול, ולחיצה
+     חוזרת על "מסמך חדש". */
+  mayDiscardDraft() {
     if (!this.state.creating) return true;
     const dirty = this.state.editBuf.trim() || this.state.draftTitle.trim();
-    if (dirty && !window.confirm("הטיוטה שנכתבה כאן תימחק. להמשיך?")) return false;
-    this.setState({ creating: false, editBuf: "", editView: "", draftTitle: "" });
+    return !dirty || window.confirm("הטיוטה שנכתבה כאן תימחק. להמשיך?");
+  }
+
+  /* ניווט החוצה ממסך היצירה. מחזיר false כשהמשתמש ביטל, וכל קורא
+     חייב לעצור אז. */
+  confirmLeaveCreating() {
+    if (!this.mayDiscardDraft()) return false;
+    if (this.state.creating) this.resetEditor({ creating: false });
     return true;
   }
 
+  /* איפוס ה-buffer המשותף לעורך ולמסך היצירה.
+
+     ביטול הטיימרים הוא לא ניקיון: טיימר הפריוויו מחזיק את הערך הישן
+     ב-closure, ואם הוא פורק אחרי האיפוס הוא מחזיר את התוכן הקודם
+     ל-editView. התוצאה היא תיבה ריקה מול פריוויו של מסמך אחר. */
+  resetEditor(extra) {
+    clearTimeout(this.previewTimer);
+    this.previewTimer = null;
+    clearTimeout(this.saveTimer);
+    this.saveTimer = null;
+    this.setState(Object.assign({ editBuf: "", editView: "", draftTitle: "" }, extra || {}));
+  }
+
   async submitDraft() {
-    const content = this.state.editBuf.trim();
-    if (!content) return;
+    /* trim רק כדי לדעת אם יש תוכן. מה שנשמר הוא מה שנכתב — רווחים
+       והזחה בתחילת המסמך הם לפעמים חלק ממנו. */
+    const content = this.state.editBuf;
+    if (!content.trim()) return;
     const title = this.state.draftTitle.trim();
     await this.createDocuments([{ title: title || this.titleFromMarkdown(content), content: content }]);
-    this.setState({ creating: false, editBuf: "", editView: "", draftTitle: "" });
+    this.resetEditor({ creating: false });
   }
 
   /* עברית מבחינה בין יחיד לרבים: "1 מסמכים" קריא כשגיאה. */
@@ -1991,7 +2018,10 @@ class Component extends DCLogic {
 
           keepH1 רק במצב יצירה: בעריכה כותרת רמה 1 מוצגת בכותרת העמוד
           שמעל המסך המפוצל, ובמסך היצירה אין כותרת כזאת. */
-    }, this.render_blocks(parsed, this.props.numberedHeadings ?? true, -1, false, s.creating));
+    }, this.render_blocks(parsed, {
+         numbered: this.props.numberedHeadings ?? true,
+         keepH1: s.creating
+       }));
 
     const pane = (children, title) => React.createElement("div", {
       style: {
@@ -2084,11 +2114,12 @@ class Component extends DCLogic {
     } else if (num) {
       next = String(parseInt(num, 10) + 1) + numSep;
     } else {
-      /* אותיות עבריות: המשך לפי מיקום באלף-בית. ת היא הסוף — אחריה
-         נעצרים במקום לגלוש לתווים שאינם אותיות. */
-      const code = heb.charCodeAt(0);
-      if (code >= 0x05ea) return null;
-      next = String.fromCharCode(code + 1) + hebSep;
+      /* רצף מפורש ולא charCodeAt+1: בטבלת יוניקוד הסופיות יושבות בין
+         האותיות, ולכן י+1 הוא ך, ל+1 הוא ם, ופ+1 הוא ץ. ת היא הסוף —
+         אחריה נעצרים. אות סופית כמסמן אינה ברצף ולכן גם היא עוצרת. */
+      const idx = HEB_ALPHABET.indexOf(heb);
+      if (idx < 0 || idx === HEB_ALPHABET.length - 1) return null;
+      next = HEB_ALPHABET[idx + 1] + hebSep;
     }
     return { indent: indent, marker: next, gap: gap, empty: rest.trim() === "" };
   }
@@ -2106,9 +2137,14 @@ class Component extends DCLogic {
     const value = this.state.editBuf;
     const at = el.selectionStart;
     const lineStart = value.lastIndexOf("\n", at - 1) + 1;
-    const current = value.slice(lineStart, at);
 
-    const cont = this.listContinuation(current);
+    /* שתי בדיקות ולא אחת. מה שלפני הסמן קובע אם הסמן בכלל עבר את
+       הסימון — Enter לפניו הוא Enter רגיל. אבל הריקנות נקבעת לפי
+       השורה כולה: "1. |טקסט" נראה ריק ממה שלפני הסמן, ויציאה מהרשימה
+       שם הייתה מוחקת את הסימון ומשאירה את הטקסט מרחף. */
+    if (!this.listContinuation(value.slice(lineStart, at))) return;
+    const lineEnd = value.indexOf("\n", at);
+    const cont = this.listContinuation(value.slice(lineStart, lineEnd < 0 ? value.length : lineEnd));
     if (!cont) return;
 
     e.preventDefault();
@@ -2425,7 +2461,7 @@ class Component extends DCLogic {
       fileName: doc ? doc.slug + ".md" : "",
       meta: words + " מילים · " + Math.max(1, Math.round(words / 200)) + " דקות קריאה",
       source: doc ? doc.content : "",
-      body: this.render_blocks(parsed, numbered, leadIdx),
+      body: this.render_blocks(parsed, { numbered: numbered, skipIdx: leadIdx }),
 
       /* --- הגירה וגיבוי --- */
       /* מוצג רק כשיש בפועל מה להעביר, ורק לבעלים בתוך פרויקט. */
@@ -2904,10 +2940,22 @@ class Component extends DCLogic {
     });
   }
 
-  /* keepH1 — האם לרנדר גם כותרת רמה 1. בתצוגת המסמך היא מוצגת בכותרת
-     העמוד ולכן מושמטת מהגוף, אבל במסך היצירה אין כותרת עמוד: בלי הדגל
-     הזה השורה הראשונה של הטיוטה פשוט נעלמת מהפריוויו. */
-  render_blocks(parsed, numbered, skipIdx, nested, keepH1) {
+  /* אובייקט אפשרויות ולא ארבעה פרמטרים במקום: שלושה מהם בוליאניים
+     ודומים, וסדר מוחלף ביניהם עובר בשקט בכל בדיקה.
+
+       numbered — מספור אוטומטי לכותרות רמה 2
+       skipIdx  — אינדקס בלוק שמדולג (הפתיח שעלה לכותרת העמוד)
+       nested   — רינדור בתוך בלוק אחר, בטיפוגרפיה מוקטנת
+       keepH1   — לרנדר גם כותרת רמה 1. בתצוגת המסמך היא מוצגת בכותרת
+                  העמוד ולכן מושמטת מהגוף, אבל במסך היצירה אין כותרת
+                  עמוד: בלי הדגל הזה השורה הראשונה של הטיוטה נעלמת. */
+  render_blocks(parsed, opts) {
+    const o = opts || {};
+    const numbered = o.numbered !== false;
+    const skipIdx = typeof o.skipIdx === "number" ? o.skipIdx : -1;
+    const nested = !!o.nested;
+    const keepH1 = !!o.keepH1;
+
     /* התמה מצהירה על צורת הבלוקים שלה במקום שנשווה שמות. עם השוואה
        ל-"light", כל תמה חדשה נכנסת אוטומטית למשפחת הכהים — וזה נכון
        ל-dim במקרה, לא בכוונה. */
@@ -2977,7 +3025,7 @@ class Component extends DCLogic {
         const def = CALLOUT[b.kind] || { hue: FALLBACK_HUE, g: "·", label: b.kind };
         const c = hue(def.hue);
         const label = b.title || def.label || b.kind;
-        const inner = React.createElement("div", { key: "in", style: { minWidth: 0, marginBottom: -12 } }, this.render_blocks({ blocks: b.inner || [] }, false, -1, true));
+        const inner = React.createElement("div", { key: "in", style: { minWidth: 0, marginBottom: -12 } }, this.render_blocks({ blocks: b.inner || [] }, { numbered: false, nested: true }));
         const collapsible = b.kind === "details" || b.kind === "summary";
         const open = !!this.state.openMap["o" + idx];
 

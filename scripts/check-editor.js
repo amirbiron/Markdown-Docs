@@ -280,10 +280,34 @@ function bigDocument(lines) {
   await p.getByText(NAME).first().click();
   await p.waitForTimeout(2500);
 
+  // הקלדה ואז מעבר מיידי למסך היצירה, בתוך חלון ה-debounce של
+  // הפריוויו. הטיימר מחזיק את הערך הישן ב-closure, ואם הוא לא מבוטל
+  // הוא מחזיר את תוכן המסמך ל-editView אחרי שהתיבה כבר רוקנה —
+  // תיבה ריקה מול פריוויו של מסמך אחר.
+  await p.getByRole('button', { name: 'עריכה', exact: true }).click();
+  await p.locator('textarea').first().waitFor({ state: 'visible', timeout: 15000 });
+  await p.fill('textarea', '# תוכן שלא אמור לדלוף לפריוויו של היצירה');
+  await p.getByRole('button', { name: /כתיבת מסמך חדש|new document/i }).click();
+  await p.waitForSelector('input[placeholder^="שם המסמך"]', { timeout: 15000 });
+  await p.waitForTimeout(1200);           // מעבר ל-PREVIEW_MS
+  const leaked = await p.evaluate(() => {
+    const head = [...document.querySelectorAll('div')].filter((d) => d.textContent.trim() === 'תצוגה')[0];
+    const box = head && head.parentElement;
+    return {
+      preview: box ? box.innerText.trim() : null,
+      textarea: (document.querySelector('textarea') || {}).value,
+    };
+  });
+  check('טיימר הפריוויו אינו מחזיר תוכן ישן אחרי מעבר ליצירה',
+    leaked.textarea === '' && (leaked.preview || '').indexOf('שלא אמור לדלוף') < 0,
+    JSON.stringify(leaked));
+
   // הכפתור בסרגל פותח את אותו מסך מפוצל של העריכה — גם כשאין מסמך
   // פתוח. קודם הוא היה מקונן בתוך בלוק המסמך ולא נפתח כלל.
   await p.getByRole('button', { name: /כתיבת מסמך חדש|new document/i }).click();
-  await p.waitForTimeout(1200);
+  // המתנה לפקד מזהה ולא לשעון: שדה השם קיים רק במסך היצירה, ולכן
+  // הופעתו היא הסימן שהמסך נפתח. השהיה קבועה עוברת גם כשהוא איטי.
+  await p.waitForSelector('input[placeholder^="שם המסמך"]', { timeout: 15000 });
 
   const createPane = await p.evaluate(() => {
     const ta = document.querySelector('textarea');
@@ -294,7 +318,7 @@ function bigDocument(lines) {
     };
   });
   check('מסך היצירה נפתח כמסך מפוצל',
-    createPane.textareaHeight > 300 && createPane.hasNameField,
+    createPane.textareaHeight > 300 && createPane.hasNameField && createPane.hasToolbar,
     JSON.stringify(createPane));
 
   const draft = '# כותרת הטיוטה\n\nפסקה.\n\n## תת פרק\n\n1. פריט ראשון';
@@ -328,6 +352,65 @@ function bigDocument(lines) {
   await p.waitForTimeout(300);
   const exited = await p.inputValue('textarea');
   check('פריט ריק יוצא מהרשימה', !/3\./.test(exited), JSON.stringify(exited.slice(-20)));
+
+  // Enter מיד אחרי הסימון, כשיש טקסט אחריו. מה שלפני הסמן נראה ריק
+  // כאן, והחלטה על סמך זה בלבד הייתה מוחקת את הסימון ומשאירה את
+  // הטקסט מרחף מחוץ לרשימה.
+  await p.fill('textarea', '- אלף');
+  await p.waitForTimeout(300);
+  await p.evaluate(() => {
+    const el = document.querySelector('textarea');
+    el.focus();
+    el.setSelectionRange(2, 2);           // בדיוק אחרי "- "
+  });
+  await p.keyboard.press('Enter');
+  await p.waitForTimeout(400);
+  const midMarker = await p.inputValue('textarea');
+  check('Enter אחרי הסימון מפצל ולא מוחק אותו',
+    midMarker === '- \n- אלף', JSON.stringify(midMarker));
+
+  // רשימה באותיות עבריות: הסופיות יושבות בין האותיות בטבלת יוניקוד,
+  // ולכן י+1 הוא ך ולא כ. הבדיקה עוברת דווקא על המעברים האלה.
+  for (const [from, to] of [['ט', 'י'], ['י', 'כ'], ['ל', 'מ'], ['פ', 'צ']]) {
+    await p.fill('textarea', from + ') פריט');
+    await p.waitForTimeout(300);
+    await p.click('textarea');
+    await p.keyboard.press('End');
+    await p.keyboard.press('Enter');
+    await p.waitForTimeout(350);
+    const grew = await p.inputValue('textarea');
+    check(`רשימה באותיות: ${from} ממשיך ל-${to}`,
+      grew === from + ') פריט\n' + to + ') ', JSON.stringify(grew));
+  }
+
+  // ת היא סוף האלף-בית — אין לאן להמשיך, ו-Enter חוזר להיות רגיל
+  await p.fill('textarea', 'ת) אחרון');
+  await p.waitForTimeout(300);
+  await p.click('textarea');
+  await p.keyboard.press('End');
+  await p.keyboard.press('Enter');
+  await p.waitForTimeout(350);
+  const afterTav = await p.inputValue('textarea');
+  check('ת מסיימת את הרצף', afterTav === 'ת) אחרון\n', JSON.stringify(afterTav));
+
+  // לחיצה חוזרת על "מסמך חדש" מוחקת טיוטה בדיוק כמו יציאה, ולכן היא
+  // עוברת באותו אישור. בלי זה היא הייתה המסלול היחיד שמוחק בשקט.
+  await p.fill('textarea', '# טיוטה שנייה');
+  await p.waitForTimeout(600);
+  let reclicks = 0;
+  const denyReset = async (d) => { reclicks++; await d.dismiss(); };
+  p.on('dialog', denyReset);
+  await p.getByRole('button', { name: /כתיבת מסמך חדש|new document/i }).click();
+  await p.waitForTimeout(900);
+  const survived = await p.inputValue('textarea');
+  p.off('dialog', denyReset);
+  check('לחיצה חוזרת על "מסמך חדש" מבקשת אישור',
+    reclicks === 1 && survived === '# טיוטה שנייה', `${reclicks} אישורים`);
+
+  // הבדיקות שלמעלה דרסו את התיבה. מחזירים את הטיוטה כפי שהייתה אחרי
+  // המשך הרשימה, כי ההגשה וההעתקה בהמשך נשענות עליה.
+  await p.fill('textarea', draft + '\n2. פריט שני');
+  await p.waitForTimeout(1500);
 
   // ניווט החוצה עם טיוטה פתוחה מבקש אישור, וביטול משאיר את הטקסט.
   // הטיוטה חיה בזיכרון בלבד — יציאה שקטה היא אובדן נתונים.

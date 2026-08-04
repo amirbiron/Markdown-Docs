@@ -352,13 +352,17 @@ body, aside, header, section, main { transition: background-color 0.2s ease, bor
       </sc-if>
 
       <sc-if value="{{ onDoc }}" hint-placeholder-val="{{ true }}">
-      <div>
+      <div data-doc="1" style="{{ docBoxStyle }}">
         <header style="margin:0 0 var(--doc-head-gap)">
           <div style="display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin:0 0 14px">
             <span dir="ltr" style="{{ chrome.fileBadge }}">{{ fileName }}</span>
             <span style="font-size:13px;color:var(--faint)">{{ meta }}</span>
 
             <span style="flex:1"></span>
+
+            <sc-if value="{{ onDoc }}" hint-placeholder-val="{{ false }}">
+            <button onClick="{{ toggleFullscreen }}" title="{{ fullscreenTitle }}" aria-label="{{ fullscreenTitle }}" style="{{ chrome.iconBtn }}">⛶</button>
+            </sc-if>
 
             <sc-if value="{{ onDoc }}" hint-placeholder-val="{{ false }}">
             <button onClick="{{ copyDocument }}" title="{{ copyDocTitle }}" aria-label="{{ copyDocTitle }}" style="{{ chrome.iconBtn }}">{{ copyDocGlyph }}</button>
@@ -1432,6 +1436,13 @@ class Component extends DCLogic {
     migrating: false, migrateNote: "", copiedDoc: false,
     creating: false, draftTitle: "",
     backupOpen: false, backupBusy: false, backupState: null,
+    /* fullscreen — מצב הקריאה במסך מלא. מוחזק ב-state ולא נקרא מה-DOM
+       בכל רינדור, אבל מסונכרן מ-fullscreenchange: יציאה ב-Esc או במחוות
+       הדפדפן אינה עוברת דרך הכפתור, ובלי הסנכרון ה-state היה משקר.
+
+       fsFallback מבדיל בין שני המסלולים: ב-API האמיתי הדפדפן כבר מוציא
+       את האלמנט מהזרימה, ובמצב המיקוד אנחנו חייבים לקבע אותו בעצמנו. */
+    fullscreen: false, fsFallback: false,
     q: "", dragging: false,
 
     /* editing — האם המסך המפוצל פתוח, creating — אותו מסך במצב יצירה.
@@ -1458,6 +1469,24 @@ class Component extends DCLogic {
     };
     document.addEventListener("visibilitychange", this.onLeave);
     window.addEventListener("pagehide", this.onLeave);
+
+    /* המקור היחיד לאמת הוא הדפדפן. הכפתור רק מבקש; מה שקובע אם אנחנו
+       במסך מלא הוא document.fullscreenElement, וזה מה שנקרא כאן. */
+    this.onFsChange = () => {
+      const on = !!(document.fullscreenElement || document.webkitFullscreenElement);
+      if (on !== this.state.fullscreen) this.setState({ fullscreen: on, fsFallback: false });
+    };
+    document.addEventListener("fullscreenchange", this.onFsChange);
+    document.addEventListener("webkitfullscreenchange", this.onFsChange);
+
+    /* ב-API האמיתי הדפדפן מטפל ב-Esc בעצמו. במצב המיקוד אין מי שיטפל,
+       ומסך שאי אפשר לצאת ממנו במקש שכולם מנסים הוא מלכודת. */
+    this.onFsKey = (e) => {
+      if (e.key === "Escape" && this.state.fsFallback) {
+        this.setState({ fullscreen: false, fsFallback: false });
+      }
+    };
+    document.addEventListener("keydown", this.onFsKey);
 
     this.onScroll = () => {
       const sel = this.state.screen === "reference" ? "[data-sec]" : "[data-h2]";
@@ -1502,6 +1531,11 @@ class Component extends DCLogic {
       document.removeEventListener("visibilitychange", this.onLeave);
       window.removeEventListener("pagehide", this.onLeave);
     }
+    if (this.onFsChange) {
+      document.removeEventListener("fullscreenchange", this.onFsChange);
+      document.removeEventListener("webkitfullscreenchange", this.onFsChange);
+    }
+    if (this.onFsKey) document.removeEventListener("keydown", this.onFsKey);
     if (this.libTick) clearInterval(this.libTick);
     clearTimeout(this.codeTimer);
     clearTimeout(this.previewTimer);
@@ -2494,6 +2528,18 @@ class Component extends DCLogic {
          את המשמעות לקורא מסך ולריחוף. */
       editLabel: s.editing ? "שמירה" : "עריכה",
       editGlyph: s.editing ? "🖫" : "✎",
+      /* ⛶ בשני המצבים, והכותרת היא שאומרת לאן הלחיצה תוביל — כמו
+         בכפתור התמה. סמל יציאה נפרד היה מחייב עוד גליף שאינו מוכר. */
+      fullscreenTitle: s.fullscreen ? "יציאה ממסך מלא" : "מסך מלא",
+      /* רקע וריפוד נדרשים גם ב-API האמיתי: אלמנט שנכנס למסך מלא מצויר
+         מעל backdrop שחור, ובלי רקע משלו הטקסט מרחף על שחור בכל ערכה.
+         ה-position:fixed נוסף רק במצב המיקוד, שבו אין מי שיוציא את
+         האלמנט מהזרימה מלבדנו. */
+      docBoxStyle: s.fullscreen
+        ? "background:var(--bg);overflow-y:auto;padding:26px clamp(16px,5vw,64px);box-sizing:border-box;"
+          + (s.fsFallback ? "position:fixed;inset:0;z-index:60" : "width:100%;height:100%")
+        : "",
+      toggleFullscreen: () => this.toggleFullscreen(),
       copyDocGlyph: s.copiedDoc ? "✓" : "⧉",
       copyDocTitle: s.copiedDoc ? "הועתק" : "העתקת המסמך",
       copyDocument: () => this.copyDocument(),
@@ -2667,8 +2713,60 @@ class Component extends DCLogic {
     set("g.cluster rect, g.cluster polygon", (el) => { el.style.fill = P.cluster; el.style.stroke = P.clusterBorder; });
     set("path.flowchart-link, .edgePath path, .edgePaths path, line.messageLine0, line.messageLine1, .relation, .transition", (el) => { el.style.stroke = P.line; el.style.fill = "none"; });
     set("marker path, marker polygon, .arrowMarkerPath, .marker path, .marker polygon", (el) => { el.style.fill = P.line; el.style.stroke = P.line; });
+    /* ER ו-sequence אינם flowchart, והצורות שלהם אינן `g.node rect`.
+       בלי השורות האלה הן נשארות עם הפלטה הבהירה המובנית של Mermaid —
+       #ffffff לשורת מאפיין, #fff4dd לקופסת ישות ולשחקן — בעוד שהשורה
+       שמתחת כופה על כל טקסט את צבע הטקסט של הערכה. בתמה כהה זו בדיוק
+       הייתה התוצאה: לבן על לבן.
+
+       הטוקנים אינם חדשים. surface ו-cluster הם שני גוני רקע שכבר
+       מוגדרים בכל ערכה, ולכן שורות מתחלפות מקבלות ניגודיות עדינה בלי
+       להמציא צבע שאיש לא בחר. */
+    set("rect.er.entityBox", (el) => { el.style.fill = P.node; el.style.stroke = P.nodeBorder; });
+    set("rect.er.attributeBoxOdd", (el) => { el.style.fill = P.surface; el.style.stroke = P.nodeBorder; });
+    set("rect.er.attributeBoxEven", (el) => { el.style.fill = P.cluster; el.style.stroke = P.nodeBorder; });
+    set("rect.er.relationshipLabelBox", (el) => { el.style.fill = P.edgeBg; el.style.stroke = "none"; });
+    set("path.er.relationshipLine", (el) => { el.style.stroke = P.line; el.style.fill = "none"; });
+    /* עיגולי הקרדינליות. הם circle בלי class, ולכן מזוהים לפי ההורה. */
+    set("g.er circle, .er.entityLabel ~ circle", (el) => { el.style.fill = P.surface; el.style.stroke = P.line; });
+    set("rect.actor, rect.actor-top, rect.actor-bottom, .actor-man circle, .actor-man line", (el) => { el.style.fill = P.node; el.style.stroke = P.nodeBorder; });
+    set("rect.note, .note", (el) => { el.style.fill = P.cluster; el.style.stroke = P.clusterBorder; });
+    set("line.actor-line", (el) => { el.style.stroke = P.line; });
+
+    /* הטקסט אחרון בכוונה: הוא רץ אחרי שכל הרקעים כבר נצבעו, ולכן אין
+       שלב שבו טקסט נצבע מעל רקע שנשאר בברירת המחדל. */
     set("text, tspan, .nodeLabel, .edgeLabel, .label, .titleText", (el) => { el.style.fill = P.text; el.style.color = P.text; });
     set(".edgeLabel rect, .labelBkg, .edgeLabel .label-container", (el) => { el.style.fill = P.edgeBg; el.style.background = P.edgeBg; el.style.backgroundColor = P.edgeBg; });
+  }
+
+  /* קריאה במסך מלא.
+
+     Fullscreen API על מכל המסמך, ולא על document.documentElement: כך
+     הסיידבר והסרגל העליון יוצאים מהמסך והמסמך מקבל את כל הרוחב.
+
+     ה-fallback אינו תיאורטי — Safari ב-iOS אינו תומך ב-requestFullscreen
+     על אלמנט כלשהו, ושם הכפתור היה נלחץ ולא קורה כלום. במקומו נכנס מצב
+     מיקוד ב-CSS: אותה חוויה בתוך הדף, בלי לצאת מכרום הדפדפן. */
+  async toggleFullscreen() {
+    /* נשלף מה-DOM ולא מ-ref: המכל מגיע מהתבנית של dc-runtime, שאין דרך
+       לתלות בה ref של React. data-doc הוא העוגן. */
+    const el = document.querySelector("[data-doc]");
+    if (!el) return;
+    const active = document.fullscreenElement || document.webkitFullscreenElement;
+    try {
+      if (active) {
+        await (document.exitFullscreen || document.webkitExitFullscreen).call(document);
+        return;
+      }
+      const req = el.requestFullscreen || el.webkitRequestFullscreen;
+      if (req) { await req.call(el); return; }
+    } catch (e) {
+      /* דחייה של הדפדפן — הרשאה, iframe, או מחווה שלא נספרה. נופלים
+         למצב המיקוד במקום להשאיר כפתור שלא עושה כלום. */
+    }
+    /* fullscreenchange לא נורה במסלול הזה, ולכן ה-state מתעדכן ידנית. */
+    const on = !this.state.fullscreen;
+    this.setState({ fullscreen: on, fsFallback: on });
   }
 
   /* העתקת המסמך כולו. משתמשת באותו מסלול של העתקת בלוק קוד, כולל
@@ -3114,23 +3212,46 @@ class Component extends DCLogic {
       } else if (b.t === "table") {
         const head = b.rows[0], body = b.rows.slice(1);
         const numeric = (v) => /^[\d.,%+\-]+$/.test(v.replace(/\s/g, ""));
+
+        /* טבלה רחבה גוללת בתוך עצמה במקום להיחתך.
+
+           width:100% לבדו נראה כאילו הוא פותר את זה, אבל הוא רק דוחס:
+           טבלה בת שש עמודות נדחסת עד שאי אפשר לקרוא אותה, ותא עם קוד או
+           כתובת שאי אפשר לשבור גולש החוצה ונחתך. max-content נותן לטבלה
+           את הרוחב הטבעי שלה, min-width:100% מותח אותה כשהיא צרה, והמעטפת
+           גוללת אופקית. אותו פתרון כבר קיים בבלוקי הקוד ובתרשימים.
+
+           TD_MAX על התאים מונע את הקצה השני: עמודה של פסקאות הייתה
+           נמתחת לאלפי פיקסלים במקום לשבור שורה. הוא תלוי גם ברוחב המסך
+           ולא רק בקבוע — 420px על מסך של 360px היו מכריחים גלילה על
+           טבלה של שתי עמודות שיכולה פשוט לשבור שורה. */
+        const scroller = (child, extra) => React.createElement("div", {
+          key: key,
+          style: Object.assign({ overflowX: "auto", maxWidth: "100%" }, extra || {})
+        }, child);
+        const TD_MAX = "min(420px, 55vw)";
+
         if (ed) {
-          out.push(React.createElement("table", { key: key, style: { width: "100%", borderCollapse: "collapse", margin: "0 0 28px", fontSize: 16 } },
+          out.push(scroller(React.createElement("table", { style: { width: "max-content", minWidth: "100%", borderCollapse: "collapse", fontSize: 16 } },
             React.createElement("thead", { key: "h" }, React.createElement("tr", null,
               head.map((c, k) => React.createElement("th", { key: k, style: { padding: "0 14px 9px", textAlign: "start", borderBottom: "1.5px solid var(--ink)", fontFamily: "var(--mono)", fontSize: 10.5, fontWeight: 600, letterSpacing: "0.12em", textTransform: "uppercase", color: "var(--soft)" } }, this.inline(c))))),
             React.createElement("tbody", { key: "b" }, body.map((row, k) => React.createElement("tr", { key: k },
               row.map((c, j) => numeric(c)
                 ? React.createElement("td", { key: j, dir: "ltr", style: { padding: "11px 14px", textAlign: "end", borderBottom: "1px solid var(--line-2)", fontFamily: "var(--mono)", fontSize: 14.5, color: "var(--text)" } }, c)
-                : React.createElement("td", { key: j, style: { padding: "11px 14px", borderBottom: "1px solid var(--line-2)", color: j === 0 ? "var(--ink)" : "var(--muted)", fontWeight: j === 0 ? 600 : 400 } }, this.inline(c))))))));
+                : React.createElement("td", { key: j, style: { padding: "11px 14px", maxWidth: TD_MAX, borderBottom: "1px solid var(--line-2)", color: j === 0 ? "var(--ink)" : "var(--muted)", fontWeight: j === 0 ? 600 : 400 } }, this.inline(c))))))), { margin: "0 0 28px" }));
         } else {
-          out.push(React.createElement("div", { key: key, style: { border: "1px solid var(--line)", borderRadius: "var(--r-md)", overflow: "hidden", margin: "0 0 22px" } },
-            React.createElement("table", { style: { width: "100%", borderCollapse: "collapse", background: "var(--card)", fontSize: 15 } },
+          out.push(scroller(
+            React.createElement("table", { style: { width: "max-content", minWidth: "100%", borderCollapse: "collapse", background: "var(--card)", fontSize: 15 } },
               React.createElement("thead", { key: "h" }, React.createElement("tr", { style: { background: "var(--accent)" } },
                 head.map((c, k) => React.createElement("th", { key: k, style: { padding: "12px 16px", textAlign: "start", fontWeight: 600, color: "var(--accent-on)" } }, this.inline(c))))),
               React.createElement("tbody", { key: "b" }, body.map((row, k) => React.createElement("tr", { key: k, style: { borderBottom: k === body.length - 1 ? "none" : "1px solid var(--hair)" } },
                 row.map((c, j) => numeric(c)
                   ? React.createElement("td", { key: j, dir: "ltr", style: { padding: "12px 16px", textAlign: "end", fontFamily: "var(--mono)", color: "var(--text)" } }, c)
-                  : React.createElement("td", { key: j, style: { padding: "12px 16px", color: j === 0 ? "var(--head)" : "var(--muted)" } }, this.inline(c)))))))));
+                  : React.createElement("td", { key: j, style: { padding: "12px 16px", maxWidth: TD_MAX, color: j === 0 ? "var(--head)" : "var(--muted)" } }, this.inline(c))))))),
+            /* overflow-x:auto ולא overflow:hidden. hidden נועד לחתוך את
+               הפינות לפי ה-radius, אבל הוא חתך גם את הטבלה עצמה — וזה
+               בדיוק הבאג. auto חותך לפינות ומוסיף גלילה. */
+            { border: "1px solid var(--line)", borderRadius: "var(--r-md)", margin: "0 0 22px" }));
         }
 
       } else if (b.t === "img") {

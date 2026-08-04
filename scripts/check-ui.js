@@ -78,11 +78,50 @@ const check = (label, ok, extra) => {
   // מסמך דרך מסך הכתיבה — המסך המפוצל שנפתח מכפתור הסרגל
   await p.getByRole('button', { name: /new document|כתיבת מסמך חדש/i }).click();
   await p.waitForSelector('input[placeholder^="שם המסמך"]', { timeout: 15000 });
-  await p.fill('textarea', '# מדריך התקנה\n\nפסקת פתיחה.\n\n## שלב ראשון\n\n- פריט\n- פריט נוסף\n');
+  // הטבלה כאן רחבה בכוונה: היא מה שמוודא שטבלה שאינה נכנסת ברוחב
+  // גוללת בתוך מעטפת במקום להיחתך.
+  await p.fill('textarea', [
+    '# מדריך התקנה', '', 'פסקת פתיחה.', '', '## שלב ראשון', '', '- פריט', '- פריט נוסף', '',
+    '## טבלה רחבה', '',
+    '| מזהה | שם הפרויקט | בעלים | נראות | מסמכים | קישורים | נוצר בתאריך | עודכן לאחרונה |',
+    '| --- | --- | --- | --- | --- | --- | --- | --- |',
+    '| a1b2c3 | תיעוד המוצר הראשי | admin@example.com | פומבי | 42 | 7 | 2024-01-15 | 2026-08-04 |',
+    '',
+  ].join('\n'));
   await p.getByRole('button', { name: 'הוספה לפרויקט' }).click();
   await p.waitForTimeout(2500);
   const docText = await p.evaluate(() => document.body.innerText);
   check('המסמך נוצר ומרונדר', docText.includes('מדריך התקנה') && docText.includes('שלב ראשון'));
+
+  // נמדד ברוחב צר, כי שם טבלה של שמונה עמודות באמת לא נכנסת. הבדיקה
+  // היא שהמעטפת גוללת ולא שהטבלה צרה — overflow:hidden על המעטפת חתך
+  // את העמודות האחרונות בלי שום סימן שהן קיימות.
+  //
+  // overflowX נבדק במפורש ולא רק scrollWidth > clientWidth: תיבה עם
+  // overflow:hidden עדיין מדווחת scrollWidth גדול יותר, וגם עדיין ניתן
+  // לגלול אותה מקוד. מה שהיא לא מאפשרת הוא גלילה של המשתמש — גלגלת,
+  // מגע או Shift+גלילה — וזו בדיוק ההצהרה שקובעת אותה.
+  await p.setViewportSize({ width: 430, height: 900 });
+  await p.waitForTimeout(800);
+  const wide = await p.evaluate(() => {
+    const t = [...document.querySelectorAll('table')].sort((a, b) => b.scrollWidth - a.scrollWidth)[0];
+    if (!t) return null;
+    const box = t.parentElement;
+    return {
+      overflowX: getComputedStyle(box).overflowX,
+      tableW: Math.round(t.scrollWidth),
+      boxW: Math.round(box.clientWidth),
+      scrolls: box.scrollWidth > box.clientWidth + 1,
+      pageOverflow: document.documentElement.scrollWidth > document.documentElement.clientWidth + 1,
+    };
+  });
+  check('טבלה רחבה גוללת ואינה נחתכת',
+    !!wide && wide.overflowX === 'auto' && wide.scrolls
+      && wide.tableW > wide.boxW && !wide.pageOverflow,
+    JSON.stringify(wide));
+  await p.screenshot({ path: SHOTS + '/ui-table-narrow.png' });
+  await p.setViewportSize({ width: 1500, height: 1000 });
+  await p.waitForTimeout(600);
 
   // מסמך דרך העלאת קובץ. מסלול נפרד לגמרי מההדבקה — הוא עובר דרך
   // readFiles, ואיפוס value של ה-input מרוקן את אותו FileList שמחזיקים.
@@ -93,6 +132,66 @@ const check = (label, ok, extra) => {
   await p.waitForTimeout(3000);
   const uploaded = await p.evaluate(() => document.body.innerText);
   check('העלאת קובץ יוצרת מסמך', uploaded.includes('מסמך מקובץ') && uploaded.includes('תוכן שהועלה'));
+
+  // ── מסך מלא ───────────────────────────────────────────────────────
+  // שלושת המסלולים, כי כל אחד נשבר אחרת. המסלול השלישי — יציאה שלא דרך
+  // הכפתור — הוא זה שקל לפספס: בלי האזנה ל-fullscreenchange, ה-state
+  // ממשיך להצהיר "במסך מלא" אחרי שהמשתמש כבר יצא ב-Esc.
+  await p.locator('button[title="מסך מלא"]').click();
+  await p.waitForTimeout(700);
+  const fsOn = await p.evaluate(() => {
+    const el = document.querySelector('[data-doc]');
+    return {
+      isFsElement: document.fullscreenElement === el,
+      bg: getComputedStyle(el).backgroundColor,
+      exitTitle: !!document.querySelector('button[title="יציאה ממסך מלא"]'),
+    };
+  });
+  check('מסך מלא נפתח על מכל המסמך',
+    fsOn.isFsElement && fsOn.exitTitle && fsOn.bg !== 'rgba(0, 0, 0, 0)',
+    JSON.stringify(fsOn));
+  await p.screenshot({ path: SHOTS + '/ui-fullscreen.png' });
+
+  // יציאה שלא דרך הכפתור. ב-headless מקש Escape אינו מפעיל את יציאת
+  // הדפדפן ממסך מלא — זו התנהגות של כרום הדפדפן ולא אירוע DOM — ולכן
+  // נבדק כאן אותו אות בדיוק שהיא מייצרת.
+  await p.evaluate(() => document.exitFullscreen());
+  await p.waitForTimeout(700);
+  const fsOff = await p.evaluate(() => ({
+    fs: !!document.fullscreenElement,
+    style: document.querySelector('[data-doc]').getAttribute('style') || '',
+    backToTitle: !!document.querySelector('button[title="מסך מלא"]'),
+  }));
+  check('יציאה שלא דרך הכפתור מסונכרנת חזרה',
+    !fsOff.fs && fsOff.style === '' && fsOff.backToTitle, JSON.stringify(fsOff));
+
+  // ה-fallback. Safari ב-iOS אינו תומך ב-requestFullscreen על אלמנט,
+  // ובלי המסלול הזה הכפתור שם נלחץ ולא קורה כלום.
+  await p.evaluate(() => {
+    Element.prototype.requestFullscreen = undefined;
+    Element.prototype.webkitRequestFullscreen = undefined;
+  });
+  await p.locator('button[title="מסך מלא"]').click();
+  await p.waitForTimeout(700);
+  const fb = await p.evaluate(() => {
+    const el = document.querySelector('[data-doc]');
+    const r = el.getBoundingClientRect();
+    return {
+      position: getComputedStyle(el).position,
+      covers: Math.round(r.width) === window.innerWidth && Math.round(r.height) === window.innerHeight,
+      exitTitle: !!document.querySelector('button[title="יציאה ממסך מלא"]'),
+    };
+  });
+  check('בלי Fullscreen API נכנס מצב מיקוד',
+    fb.position === 'fixed' && fb.covers && fb.exitTitle, JSON.stringify(fb));
+
+  await p.keyboard.press('Escape');
+  await p.waitForTimeout(500);
+  const fbOff = await p.evaluate(() => ({
+    style: document.querySelector('[data-doc]').getAttribute('style') || '',
+    backToTitle: !!document.querySelector('button[title="מסך מלא"]'),
+  }));
+  check('Escape יוצא ממצב המיקוד', fbOff.style === '' && fbOff.backToTitle, JSON.stringify(fbOff));
 
   // קישור
   await p.fill('input[placeholder="שם הקישור"]', 'CodeKeeper');

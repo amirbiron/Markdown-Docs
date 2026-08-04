@@ -209,3 +209,169 @@ async def test_run_once_skips_when_a_recent_backup_exists(owner, tmp_path, monke
 
     second = await scheduler.run_once()
     assert second is None, "גיבוי שני רץ למרות שהראשון נכתב הרגע"
+
+
+# ── נראות ומניעת ריצות מקבילות ────────────────────────────────────────
+
+
+async def test_status_reports_the_three_questions(owner, tmp_path, monkeypatch):
+    """מה שמסך ניהול צריך: פעיל? מתי אחרון? מתי הבא?"""
+    monkeypatch.setattr(scheduler, "backup_dir", lambda: tmp_path)
+    _seed(tmp_path, 3)
+
+    body = (await owner.get("/api/backup")).json()
+    assert body["enabled"] is True
+    assert body["running"] is False
+    assert body["keep"] == 30
+    assert len(body["backups"]) == 3
+    assert body["total_bytes"] > 0
+    # הבא נגזר מהאחרון ולא נשמר בנפרד, ולכן הוא נכון גם אחרי הפעלה מחדש
+    assert body["next_run_at"] is not None
+
+
+async def test_status_requires_authentication(anon):
+    assert (await anon.get("/api/backup")).status_code == 401
+    assert (await anon.post("/api/backup/run", headers=WRITE)).status_code == 401
+
+
+async def test_manual_run_writes_immediately(owner, tmp_path, monkeypatch):
+    """force מדלג על בדיקת התזמון — מי שלחץ התכוון לגבות עכשיו."""
+    monkeypatch.setattr(scheduler, "backup_dir", lambda: tmp_path)
+    await make_project(owner, slug="docs")
+    await make_document(owner)
+
+    first = await owner.post("/api/backup/run", headers=WRITE)
+    assert first.status_code == 200
+    assert first.json()["skipped"] is False
+
+    # ומיד שוב — התזמון לא חוסם, כי force
+    second = await owner.post("/api/backup/run", headers=WRITE)
+    assert second.status_code == 200
+    assert second.json()["skipped"] is False
+    assert len(scheduler.existing_backups(tmp_path)) == 2
+
+
+async def test_a_second_run_while_one_is_active_gets_409(owner, tmp_path, monkeypatch):
+    """תפוס אינו שבור, ואסור שהבקשה השנייה תמתין ואז תריץ גיבוי נוסף."""
+    monkeypatch.setattr(scheduler, "backup_dir", lambda: tmp_path)
+
+    import asyncio as _asyncio
+
+    started = _asyncio.Event()
+    release = _asyncio.Event()
+
+    async def slow_run(force=False):
+        started.set()
+        await release.wait()
+        return None
+
+    monkeypatch.setattr(scheduler, "run_once", slow_run)
+
+    first = _asyncio.create_task(scheduler.run_guarded(force=True))
+    await started.wait()
+
+    # בזמן שהראשון תקוע, השנייה חוזרת מיד
+    response = await owner.post("/api/backup/run", headers=WRITE)
+    assert response.status_code == 409
+    assert response.json()["detail"] == scheduler.ALREADY_RUNNING
+
+    release.set()
+    assert (await first)["ok"] is True
+
+
+async def test_a_failing_backup_does_not_raise_out_of_the_loop(tmp_path, monkeypatch):
+    """המתזמן קורא לכאן. חריגה שיוצאת החוצה משאירה את המערכת בלי גיבויים."""
+    monkeypatch.setattr(scheduler, "backup_dir", lambda: tmp_path)
+
+    async def boom(force=False):
+        raise RuntimeError("הדיסק מלא")
+
+    monkeypatch.setattr(scheduler, "run_once", boom)
+
+    result = await scheduler.run_guarded(force=True)
+    assert result["ok"] is False
+    assert scheduler.is_running() is False, "הנעילה לא שוחררה אחרי כישלון"
+
+    last = scheduler.last_run()
+    assert last["ok"] is False
+    assert last["error"] == "RuntimeError"
+
+
+async def test_two_backups_in_the_same_second_do_not_overwrite(owner, tmp_path):
+    """החותמת היא ברזולוציית שנייה, ולחיצה כפולה נופלת בדיוק שם."""
+    await make_project(owner, slug="docs")
+    await make_document(owner)
+
+    first = await scheduler.write_backup(tmp_path)
+    second = await scheduler.write_backup(tmp_path)
+
+    assert first != second, "הגיבוי השני דרס את הראשון"
+    assert first.exists() and second.exists()
+    assert len(scheduler.existing_backups(tmp_path)) == 2
+    # ושניהם עדיין מזוהים כגיבויים לצורך הרוטציה
+    assert all(scheduler.stamp_of(p) is not None for p in (first, second))
+
+
+async def test_status_with_no_backups_yet(owner, tmp_path, monkeypatch):
+    """התקנה טרייה: אין קבצים, ואין ריצה הבאה לגזור ממנה."""
+    monkeypatch.setattr(scheduler, "backup_dir", lambda: tmp_path)
+
+    body = (await owner.get("/api/backup")).json()
+    assert body["backups"] == []
+    assert body["total_bytes"] == 0
+    assert body["next_run_at"] is None, "אין ממה לגזור ריצה הבאה"
+
+
+async def test_status_survives_a_file_that_vanishes(owner, tmp_path, monkeypatch):
+    """גיזום או ניקוי ידני באמצע — המסך מדווח, לא מחזיר 500."""
+    _seed(tmp_path, 3)
+    listed = scheduler.existing_backups(tmp_path)
+
+    def racy(directory=None):
+        # מחזירים גם קובץ שכבר לא קיים
+        return listed + [tmp_path / "backup-20991231-235959.zip"]
+
+    monkeypatch.setattr(scheduler, "backup_dir", lambda: tmp_path)
+    monkeypatch.setattr(scheduler, "existing_backups", racy)
+
+    response = await owner.get("/api/backup")
+    assert response.status_code == 200
+    assert len(response.json()["backups"]) == 3
+
+
+async def test_run_returns_500_when_the_backup_fails(owner, monkeypatch):
+    """כישלון אמיתי מתורגם ל-500, להבדיל מ-409 של "תפוס"."""
+
+    async def failing(force=False):
+        return {"ok": False, "error": "הגיבוי נכשל"}
+
+    monkeypatch.setattr(scheduler, "run_guarded", failing)
+
+    response = await owner.post("/api/backup/run", headers=WRITE)
+    assert response.status_code == 500
+    assert response.json()["detail"] == "הגיבוי נכשל"
+
+
+async def test_only_one_of_many_concurrent_runs_executes(tmp_path, monkeypatch):
+    """התפיסה עצמה היא הבדיקה — לא בדיקה שקודמת לה."""
+    monkeypatch.setattr(scheduler, "backup_dir", lambda: tmp_path)
+
+    import asyncio as _asyncio
+
+    ran = 0
+
+    async def slow(force=False):
+        nonlocal ran
+        ran += 1
+        await _asyncio.sleep(0.05)
+        return None
+
+    monkeypatch.setattr(scheduler, "run_once", slow)
+
+    results = await _asyncio.gather(*[scheduler.run_guarded(force=True) for _ in range(20)])
+    assert ran == 1, f"רצו {ran} גיבויים במקביל"
+    assert sum(1 for r in results if r["ok"]) == 1
+    assert all(
+        r["error"] == scheduler.ALREADY_RUNNING for r in results if not r["ok"]
+    ), "מי שנדחה קיבל סיבה אחרת מ'תפוס'"
+    assert scheduler.is_running() is False, "הנעילה לא שוחררה"

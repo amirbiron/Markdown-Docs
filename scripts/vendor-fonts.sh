@@ -15,7 +15,12 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-FONTS_URL="https://fonts.googleapis.com/css2?family=Heebo:wght@300;400;500;600;700;800&family=Assistant:wght@300;400;500;600;700&family=Frank+Ruhl+Libre:wght@400;500;700;800&family=JetBrains+Mono:wght@400;500;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap"
+# המשפחות מסודרות לפי התמה שצורכת אותן, כדי שהוספת תמה תהיה תוספת
+# במקום עריכה של מחרוזת אחת ארוכה:
+#   dark  — Heebo, JetBrains Mono
+#   light — Assistant, Frank Ruhl Libre, IBM Plex Mono
+#   dim   — Rubik, Source Code Pro
+FONTS_URL="https://fonts.googleapis.com/css2?family=Heebo:wght@300;400;500;600;700;800&family=Assistant:wght@300;400;500;600;700&family=Frank+Ruhl+Libre:wght@400;500;700;800&family=JetBrains+Mono:wght@400;500;700&family=IBM+Plex+Mono:wght@400;500;600&family=Rubik:wght@300;400;500;600;700;800&family=Source+Code+Pro:wght@400;500;600;700&display=swap"
 
 # Google מגיש פורמט לפי ה-User-Agent. בלי UA של דפדפן מודרני מתקבל TTF
 # ישן ומנופח פי כמה, בלי unicode-range — כלומר גם כבד יותר וגם בלי

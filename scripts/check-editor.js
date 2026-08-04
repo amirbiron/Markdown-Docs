@@ -48,7 +48,12 @@ function bigDocument(lines) {
 
 (async () => {
   const browser = await chromium.launch();
-  const ctx = await browser.newContext({ viewport: { width: 1600, height: 1000 } });
+  /* הרשאות הלוח נדרשות לבדיקת כפתור ההעתקה: בלעדיהן readText נדחה,
+     והבדיקה הייתה מאשרת "הועתק" בלי לדעת מה באמת נכנס ללוח. */
+  const ctx = await browser.newContext({
+    viewport: { width: 1600, height: 1000 },
+    permissions: ['clipboard-read', 'clipboard-write'],
+  });
   const p = await ctx.newPage();
   const errs = [];
   p.on('console', (m) => { if (m.type() === 'error') errs.push(m.text()); });
@@ -265,6 +270,185 @@ function bigDocument(lines) {
     !!afterFail && afterFail.indexOf(failMarker) >= 0,
     JSON.stringify((afterFail || '').slice(0, 40)));
 
+
+  // ── מסך היצירה ────────────────────────────────────────────────────
+  // רענון מלא: הבדיקות שלמעלה השאירו את הדף עם visibilityState מזויף
+  // ועם נתב שהוסר, ומצב כזה מסתיר רגרסיות במקום לחשוף אותן.
+  await p.reload({ waitUntil: 'load' });
+  await p.waitForSelector('#dc-root', { timeout: 20000 });
+  await p.waitForTimeout(3000);
+  await p.getByText(NAME).first().click();
+  await p.waitForTimeout(2500);
+
+  // הקלדה ואז מעבר מיידי למסך היצירה, בתוך חלון ה-debounce של
+  // הפריוויו. הטיימר מחזיק את הערך הישן ב-closure, ואם הוא לא מבוטל
+  // הוא מחזיר את תוכן המסמך ל-editView אחרי שהתיבה כבר רוקנה —
+  // תיבה ריקה מול פריוויו של מסמך אחר.
+  await p.getByRole('button', { name: 'עריכה', exact: true }).click();
+  await p.locator('textarea').first().waitFor({ state: 'visible', timeout: 15000 });
+  await p.fill('textarea', '# תוכן שלא אמור לדלוף לפריוויו של היצירה');
+  await p.getByRole('button', { name: /כתיבת מסמך חדש|new document/i }).click();
+  await p.waitForSelector('input[placeholder^="שם המסמך"]', { timeout: 15000 });
+  await p.waitForTimeout(1200);           // מעבר ל-PREVIEW_MS
+  const leaked = await p.evaluate(() => {
+    const head = [...document.querySelectorAll('div')].filter((d) => d.textContent.trim() === 'תצוגה')[0];
+    const box = head && head.parentElement;
+    return {
+      preview: box ? box.innerText.trim() : null,
+      textarea: (document.querySelector('textarea') || {}).value,
+    };
+  });
+  check('טיימר הפריוויו אינו מחזיר תוכן ישן אחרי מעבר ליצירה',
+    leaked.textarea === '' && (leaked.preview || '').indexOf('שלא אמור לדלוף') < 0,
+    JSON.stringify(leaked));
+
+  // הכפתור בסרגל פותח את אותו מסך מפוצל של העריכה — גם כשאין מסמך
+  // פתוח. קודם הוא היה מקונן בתוך בלוק המסמך ולא נפתח כלל.
+  await p.getByRole('button', { name: /כתיבת מסמך חדש|new document/i }).click();
+  // המתנה לפקד מזהה ולא לשעון: שדה השם קיים רק במסך היצירה, ולכן
+  // הופעתו היא הסימן שהמסך נפתח. השהיה קבועה עוברת גם כשהוא איטי.
+  await p.waitForSelector('input[placeholder^="שם המסמך"]', { timeout: 15000 });
+
+  const createPane = await p.evaluate(() => {
+    const ta = document.querySelector('textarea');
+    return {
+      textareaHeight: ta ? Math.round(ta.getBoundingClientRect().height) : 0,
+      hasNameField: !!document.querySelector('input[placeholder^="שם המסמך"]'),
+      hasToolbar: !!document.querySelector('button[title]'),
+    };
+  });
+  check('מסך היצירה נפתח כמסך מפוצל',
+    createPane.textareaHeight > 300 && createPane.hasNameField && createPane.hasToolbar,
+    JSON.stringify(createPane));
+
+  const draft = '# כותרת הטיוטה\n\nפסקה.\n\n## תת פרק\n\n1. פריט ראשון';
+  await p.fill('textarea', draft);
+  await p.waitForTimeout(1500);
+
+  // כותרת רמה 1 חייבת להופיע בפריוויו של מסך היצירה: אין כאן כותרת
+  // עמוד שתציג אותה, ובלי הדגל היא נבלעה בשקט.
+  const previewTags = await p.evaluate(() => {
+    const head = [...document.querySelectorAll('div')].filter((d) => d.textContent.trim() === 'תצוגה')[0];
+    const box = head && head.parentElement;
+    return box ? [...box.querySelectorAll('h1,h2,p,li')].map((e) => e.tagName) : [];
+  });
+  check('הפריוויו מציג גם כותרת רמה 1', previewTags.indexOf('H1') >= 0, previewTags.join(','));
+
+  // Enter בסוף פריט ממשיך את הרשימה במספר הבא
+  await p.click('textarea');
+  await p.keyboard.press('End');
+  await p.keyboard.press('Enter');
+  await p.keyboard.type('פריט שני');
+  await p.waitForTimeout(400);
+  const continued = await p.inputValue('textarea');
+  check('Enter ממשיך רשימה ממוספרת',
+    continued.indexOf('2. פריט שני') >= 0,
+    JSON.stringify(continued.slice(-24)));
+
+  // Enter על פריט ריק יוצא מהרשימה במקום לייצר עוד "3."
+  await p.keyboard.press('Enter');
+  await p.waitForTimeout(200);
+  await p.keyboard.press('Enter');
+  await p.waitForTimeout(300);
+  const exited = await p.inputValue('textarea');
+  check('פריט ריק יוצא מהרשימה', !/3\./.test(exited), JSON.stringify(exited.slice(-20)));
+
+  // Enter מיד אחרי הסימון, כשיש טקסט אחריו. מה שלפני הסמן נראה ריק
+  // כאן, והחלטה על סמך זה בלבד הייתה מוחקת את הסימון ומשאירה את
+  // הטקסט מרחף מחוץ לרשימה.
+  await p.fill('textarea', '- אלף');
+  await p.waitForTimeout(300);
+  await p.evaluate(() => {
+    const el = document.querySelector('textarea');
+    el.focus();
+    el.setSelectionRange(2, 2);           // בדיוק אחרי "- "
+  });
+  await p.keyboard.press('Enter');
+  await p.waitForTimeout(400);
+  const midMarker = await p.inputValue('textarea');
+  check('Enter אחרי הסימון מפצל ולא מוחק אותו',
+    midMarker === '- \n- אלף', JSON.stringify(midMarker));
+
+  // רשימה באותיות עבריות: הסופיות יושבות בין האותיות בטבלת יוניקוד,
+  // ולכן י+1 הוא ך ולא כ. הבדיקה עוברת דווקא על המעברים האלה.
+  for (const [from, to] of [['ט', 'י'], ['י', 'כ'], ['ל', 'מ'], ['פ', 'צ']]) {
+    await p.fill('textarea', from + ') פריט');
+    await p.waitForTimeout(300);
+    await p.click('textarea');
+    await p.keyboard.press('End');
+    await p.keyboard.press('Enter');
+    await p.waitForTimeout(350);
+    const grew = await p.inputValue('textarea');
+    check(`רשימה באותיות: ${from} ממשיך ל-${to}`,
+      grew === from + ') פריט\n' + to + ') ', JSON.stringify(grew));
+  }
+
+  // ת היא סוף האלף-בית — אין לאן להמשיך, ו-Enter חוזר להיות רגיל
+  await p.fill('textarea', 'ת) אחרון');
+  await p.waitForTimeout(300);
+  await p.click('textarea');
+  await p.keyboard.press('End');
+  await p.keyboard.press('Enter');
+  await p.waitForTimeout(350);
+  const afterTav = await p.inputValue('textarea');
+  check('ת מסיימת את הרצף', afterTav === 'ת) אחרון\n', JSON.stringify(afterTav));
+
+  // לחיצה חוזרת על "מסמך חדש" מוחקת טיוטה בדיוק כמו יציאה, ולכן היא
+  // עוברת באותו אישור. בלי זה היא הייתה המסלול היחיד שמוחק בשקט.
+  await p.fill('textarea', '# טיוטה שנייה');
+  await p.waitForTimeout(600);
+  let reclicks = 0;
+  const denyReset = async (d) => { reclicks++; await d.dismiss(); };
+  p.on('dialog', denyReset);
+  await p.getByRole('button', { name: /כתיבת מסמך חדש|new document/i }).click();
+  await p.waitForTimeout(900);
+  const survived = await p.inputValue('textarea');
+  p.off('dialog', denyReset);
+  check('לחיצה חוזרת על "מסמך חדש" מבקשת אישור',
+    reclicks === 1 && survived === '# טיוטה שנייה', `${reclicks} אישורים`);
+
+  // הבדיקות שלמעלה דרסו את התיבה. מחזירים את הטיוטה כפי שהייתה אחרי
+  // המשך הרשימה, כי ההגשה וההעתקה בהמשך נשענות עליה.
+  await p.fill('textarea', draft + '\n2. פריט שני');
+  await p.waitForTimeout(1500);
+
+  // ניווט החוצה עם טיוטה פתוחה מבקש אישור, וביטול משאיר את הטקסט.
+  // הטיוטה חיה בזיכרון בלבד — יציאה שקטה היא אובדן נתונים.
+  let prompts = 0;
+  const dismiss = async (d) => { prompts++; await d.dismiss(); };
+  p.on('dialog', dismiss);
+  await p.getByRole('link', { name: /כל הפרויקטים/ }).click();
+  await p.waitForTimeout(1200);
+  const kept = await p.evaluate(() => {
+    const ta = document.querySelector('textarea');
+    return { stillHere: !!document.querySelector('input[placeholder^="שם המסמך"]'), val: ta ? ta.value : '' };
+  });
+  p.off('dialog', dismiss);
+  check('יציאה עם טיוטה פתוחה מבקשת אישור, וביטול משמר אותה',
+    prompts === 1 && kept.stillHere && kept.val.indexOf('כותרת הטיוטה') >= 0,
+    `${prompts} אישורים`);
+
+  await p.fill('input[placeholder^="שם המסמך"]', 'מסמך ממסך היצירה');
+  await p.getByRole('button', { name: 'הוספה לפרויקט' }).click();
+  await p.waitForTimeout(2500);
+  const createdText = await p.evaluate(() => document.body.innerText);
+  check('הטיוטה נוספה לפרויקט',
+    createdText.indexOf('מסמך ממסך היצירה') >= 0 && createdText.indexOf('תת פרק') >= 0);
+  await p.screenshot({ path: SHOTS + '/editor-create.png' });
+
+  // ── כפתור ההעתקה ──────────────────────────────────────────────────
+  // מה שנבדק הוא תוכן הלוח ולא הסימן שהתחלף: כפתור שמצייר ✓ בלי
+  // להעתיק דבר עובר כל בדיקה שמסתכלת רק על הסימן.
+  await p.locator('button[title="העתקת המסמך"]').click();
+  await p.waitForTimeout(500);
+  const clip = await p.evaluate(() => navigator.clipboard.readText());
+  check('כפתור ההעתקה מעתיק את מקור המסמך',
+    clip.indexOf('# כותרת הטיוטה') >= 0 && clip.indexOf('2. פריט שני') >= 0,
+    JSON.stringify(clip.slice(0, 24)));
+  const copiedGlyph = await p.evaluate(
+    () => (document.querySelector('button[title="הועתק"]') || {}).textContent
+  );
+  check('הכפתור מסמן שההעתקה בוצעה', copiedGlyph === '✓', JSON.stringify(copiedGlyph));
 
   // ── ניקוי ─────────────────────────────────────────────────────────
   const removed = await p.evaluate(async (slug) => {

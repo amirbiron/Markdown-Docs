@@ -47,6 +47,21 @@ class DocumentCreate(BaseModel):
 
 class DocumentUpdate(BaseModel):
     title: str | None = Field(default=None, min_length=1, max_length=TITLE_MAX)
+
+    # ה-slug הוא שם הקובץ שמוצג במסך ובהורדה, ולכן שינוי שם המסמך גורר
+    # אותו. אפשר לתת אותו במפורש, כמו ב-DocumentCreate.
+    slug: str | None = Field(default=None, min_length=1, max_length=100)
+
+    # או לבקש שייגזר מהכותרת. הלקוח משתמש בזה ולא גוזר בעצמו, כי כללי
+    # ה-slug נשענים על מחלקות תווים של יוניקוד: ‎\w ב-Python תחת re.UNICODE
+    # כולל אותיות בכל כתב, ואילו ‎\w ב-JavaScript הוא ASCII בלבד. תאום
+    # בצד הלקוח היה נראה נכון ופוסל שמות עבריים לגיטימיים.
+    #
+    # דגל מפורש ולא גזירה אוטומטית מכל title שנשלח: השמירה האוטומטית
+    # של העורך אינה שולחת כותרת היום, אבל אם מישהו יוסיף אותה, גזירה
+    # שקטה הייתה משנה את שם הקובץ בכל הקלדה.
+    slug_from_title: bool = False
+
     content: str | None = None
     position: int | None = Field(default=None, ge=0, le=1_000_000)
 

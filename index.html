@@ -1621,6 +1621,9 @@ class Component extends DCLogic {
     newProjectName: "", newProjectDesc: "", newLinkTitle: "", newLinkUrl: "",
     migrating: false, migrateNote: "", copiedDoc: false,
     creating: false, draftTitle: "",
+    /* renameTitle — שדה השם במסך העריכה. נזרע מ-doc.title בפתיחת
+       העורך, ומוחזק בנפרד ממנו כדי שהקלדה לא תשנה את המסמך עד שמאשרים. */
+    renameTitle: "", renaming: false,
     backupOpen: false, backupBusy: false, backupState: null,
     /* fullscreen — מצב הקריאה במסך מלא. מוחזק ב-state ולא נקרא מה-DOM
        בכל רינדור, אבל מסונכרן מ-fullscreenchange: יציאה ב-Esc או במחוות
@@ -1707,8 +1710,32 @@ class Component extends DCLogic {
     this.bootstrap();
   }
 
+  /* הוק אחד בלבד. שני componentDidUpdate באותה מחלקה אינם שגיאה
+     ב-JavaScript — המאוחר מחליף את המוקדם בשקט, וכל מה שהיה בראשון
+     פשוט מפסיק לרוץ. כאן זה עצר את ציור התרשימים לגמרי. */
   componentDidUpdate() {
     this.drawDiagrams();
+    this.restoreCaret();
+  }
+
+  /* החזרת הסמן אחרי כתיבה לתיבה.
+
+     היה כאן requestAnimationFrame, וזו הייתה תחרות אמיתית: rAF פורק
+     לפני הציור הבא, כלומר בערך 16ms אחרי הכתיבה. מי שמקליד מהר — או
+     לוחץ Enter וממשיך מיד — הספיק להכניס תווים לפני שהוא פרק, ואז
+     הסמן קפץ אחורה והתווים שכבר נכתבו נשארו במקום אחר. התוצאה היא
+     טקסט מבולבל, ורק לפעמים: זו בדיוק התלות בזמן.
+
+     componentDidUpdate רץ מיד אחרי ש-React סיים לכתוב ל-DOM, באותה
+     משימה, ולכן אין חלון שבו אירוע מקלדת יכול להידחף פנימה. */
+  restoreCaret() {
+    const caret = this.pendingCaret;
+    if (!caret) return;
+    this.pendingCaret = null;
+    const el = this.editRef;
+    if (!el) return;
+    el.focus();
+    el.setSelectionRange(caret.from, caret.to);
   }
 
   componentWillUnmount() {
@@ -2096,6 +2123,44 @@ class Component extends DCLogic {
     return n === 1 ? "מסמך אחד" : n + " מסמכים";
   }
 
+  /* שינוי שם המסמך.
+
+     ה-slug נגזר בשרת ולא כאן: כללי ה-slug נשענים על מחלקות תווים של
+     יוניקוד, ו-\w ב-JavaScript הוא ASCII בלבד. תאום מקומי היה נראה
+     נכון ופוסל שמות עבריים לגיטימיים.
+
+     התוכן לא נשלח כאן בכוונה — השורה שמתחילה ב-# נשארת כפי שהיא. */
+  async renameDocument() {
+    const project = this.state.project;
+    const doc = this.state.doc;
+    const name = this.state.renameTitle.trim();
+    if (!project || !doc || !name || name === doc.title) return;
+
+    this.setState({ renaming: true });
+    /* השמירה הממתינה יוצאת קודם, ולנתיב הישן. אחרי שה-slug ישתנה
+       הנתיב הזה כבר לא קיים, ותוכן שהוקלד בשניות האחרונות היה נעלם. */
+    await this.flushSave();
+
+    const result = await this.guard(() =>
+      this.api("/projects/" + encodeURIComponent(project.slug) + "/docs/" + encodeURIComponent(doc.slug), {
+        method: "PUT",
+        body: { title: name, slug_from_title: true }
+      })
+    );
+    this.setState({ renaming: false });
+    if (!result || !result.document) return;
+
+    /* docSlug חייב לעבור לחדש. הוא מזין את הנתיב של כל שמירה הבאה,
+       ואת סימון המסמך הפעיל בסיידבר — אילו היה נשאר על הישן, השמירה
+       האוטומטית הבאה הייתה מקבלת 404 ומה שהוקלד היה הולך לאיבוד. */
+    this.setState({
+      doc: result.document,
+      docSlug: result.document.slug,
+      renameTitle: result.document.title
+    });
+    await this.refreshProject();
+  }
+
   /* הכותרת מהשורה הראשונה שמתחילה ב-#, ובהיעדרה טקסט ניטרלי. */
   titleFromMarkdown(text) {
     const m = String(text || "").match(/^#\s+(.*)$/m);
@@ -2110,8 +2175,12 @@ class Component extends DCLogic {
       this.setState({ editing: false });
       return;
     }
-    const content = (this.state.doc && this.state.doc.content) || "";
-    this.setState({ editing: true, editBuf: content, editView: content, saveState: "" });
+    const doc = this.state.doc;
+    const content = (doc && doc.content) || "";
+    this.setState({
+      editing: true, editBuf: content, editView: content, saveState: "",
+      renameTitle: doc ? doc.title : ""
+    });
   }
 
   /* כל הקלדה עוברת דרך כאן, ומכאן יוצאים שני טיימרים נפרדים.
@@ -2260,6 +2329,8 @@ class Component extends DCLogic {
        היא שם המסמך ושני הכפתורים. כל השאר — הסרגל, התיבה, הפריוויו —
        זהה, וזו כל הסיבה ששני המסכים הם רכיב אחד. */
     const creating = s.creating;
+    const renameDirty = !creating && !!s.doc
+      && s.renameTitle.trim() !== "" && s.renameTitle.trim() !== s.doc.title;
     const topRow = creating
       ? React.createElement("div", {
           key: "bar",
@@ -2289,11 +2360,35 @@ class Component extends DCLogic {
         ])
       : React.createElement("div", {
           key: "bar",
-          style: { display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }
+          style: { display: "flex", flexWrap: "wrap", alignItems: "center", gap: 10 }
         }, [
-          React.createElement("span", { key: "st", style: { fontSize: 12.5, color: labelColor } }, label),
-          React.createElement("span", { key: "sp", style: { fontSize: 12.5, color: "var(--faint)" } },
-            s.editBuf.split("\n").length + " שורות")
+          /* אותו שדה בדיוק כמו במסך היצירה, ובאותו מקום. */
+          React.createElement("input", {
+            key: "name",
+            dir: "auto",
+            placeholder: "שם המסמך",
+            value: s.renameTitle,
+            onChange: (e) => this.setState({ renameTitle: e.target.value }),
+            onKeyDown: (e) => { if (e.key === "Enter") { e.preventDefault(); this.renameDocument(); } },
+            style: { flex: "1 1 240px", minWidth: 0, boxSizing: "border-box", padding: "8px 12px",
+              background: "var(--tint)", border: "1px solid var(--line)", borderRadius: "var(--r-sm)",
+              color: "var(--head)", fontFamily: "inherit", fontSize: 14, outline: "none" }
+          }),
+          /* הכפתור מופיע רק כשהשם באמת שונה. כפתור קבוע שלא עושה כלום
+             ברוב הזמן מלמד להתעלם ממנו. */
+          renameDirty
+            ? React.createElement("button", {
+                key: "rn", type: "button", disabled: s.renaming,
+                onClick: () => this.renameDocument(),
+                style: { padding: "8px 16px", border: "1px solid var(--accent)", borderRadius: "var(--r-sm)",
+                  background: "var(--accent)", color: "var(--accent-on)", fontFamily: "inherit",
+                  fontSize: 13.5, fontWeight: 600, cursor: s.renaming ? "default" : "pointer",
+                  opacity: s.renaming ? 0.6 : 1 }
+              }, s.renaming ? "משנה…" : "שינוי שם")
+            : null,
+          React.createElement("span", { key: "sp", style: { flex: "none", fontSize: 12.5, color: "var(--faint)" } },
+            s.editBuf.split("\n").length + " שורות"),
+          React.createElement("span", { key: "st", style: { flex: "none", fontSize: 12.5, color: labelColor } }, label)
         ]);
 
     return React.createElement("div", { style: { display: "flex", flexDirection: "column", gap: 12 } }, [
@@ -2374,7 +2469,7 @@ class Component extends DCLogic {
       const next = value.slice(0, lineStart) + "\n" + value.slice(at);
       this.onEdit(next);
       const to = lineStart + 1;
-      requestAnimationFrame(() => { el.focus(); el.setSelectionRange(to, to); });
+      this.pendingCaret = { from: to, to: to };
       return;
     }
 
@@ -2382,7 +2477,7 @@ class Component extends DCLogic {
     const next = value.slice(0, at) + insert + value.slice(at);
     this.onEdit(next);
     const to = at + insert.length;
-    requestAnimationFrame(() => { el.focus(); el.setSelectionRange(to, to); });
+    this.pendingCaret = { from: to, to: to };
   }
 
   /* הזרקת תבנית מהסרגל.
@@ -2414,10 +2509,7 @@ class Component extends DCLogic {
     /* הסמן נכנס לתוך התבנית ולא אחריה, ומסמן את מה שבפנים. */
     const from = head.length + before.length;
     this.onEdit(next);
-    requestAnimationFrame(() => {
-      el.focus();
-      el.setSelectionRange(from, from + inner.length);
-    });
+    this.pendingCaret = { from: from, to: from + inner.length };
   }
 
   /* שמירה מיידית של מה שממתין. נקראת גם מהטיימר וגם מכל מסלול שבו

@@ -414,3 +414,129 @@ async def test_repository_files_are_not_served(anon, path):
 async def test_the_front_end_is_still_served(anon):
     assert (await anon.get("/")).status_code == 200
     assert (await anon.get("/assets/support.js")).status_code == 200
+
+
+# ── שינוי שם מסמך: השם וה-slug נעים יחד ───────────────────────────────
+
+
+async def test_rename_moves_the_slug_with_the_title(owner):
+    """ה-slug הוא שם הקובץ שמוצג במסך ובהורדה, ולכן הוא חלק מהשם."""
+    await make_project(owner)
+    await make_document(owner, content="# התקנה\n\nגוף.")
+
+    renamed = await owner.put(
+        "/api/projects/docs/docs/installation",
+        json={"title": "מדריך הפעלה", "slug": "operation-guide"},
+        headers=WRITE,
+    )
+    assert renamed.status_code == 200, renamed.text
+    assert renamed.json()["applied"] is True
+    assert renamed.json()["document"]["slug"] == "operation-guide"
+    assert renamed.json()["document"]["title"] == "מדריך הפעלה"
+
+    # התוכן לא נגעו בו — השורה שמתחילה ב-# נשארת כפי שהיא.
+    assert renamed.json()["document"]["content"] == "# התקנה\n\nגוף."
+
+    # הנתיב הישן איננו, והחדש עונה.
+    assert (await owner.get("/api/projects/docs/docs/installation")).status_code == 404
+    moved = await owner.get("/api/projects/docs/docs/operation-guide")
+    assert moved.status_code == 200
+    assert moved.json()["title"] == "מדריך הפעלה"
+
+
+async def test_rename_onto_an_existing_slug_is_409(owner):
+    """ההתנגשות נתפסת ב-UniqueConstraint ולא בבדיקה שקודמת לכתיבה."""
+    await make_project(owner)
+    await make_document(owner, slug="installation", title="התקנה")
+    await make_document(owner, slug="usage", title="שימוש")
+
+    clash = await owner.put(
+        "/api/projects/docs/docs/usage",
+        json={"title": "התקנה", "slug": "installation"},
+        headers=WRITE,
+    )
+    assert clash.status_code == 409, clash.text
+    assert "כבר קיים" in clash.json()["detail"]
+
+    # ההתנגשות לא השאירה חצי שינוי: שני המסמכים כפי שהיו.
+    assert (await owner.get("/api/projects/docs/docs/usage")).json()["title"] == "שימוש"
+    assert (await owner.get("/api/projects/docs/docs/installation")).json()["title"] == "התקנה"
+
+
+async def test_rename_to_an_invalid_slug_is_422(owner):
+    await make_project(owner)
+    await make_document(owner)
+
+    bad = await owner.put(
+        "/api/projects/docs/docs/installation",
+        json={"title": "שם חדש", "slug": "לא חוקי!"},
+        headers=WRITE,
+    )
+    assert bad.status_code == 422, bad.text
+
+    # ולא נשמר כלום — גם לא הכותרת שנשלחה באותה בקשה.
+    assert (await owner.get("/api/projects/docs/docs/installation")).json()["title"] == "התקנה"
+
+
+async def test_saving_without_a_slug_leaves_it_alone(owner):
+    """השמירה האוטומטית של העורך שולחת title בכל בקשה.
+
+    אילו השרת היה גוזר slug מהכותרת, שם הקובץ היה משתנה בכל הקלדה.
+    """
+    await make_project(owner)
+    await make_document(owner)
+
+    saved = await owner.put(
+        "/api/projects/docs/docs/installation",
+        json={"title": "התקנה", "content": "עוד תוכן"},
+        headers=WRITE,
+    )
+    assert saved.status_code == 200, saved.text
+    assert saved.json()["document"]["slug"] == "installation"
+
+
+async def test_rename_derives_the_slug_from_the_title(owner):
+    """הלקוח מבקש גזירה ולא גוזר בעצמו.
+
+    כללי ה-slug נשענים על מחלקות תווים של יוניקוד, ו-\\w ב-JavaScript
+    הוא ASCII בלבד — תאום בצד הלקוח היה פוסל שמות עבריים לגיטימיים.
+    """
+    await make_project(owner)
+    await make_document(owner)
+
+    renamed = await owner.put(
+        "/api/projects/docs/docs/installation",
+        json={"title": "מדריך הפעלה מלא", "slug_from_title": True},
+        headers=WRITE,
+    )
+    assert renamed.status_code == 200, renamed.text
+    assert renamed.json()["document"]["slug"] == "מדריך-הפעלה-מלא"
+    assert (await owner.get("/api/projects/docs/docs/מדריך-הפעלה-מלא")).status_code == 200
+
+
+async def test_slug_from_title_without_the_flag_changes_nothing(owner):
+    """בלי הדגל, כותרת לבדה אינה נוגעת ב-slug."""
+    await make_project(owner)
+    await make_document(owner)
+
+    saved = await owner.put(
+        "/api/projects/docs/docs/installation",
+        json={"title": "שם אחר לגמרי"},
+        headers=WRITE,
+    )
+    assert saved.status_code == 200, saved.text
+    assert saved.json()["document"]["slug"] == "installation"
+
+
+async def test_a_title_that_yields_no_slug_is_422(owner):
+    """כותרת שכולה סימני פיסוק לא מייצרת מזהה."""
+    await make_project(owner)
+    await make_document(owner)
+
+    bad = await owner.put(
+        "/api/projects/docs/docs/installation",
+        json={"title": "!!! ???", "slug_from_title": True},
+        headers=WRITE,
+    )
+    assert bad.status_code == 422, bad.text
+    assert (await owner.get("/api/projects/docs/docs/installation")).json()["title"] == "התקנה"

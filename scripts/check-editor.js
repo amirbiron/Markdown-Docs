@@ -436,15 +436,61 @@ function bigDocument(lines) {
     createdText.indexOf('מסמך ממסך היצירה') >= 0 && createdText.indexOf('תת פרק') >= 0);
   await p.screenshot({ path: SHOTS + '/editor-create.png' });
 
+  // ── שינוי שם מסמך ─────────────────────────────────────────────────
+  // שלושה דברים נמדדים כאן, וכל אחד מהם היה יכול להישבר לבד: שורת
+  // ה-.md זזה עם השם, השורה שמתחילה ב-# לא, והשמירה שאחרי השינוי
+  // מגיעה לנתיב החדש.
+  await p.locator('button[title="עריכה"]').click();
+  await p.waitForSelector('input[placeholder="שם המסמך"]', { timeout: 15000 });
+
+  const nameField = p.locator('input[placeholder="שם המסמך"]');
+  const beforeRename = await p.evaluate(() => ({
+    badge: (document.querySelector('[data-doc] header span[dir="ltr"]') || {}).textContent,
+    button: [...document.querySelectorAll('button')].filter((b) => b.textContent.trim() === 'שינוי שם').length,
+  }));
+  check('כפתור שינוי השם מוסתר כשהשם לא שונה', beforeRename.button === 0, JSON.stringify(beforeRename));
+
+  await nameField.fill('מדריך מפורט');
+  await p.waitForTimeout(400);
+  await p.locator('button:has-text("שינוי שם")').click();
+  await p.waitForTimeout(2500);
+
+  const afterRename = await p.evaluate(() => ({
+    badge: (document.querySelector('[data-doc] header span[dir="ltr"]') || {}).textContent,
+    firstLine: (document.querySelector('textarea') || {}).value.split('\n')[0],
+  }));
+  check('שורת ה-md נעה עם השם',
+    afterRename.badge === 'מדריך-מפורט.md' && afterRename.badge !== beforeRename.badge,
+    JSON.stringify(afterRename.badge));
+  check('השורה שמתחילה ב-# לא השתנתה',
+    afterRename.firstLine === '# כותרת הטיוטה', JSON.stringify(afterRename.firstLine));
+
+  // הבדיקה החדה: docSlug חייב לעבור לחדש, אחרת השמירה הבאה מקבלת 404
+  // ומה שהוקלד נעלם בלי שום סימן.
+  const afterMark = 'נכתב אחרי שינוי השם ' + process.pid;
+  await p.locator('textarea').fill('# כותרת הטיוטה\n\n' + afterMark);
+  await p.waitForTimeout(4500);
+  const afterRenameSave = await p.evaluate(async (slug) => {
+    const r = await fetch(`/api/projects/${encodeURIComponent(slug)}/docs/${encodeURIComponent('מדריך-מפורט')}`,
+      { credentials: 'same-origin' });
+    return r.ok ? (await r.json()).content : 'HTTP ' + r.status;
+  }, setup.slug);
+  check('שמירה אחרי שינוי השם מגיעה לנתיב החדש',
+    afterRenameSave.indexOf(afterMark) >= 0, JSON.stringify(afterRenameSave.slice(0, 40)));
+
   // ── כפתור ההעתקה ──────────────────────────────────────────────────
   // מה שנבדק הוא תוכן הלוח ולא הסימן שהתחלף: כפתור שמצייר ✓ בלי
   // להעתיק דבר עובר כל בדיקה שמסתכלת רק על הסימן.
   await p.locator('button[title="העתקת המסמך"]').click();
   await p.waitForTimeout(500);
   const clip = await p.evaluate(() => navigator.clipboard.readText());
+  /* נמדד מול מה שבתיבה ברגע הזה ולא מול מחרוזת קבועה. בדיקות שקדמו
+     כאן משנות את התוכן, וציפייה קשיחה הייתה נשברת בכל פעם שמישהו
+     מוסיף שלב לפניה — כישלון שנראה כמו באג בהעתקה ואינו. */
+  const inBox = await p.locator('textarea').first().inputValue();
   check('כפתור ההעתקה מעתיק את מקור המסמך',
-    clip.indexOf('# כותרת הטיוטה') >= 0 && clip.indexOf('2. פריט שני') >= 0,
-    JSON.stringify(clip.slice(0, 24)));
+    clip === inBox && clip.length > 0,
+    JSON.stringify(clip.slice(0, 30)));
   const copiedGlyph = await p.evaluate(
     () => (document.querySelector('button[title="הועתק"]') || {}).textContent
   );

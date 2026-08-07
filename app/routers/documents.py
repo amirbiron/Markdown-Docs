@@ -181,6 +181,16 @@ async def update_document(
 
     if payload.title is not None:
         document.title = payload.title.strip()
+    # slug מפורש גובר על גזירה מהכותרת, כדי שבקשה שנותנת את שניהם לא
+    # תהיה תלויה בסדר הבדיקות כאן.
+    if payload.slug is not None or (payload.slug_from_title and payload.title is not None):
+        # אותו אימות בדיוק כמו ביצירה. slug פסול הוא שגיאת קלט ולא
+        # התנגשות, ולכן 422 ולא 409.
+        try:
+            document.slug = slugs.resolve(payload.slug, payload.title or "")
+        except slugs.SlugError as error:
+            await session.rollback()
+            raise HTTPException(422, str(error)) from None
     if payload.content is not None:
         document.content = payload.content
     if payload.position is not None:
@@ -189,7 +199,18 @@ async def update_document(
         document.last_client_seq = payload.client_seq
         document.last_editor_id = payload.editor_id
 
-    await session.flush()
+    # ה-flush הוא המקום שבו UniqueConstraint על (project_id, slug) נאכף.
+    # התפיסה כאן ולא בדיקת SELECT מראש, מאותה סיבה שבה היצירה עושה את
+    # זה: בדיקה ואז כתיבה הן שתי פעולות ששתי בקשות מקבילות משזרות
+    # ביניהן, ושתיהן היו עוברות אותה (כלל 2).
+    try:
+        await session.flush()
+    except IntegrityError:
+        await session.rollback()
+        raise HTTPException(
+            status.HTTP_409_CONFLICT, "כבר קיים מסמך עם המזהה הזה בפרויקט"
+        ) from None
+
     await _trim_versions(session, document.id)
     await session.commit()
     await session.refresh(document)

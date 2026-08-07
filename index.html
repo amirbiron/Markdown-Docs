@@ -1710,8 +1710,12 @@ class Component extends DCLogic {
     this.bootstrap();
   }
 
+  /* הוק אחד בלבד. שני componentDidUpdate באותה מחלקה אינם שגיאה
+     ב-JavaScript — המאוחר מחליף את המוקדם בשקט, וכל מה שהיה בראשון
+     פשוט מפסיק לרוץ. כאן זה עצר את ציור התרשימים לגמרי. */
   componentDidUpdate() {
     this.drawDiagrams();
+    this.restoreCaret();
   }
 
   /* החזרת הסמן אחרי כתיבה לתיבה.
@@ -1724,7 +1728,7 @@ class Component extends DCLogic {
 
      componentDidUpdate רץ מיד אחרי ש-React סיים לכתוב ל-DOM, באותה
      משימה, ולכן אין חלון שבו אירוע מקלדת יכול להידחף פנימה. */
-  componentDidUpdate() {
+  restoreCaret() {
     const caret = this.pendingCaret;
     if (!caret) return;
     this.pendingCaret = null;

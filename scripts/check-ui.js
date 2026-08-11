@@ -104,6 +104,12 @@ const check = (label, ok, extra) => {
     '> ציטוט ראשון',
     '> ציטוט שני',
     '',
+    '#### כותרת H4',
+    '',
+    '##### כותרת H5',
+    '',
+    '###### כותרת H6',
+    '',
   ].join('\n'));
   await p.getByRole('button', { name: 'הוספה לפרויקט' }).click();
   await p.waitForTimeout(2500);
@@ -192,6 +198,25 @@ const check = (label, ok, extra) => {
       quote: rects(quote),
     };
   });
+  // ── שלוש הרמות העמוקות ────────────────────────────────────────────
+  // הן חלקו ענף else אחד, כלומר אותו תג ואותו גודל בדיוק. נמדד מה
+  // שנשבר: תג נפרד לכל רמה, וגודל שיורד ממש בין רמה לרמה.
+  const deep = await p.evaluate(() => {
+    const of = (tag) => {
+      const el = [...document.querySelectorAll('[data-doc] ' + tag)]
+        .find((e) => (e.textContent || '').includes('כותרת ' + tag.toUpperCase()));
+      if (!el) return null;
+      const cs = getComputedStyle(el);
+      return { size: parseFloat(cs.fontSize), weight: Number(cs.fontWeight), color: cs.color };
+    };
+    return { h4: of('h4'), h5: of('h5'), h6: of('h6') };
+  });
+  check('H4, H5 ו-H6 נבדלות זו מזו',
+    !!deep.h4 && !!deep.h5 && !!deep.h6
+      && deep.h4.size > deep.h5.size && deep.h5.size > deep.h6.size
+      && new Set([deep.h4.color, deep.h6.color]).size === 2,
+    JSON.stringify(deep));
+
   check('שורות בפסקה נשברות כפי שנכתבו',
     lineBreaks.three === 3 && lineBreaks.separate
       && lineBreaks.bold === 2 && lineBreaks.strong

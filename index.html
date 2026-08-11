@@ -533,7 +533,7 @@ dir: rtl
         <span style="font-family:var(--mono);font-size:14px;font-weight:500;color:var(--accent-text)">01</span>
         טיפוגרפיה וכותרות
       </h2>
-      <p style="margin:0 0 18px;font-size:16.5px;line-height:1.85;color:var(--text);text-wrap:pretty">היררכיית הכותרות היא ההסכם היחיד בין הכותב לקורא. <strong style="color:var(--ink);font-weight:700">H2 פותח נושא</strong>, <em style="color:var(--head)">H3 מחלק אותו</em>, ו‑H4 הוא הגבול — מעבר לזה כבר צריך עמוד נפרד. טקסט <del style="color:var(--faint)">שאינו רלוונטי</del> מסומן ולא נמחק, ושמות ערכים נכתבים כ‑<code style="font-family:var(--mono);font-size:0.88em;background:var(--card);border:1px solid var(--line-2);border-radius:var(--r-sm);padding:2px 6px;color:var(--code-inline)">inline code</code>. קישורים כמו <a href="#sec-06">רפרנס ה‑API</a> תמיד מקבלים טקסט שמתאר את היעד.<sup style="font-size:11px"><a href="#footnotes" style="padding-inline-start:2px">1</a></sup></p>
+      <p style="margin:0 0 18px;font-size:16.5px;line-height:1.85;color:var(--text);text-wrap:pretty">היררכיית הכותרות היא ההסכם היחיד בין הכותב לקורא. <strong style="color:var(--ink);font-weight:700">H2 פותח נושא</strong>, <em style="color:var(--head)">H3 מחלק אותו</em>, ו‑H4 עד H6 מחלקים בתוכו. שש הרמות מרונדרות כל אחת בגודל ובמשקל משלה, אבל תוכן העניינים בצד עוצר ב‑H3 — מעבר לזה הוא מציף את עצמו. טקסט <del style="color:var(--faint)">שאינו רלוונטי</del> מסומן ולא נמחק, ושמות ערכים נכתבים כ‑<code style="font-family:var(--mono);font-size:0.88em;background:var(--card);border:1px solid var(--line-2);border-radius:var(--r-sm);padding:2px 6px;color:var(--code-inline)">inline code</code>. קישורים כמו <a href="#sec-06">רפרנס ה‑API</a> תמיד מקבלים טקסט שמתאר את היעד.<sup style="font-size:11px"><a href="#footnotes" style="padding-inline-start:2px">1</a></sup></p>
       <h3 style="margin:26px 0 12px;font-family:var(--display);font-size:var(--ref-h3);font-weight:700;color:var(--green)">H3 — כותרת משנית</h3>
       <p style="margin:0 0 18px;font-size:16.5px;line-height:1.85;color:var(--text);text-wrap:pretty">ברמה הזאת נכנסים לפרטים: מה קורה בפועל, מה נכשל, ואיך מזהים את זה. פסקה אחת לרעיון אחד.</p>
       <h4 style="margin:22px 0 10px;font-size:16px;font-weight:700;color:var(--amber)">H4 — מקרה קצה</h4>
@@ -1337,6 +1337,34 @@ SNIPPETS.push({
     block: true
   }))
 });
+
+/* ═══════════════════════════════════════════════════════════════════
+   הכותרות העמוקות — 4, 5 ו-6
+
+   שלושתן קיבלו קודם ענף else אחד, כלומר אותו תג ואותו עיצוב בדיוק.
+   הפרסר תמיד הבדיל ביניהן (level נגזר מאורך רצף ה-#), אבל הרינדור
+   איחד אותן — כותב ש-##### מתחת ל-#### קיבל שתי שורות זהות.
+
+   הסולם נפתח כלפי מעלה ולא כלפי מטה: טקסט הגוף הוא 16.5, ו-H4 היה
+   16 — כלומר כבר קטן ממנו. הקטנה נוספת ל-5 ול-6 הייתה נותנת שתי
+   כותרות בגודל הערת שוליים. לכן H4 עולה ל-18, מעל טקסט הגוף, ומתחתיו
+   נפתח מקום לשתי רמות אמיתיות.
+
+   הגודל אינו הסימן היחיד: כל רמה יורדת גם במשקל ובעוצמת הצבע, כדי
+   שההיררכיה תיקרא גם כשהכותרות לא זו לצד זו וגם למי שאינו מבחין בין
+   הגוונים.
+   ═══════════════════════════════════════════════════════════════════ */
+/* שתי עמודות גודל, כי הערכות הכתבתיות גדולות לאורך כל הסולם: טקסט
+   הגוף שלהן 17.5 מול 16.5, ו-H3 שלהן 23 מול 20. עמודה אחת משותפת
+   הייתה מציבה שם את H5 מתחת לטקסט הגוף. */
+const DEEP_HEADINGS = {
+  4: { tag: "h4", size: 18, edSize: 20, weight: 700, margin: "26px 0 10px", tracking: "0.01em",
+       fg: "var(--amber)", edFg: "var(--accent)" },
+  5: { tag: "h5", size: 16, edSize: 18, weight: 700, margin: "22px 0 8px", tracking: "0.01em",
+       fg: "var(--head)", edFg: "var(--head)" },
+  6: { tag: "h6", size: 14, edSize: 15.5, weight: 600, margin: "20px 0 8px", tracking: "0.04em",
+       fg: "var(--soft)", edFg: "var(--soft)" }
+};
 
 const FALLBACK_HUE = "gray";
 
@@ -3504,9 +3532,14 @@ class Component extends DCLogic {
             ? { margin: "32px 0 12px", fontFamily: "var(--display)", fontSize: 23, fontWeight: 700, color: "var(--ink)", scrollMarginTop: 90 }
             : { margin: "28px 0 12px", fontSize: 20, fontWeight: 700, color: "var(--green)", scrollMarginTop: 90 } }, this.inline(b.text)));
         } else {
-          out.push(React.createElement("h4", { key: key, id: "h-" + hi, style: ed
-            ? { margin: "24px 0 10px", fontSize: 15, fontWeight: 700, letterSpacing: "0.02em", color: "var(--accent)", scrollMarginTop: 90 }
-            : { margin: "22px 0 10px", fontSize: 16, fontWeight: 700, color: "var(--amber)", scrollMarginTop: 90 } }, this.inline(b.text)));
+          /* התג נגזר מהרמה ולא קבוע h4: כותרת שנכתבה ###### יוצאת
+             <h6>, וקורא מסך שומע את העומק הנכון. */
+          const deep = DEEP_HEADINGS[b.level] || DEEP_HEADINGS[6];
+          out.push(React.createElement(deep.tag, { key: key, id: "h-" + hi, style: {
+            margin: deep.margin, fontSize: ed ? deep.edSize : deep.size, fontWeight: deep.weight,
+            letterSpacing: deep.tracking, color: ed ? deep.edFg : deep.fg,
+            scrollMarginTop: 90
+          } }, this.inline(b.text)));
         }
 
       } else if (b.t === "p") {

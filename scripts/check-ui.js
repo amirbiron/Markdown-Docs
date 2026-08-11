@@ -87,6 +87,18 @@ const check = (label, ok, extra) => {
     '| --- | --- | --- | --- | --- | --- | --- | --- |',
     '| a1b2c3 | תיעוד המוצר הראשי | admin@example.com | פומבי | 42 | 7 | 2024-01-15 | 2026-08-04 |',
     '',
+    '## שורות',
+    '',
+    'שורה ראשונה',
+    'שורה שנייה',
+    'שורה שלישית',
+    '',
+    '**מודגש שנפרס',
+    'על שתי שורות**',
+    '',
+    '> ציטוט ראשון',
+    '> ציטוט שני',
+    '',
   ].join('\n'));
   await p.getByRole('button', { name: 'הוספה לפרויקט' }).click();
   await p.waitForTimeout(2500);
@@ -122,6 +134,46 @@ const check = (label, ok, extra) => {
   await p.screenshot({ path: SHOTS + '/ui-table-narrow.png' });
   await p.setViewportSize({ width: 1500, height: 1000 });
   await p.waitForTimeout(600);
+
+  // ── שבירת שורות בתוך פסקה ─────────────────────────────────────────
+  // נמדד במספר השורות הוויזואליות (getClientRects) ולא בספירת <br>.
+  // <br> קיים שנבלע ב-CSS נראה בדיוק כמו <br> חסר בעין של הקורא,
+  // וספירת אלמנטים הייתה עוברת עליו. הרוחב כאן 1500 והשורות קצרות,
+  // ולכן כל שבירה שנמדדת היא שבירה שנכתבה ולא גלישה.
+  const lineBreaks = await p.evaluate(() => {
+    const find = (tag, txt) => [...document.querySelectorAll(tag)]
+      .find((el) => (el.textContent || '').includes(txt));
+    /* Range ולא el.getClientRects: על אלמנט בלוק המתודה מחזירה תמיד
+       מלבן אחד — תיבת הבלוק — ולא שורה לשורה. Range על התוכן מחזיר
+       מלבן לכל תיבת שורה, וזה מה שהעין באמת רואה. הספירה היא של
+       ערכי top שונים, כי צומת טקסט וצומת <strong> באותה שורה מחזירים
+       שני מלבנים נפרדים. */
+    const rects = (el) => {
+      if (!el) return 0;
+      const r = document.createRange();
+      r.selectNodeContents(el);
+      return new Set([...r.getClientRects()].map((b) => Math.round(b.top))).size;
+    };
+    const three = find('p', 'שורה ראשונה');
+    const bold = find('p', 'מודגש שנפרס');
+    const quote = find('blockquote', 'ציטוט ראשון');
+    return {
+      three: rects(three),
+      // שורה ריקה חייבת להישאר גבול של פסקה ולא להתמזג לשבירה בלבד
+      separate: !!three && !(three.textContent || '').includes('מודגש'),
+      bold: rects(bold),
+      // ההדגשה נפרסת על שתי שורות; אם הפסקה פוצלה לפני הפרסינג היא
+      // מתפרקת לשני חצאים עם ** גלויות ובלי <strong> כלל
+      strong: !!bold && !!bold.querySelector('strong')
+        && !(bold.textContent || '').includes('**'),
+      quote: rects(quote),
+    };
+  });
+  check('שורות בפסקה נשברות כפי שנכתבו',
+    lineBreaks.three === 3 && lineBreaks.separate
+      && lineBreaks.bold === 2 && lineBreaks.strong
+      && lineBreaks.quote === 2,
+    JSON.stringify(lineBreaks));
 
   // מסמך דרך העלאת קובץ. מסלול נפרד לגמרי מההדבקה — הוא עובר דרך
   // readFiles, ואיפוס value של ה-input מרוקן את אותו FileList שמחזיקים.

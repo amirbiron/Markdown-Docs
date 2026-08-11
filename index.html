@@ -3341,16 +3341,29 @@ class Component extends DCLogic {
        שנפרסת על שתי שורות נשברת — כל חצי מגיע בלי הכוכביות הסוגרות
        שלו ומוצג כטקסט רגיל עם `**` גלויות. */
     let brKey = 0;
-    const pushText = (chunk) => {
-      if (chunk.indexOf("\n") < 0) { out.push(chunk); return; }
-      const parts = chunk.split("\n");
-      parts.forEach((part, idx) => {
-        if (idx) out.push(React.createElement("br", { key: "br" + (++brKey) }));
-        if (part) out.push(part);
+    const withBreaks = (chunk) => {
+      if (chunk.indexOf("\n") < 0) return [chunk];
+      const parts = [];
+      chunk.split("\n").forEach((part, idx) => {
+        if (idx) parts.push(React.createElement("br", { key: "br" + (++brKey) }));
+        if (part) parts.push(part);
       });
+      return parts;
     };
+    const pushText = (chunk) => { out.push.apply(out, withBreaks(chunk)); };
 
-    const re = /(`[^`]+`)|(\*\*[^*]+\*\*)|(\*[^*\n]+\*)|(~~[^~]+~~)|(==[^=]+==)|(\[[^\]]+\]\([^)]+\))/g;
+    /* החלופה של כוכבית יחידה: `\*[^\s*](?:[^*]*[^\s*])?\*`
+
+       ה-\n שהיה כאן קודם (`[^*\n]+`) לא היה שם בשביל שורות — הוא הגביל
+       את הטווח לשורה אחת, וכך גם מנע במקרה מכוכביות ספרותיות להפוך
+       לנטוי. כל עוד הפסקה חוברה ברווחים לא היה לזה מחיר; מרגע שה-\n
+       נשמר, הוא חוסם נטוי שנפרס על שתי שורות.
+
+       פשוט להתיר \n (`[^*]+`) מחזיר את הבאג שהוא הסתיר: `5 * 3 ועוד * 2`
+       הופך ל-em. לכן הכלל שנכנס במקומו הוא זה של CommonMark עצמו —
+       הפותחת אינה מלווה ברווח והסוגרת אינה מוקדמת ברווח. `**` נשאר
+       כפי שהיה: הוא כבר התיר \n, והוא נדיר מספיק בטקסט ספרותי. */
+    const re = /(`[^`]+`)|(\*\*[^*]+\*\*)|(\*[^\s*](?:[^*]*[^\s*])?\*)|(~~[^~]+~~)|(==[^=]+==)|(\[[^\]]+\]\([^)]+\))/g;
     let last = 0, m, k = 0;
     while ((m = re.exec(text))) {
       if (m.index > last) pushText(text.slice(last, m.index));
@@ -3385,7 +3398,12 @@ class Component extends DCLogic {
           textDecorationThickness: "1px",
           textUnderlineOffset: "0.25em",
           textDecorationSkipInk: "auto"
-        } }, mm[1]));
+          /* טקסט הקישור נדחף כמחרוזת גולמית ולא עובר דרך kids, ולכן
+             שבירה בתוכו צריכה טיפול מפורש. code span הוא היוצא מן
+             הכלל היחיד שנשאר בכוונה: CommonMark קובע ששבירת שורה
+             בתוכו היא רווח, וזה גם מה שנכון לראות — שם של פונקציה
+             שנקטע לשתי שורות בתוך המסגרת נראה כמו שני שמות. */
+        } }, withBreaks(mm[1])));
       }
       last = m.index + s.length;
     }

@@ -96,6 +96,11 @@ const check = (label, ok, extra) => {
     '**מודגש שנפרס',
     'על שתי שורות**',
     '',
+    '*מוטה שנפרס',
+    'על שתי שורות*',
+    '',
+    'בחישוב 5 * 3 ועוד * 2 אין שום הדגשה.',
+    '',
     '> ציטוט ראשון',
     '> ציטוט שני',
     '',
@@ -145,33 +150,52 @@ const check = (label, ok, extra) => {
       .find((el) => (el.textContent || '').includes(txt));
     /* Range ולא el.getClientRects: על אלמנט בלוק המתודה מחזירה תמיד
        מלבן אחד — תיבת הבלוק — ולא שורה לשורה. Range על התוכן מחזיר
-       מלבן לכל תיבת שורה, וזה מה שהעין באמת רואה. הספירה היא של
-       ערכי top שונים, כי צומת טקסט וצומת <strong> באותה שורה מחזירים
-       שני מלבנים נפרדים. */
+       מלבן לכל תיבת שורה, וזה מה שהעין באמת רואה.
+
+       המלבנים מקובצים בסובלנות ולא לפי top מעוגל. באותה שורה ויזואלית
+       יושבים כמה מלבנים — צומת טקסט, <strong>, <code> — ואין להם אותו
+       top: תיבת inline עם גודל גופן או ריפוד אחרים מתחילה כמה פיקסלים
+       מעל או מתחת. עיגול לשלם היה סופר אותם כשורות נפרדות. הסף 8px
+       יושב בבטחה בין הפער הזה לבין מרווח שורה אמיתי, שהוא כאן כ-30px. */
     const rects = (el) => {
       if (!el) return 0;
       const r = document.createRange();
       r.selectNodeContents(el);
-      return new Set([...r.getClientRects()].map((b) => Math.round(b.top))).size;
+      const tops = [...r.getClientRects()].map((b) => b.top).sort((a, b) => a - b);
+      if (!tops.length) return 0;
+      return tops.reduce((n, t, i) => (i && t - tops[i - 1] > 8 ? n + 1 : n), 1);
     };
     const three = find('p', 'שורה ראשונה');
     const bold = find('p', 'מודגש שנפרס');
+    const em = find('p', 'מוטה שנפרס');
+    const plain = find('p', '5 * 3');
     const quote = find('blockquote', 'ציטוט ראשון');
     return {
       three: rects(three),
       // שורה ריקה חייבת להישאר גבול של פסקה ולא להתמזג לשבירה בלבד
       separate: !!three && !(three.textContent || '').includes('מודגש'),
       bold: rects(bold),
+      italic: rects(em),
+      /* ההגבלה ששמרה על זה קודם הייתה ה-\n עצמו: כל עוד הפסקה חוברה
+         ברווחים, נטוי לא יכול היה לחצות שורה ממילא. עכשיו שהוא יכול,
+         הכוכביות הספרותיות הן מה שנשאר בסיכון. */
+      literal: !!plain && !plain.querySelector('em')
+        && (plain.textContent || '').includes('5 * 3'),
       // ההדגשה נפרסת על שתי שורות; אם הפסקה פוצלה לפני הפרסינג היא
       // מתפרקת לשני חצאים עם ** גלויות ובלי <strong> כלל
       strong: !!bold && !!bold.querySelector('strong')
         && !(bold.textContent || '').includes('**'),
+      // אותו דבר בכוכבית יחידה. זה מה שנשבר כשה-\n נשמר לראשונה:
+      // החלופה של כוכבית יחידה אסרה \n במפורש
+      emTag: !!em && !!em.querySelector('em')
+        && !(em.textContent || '').includes('*'),
       quote: rects(quote),
     };
   });
   check('שורות בפסקה נשברות כפי שנכתבו',
     lineBreaks.three === 3 && lineBreaks.separate
       && lineBreaks.bold === 2 && lineBreaks.strong
+      && lineBreaks.italic === 2 && lineBreaks.emTag && lineBreaks.literal
       && lineBreaks.quote === 2,
     JSON.stringify(lineBreaks));
 

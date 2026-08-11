@@ -305,7 +305,10 @@ async def test_the_app_shell_must_revalidate(anon):
     השתנה ארבעה ימים. זה מה שהחזיק גרסה ישנה של האפליקציה אצל משתמש
     שכבר נפרסה לו גרסה חדשה, בלי שום סימן.
     """
+    # הסטטוס נבדק לפני הכותרת: המידלוור מוסיף את Cache-Control לכל תשובה
+    # בנתיב הזה, ולכן גם 500 היה עובר את הבדיקה שמתחתיו
     shell = await anon.get("/")
+    assert shell.status_code == 200
     assert shell.headers.get("Cache-Control") == "no-cache"
 
     asset = await anon.get("/assets/support.js")

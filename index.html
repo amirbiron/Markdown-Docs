@@ -390,7 +390,10 @@ body, aside, header, section, main { transition: background-color 0.2s ease, bor
             </sc-if>
           </div>
           <h1 style="margin:0 0 12px;font-family:var(--display);font-size:var(--h1-size);font-weight:800;line-height:1.14;color:var(--ink);text-wrap:balance">{{ title }}</h1>
-          <p style="margin:0;font-size:var(--lead-size);line-height:1.75;color:var(--soft);max-width:62ch;text-wrap:pretty">{{ lead }}</p>
+          <!-- pre-line ולא nowrap: הפתיח נכנס כמחרוזת גולמית ולא עובר
+               דרך inline, ולכן ה-<br/> לא נוצר לו. בלי זה HTML מכווץ את
+               השבירות שלו לרווחים ורק הוא בכל העמוד מתנהג אחרת. -->
+          <p style="margin:0;font-size:var(--lead-size);line-height:1.75;color:var(--soft);max-width:62ch;text-wrap:pretty;white-space:pre-line">{{ lead }}</p>
         </header>
 
         <sc-if value="{{ showSource }}" hint-placeholder-val="{{ false }}">
@@ -3240,7 +3243,8 @@ class Component extends DCLogic {
       if (line.indexOf(">") === 0) {
         const body = [];
         while (i < lines.length && lines[i].trim().indexOf(">") === 0) { body.push(lines[i].trim().replace(/^>\s?/, "")); i++; }
-        blocks.push({ t: "quote", text: body.join(" ") });
+        /* אותו שיקול כמו בפסקה: ציטוט רב-שורתי נכתב שורה-שורה. */
+        blocks.push({ t: "quote", text: body.join("\n") });
         continue;
       }
       if (/^[-*+]\s+\[[ xX]\]/.test(line)) {
@@ -3295,7 +3299,14 @@ class Component extends DCLogic {
         para.push(lines[i].trim());
         i++;
       }
-      if (para.length) blocks.push({ t: "p", text: para.join(" ") });
+      /* השורות מחוברות ב-newline ולא ברווח.
+
+         CommonMark אומר שרווח הוא הנכון, ושבירה אמיתית דורשת שני
+         רווחים בסוף השורה. הכלל הזה נכתב לטקסט שגולל ידנית ב-80 תווים,
+         ואף אחד לא מקליד שני רווחים בסוף שורה — הם גם בלתי-נראים
+         לגמרי. התוצאה בפועל היא שהשורות שהכותב הפריד נדבקות לפסקה
+         אחת. ה-newline נשמר כאן, ו-inline הופכת אותו ל-<br/>. */
+      if (para.length) blocks.push({ t: "p", text: para.join("\n") });
       else i++;
     }
     return { front: front, blocks: blocks };
@@ -3309,8 +3320,11 @@ class Component extends DCLogic {
     });
   }
 
+  /* ה-\n בתנאי הוא לא קישוט: בלעדיו הדגשה שנפרסת על שתי שורות
+     (`**מודגש` בשורה אחת ו-`והמשך**` בשנייה) הייתה חוזרת כמחרוזת
+     גולמית, ו-HTML היה מכווץ בה את השבירה לרווח. */
   kids(str) {
-    return /[`*~=\[]/.test(str) ? this.inline(str) : str;
+    return /[`*~=\[\n]/.test(str) ? this.inline(str) : str;
   }
 
   inline(text) {
@@ -3319,10 +3333,40 @@ class Component extends DCLogic {
        ל-dim במקרה, לא בכוונה. */
     const ed = this.editorial();
     const out = [];
-    const re = /(`[^`]+`)|(\*\*[^*]+\*\*)|(\*[^*\n]+\*)|(~~[^~]+~~)|(==[^=]+==)|(\[[^\]]+\]\([^)]+\))/g;
+
+    /* כל טקסט גולמי עובר כאן, וכל \n בתוכו הופך ל-<br/>.
+
+       הפיצול חייב להיות כאן ולא ב-render_blocks: פיצול הפסקה לשורות
+       לפני הפרסינג היה מעביר כל שורה בנפרד ל-inline, ואז הדגשה
+       שנפרסת על שתי שורות נשברת — כל חצי מגיע בלי הכוכביות הסוגרות
+       שלו ומוצג כטקסט רגיל עם `**` גלויות. */
+    let brKey = 0;
+    const withBreaks = (chunk) => {
+      if (chunk.indexOf("\n") < 0) return [chunk];
+      const parts = [];
+      chunk.split("\n").forEach((part, idx) => {
+        if (idx) parts.push(React.createElement("br", { key: "br" + (++brKey) }));
+        if (part) parts.push(part);
+      });
+      return parts;
+    };
+    const pushText = (chunk) => { out.push.apply(out, withBreaks(chunk)); };
+
+    /* החלופה של כוכבית יחידה: `\*[^\s*](?:[^*]*[^\s*])?\*`
+
+       ה-\n שהיה כאן קודם (`[^*\n]+`) לא היה שם בשביל שורות — הוא הגביל
+       את הטווח לשורה אחת, וכך גם מנע במקרה מכוכביות ספרותיות להפוך
+       לנטוי. כל עוד הפסקה חוברה ברווחים לא היה לזה מחיר; מרגע שה-\n
+       נשמר, הוא חוסם נטוי שנפרס על שתי שורות.
+
+       פשוט להתיר \n (`[^*]+`) מחזיר את הבאג שהוא הסתיר: `5 * 3 ועוד * 2`
+       הופך ל-em. לכן הכלל שנכנס במקומו הוא זה של CommonMark עצמו —
+       הפותחת אינה מלווה ברווח והסוגרת אינה מוקדמת ברווח. `**` נשאר
+       כפי שהיה: הוא כבר התיר \n, והוא נדיר מספיק בטקסט ספרותי. */
+    const re = /(`[^`]+`)|(\*\*[^*]+\*\*)|(\*[^\s*](?:[^*]*[^\s*])?\*)|(~~[^~]+~~)|(==[^=]+==)|(\[[^\]]+\]\([^)]+\))/g;
     let last = 0, m, k = 0;
     while ((m = re.exec(text))) {
-      if (m.index > last) out.push(text.slice(last, m.index));
+      if (m.index > last) pushText(text.slice(last, m.index));
       const s = m[0];
       k++;
       if (s[0] === "`") {
@@ -3354,11 +3398,16 @@ class Component extends DCLogic {
           textDecorationThickness: "1px",
           textUnderlineOffset: "0.25em",
           textDecorationSkipInk: "auto"
-        } }, mm[1]));
+          /* טקסט הקישור נדחף כמחרוזת גולמית ולא עובר דרך kids, ולכן
+             שבירה בתוכו צריכה טיפול מפורש. code span הוא היוצא מן
+             הכלל היחיד שנשאר בכוונה: CommonMark קובע ששבירת שורה
+             בתוכו היא רווח, וזה גם מה שנכון לראות — שם של פונקציה
+             שנקטע לשתי שורות בתוך המסגרת נראה כמו שני שמות. */
+        } }, withBreaks(mm[1])));
       }
       last = m.index + s.length;
     }
-    if (last < text.length) out.push(text.slice(last));
+    if (last < text.length) pushText(text.slice(last));
     return out;
   }
 

@@ -167,6 +167,24 @@ async def security_headers(request: Request, call_next) -> Response:
     response = await call_next(request)
     for header, value in SECURITY_HEADERS.items():
         response.headers.setdefault(header, value)
+
+    # מעטפת האפליקציה חייבת לאמת מול השרת בכל טעינה.
+    #
+    # בלי הכותרת הזאת התשובה יוצאת עם ETag ו-Last-Modified בלבד, ואין בה
+    # שום הנחיית טריות. במצב כזה RFC 9111 §4.2.2 מרשה לדפדפן לבחור זמן
+    # חיים היוריסטי, והנפוץ הוא כ-10% מהגיל של הקובץ. index.html שלא
+    # השתנה ארבעה ימים מקבל כך כעשר שעות של "טרי" — הדפדפן לא שולח
+    # בקשה בכלל, וה-ETag שקיים חסר משמעות כי אין למי להשוות אותו.
+    #
+    # התוצאה היא פריסה שמגיעה למי שהאתר פתוח אצלו רק אחרי שעות, בלי שום
+    # סימן. no-cache אינו "אל תשמור" אלא "שמור, אבל אמת בכל פעם": הגוף
+    # נשאר במטמון, והאימות מחזיר 304 ריק כשאין שינוי.
+    #
+    # /api לא נכלל בכוונה — התשובות שם נוצרות בלי ETag ובלי Last-Modified,
+    # ובלעדיהם אין לדפדפן על מה לבסס היוריסטיקה מלכתחילה.
+    path = request.url.path
+    if path == "/" or path.startswith("/assets/"):
+        response.headers.setdefault("Cache-Control", "no-cache")
     return response
 
 

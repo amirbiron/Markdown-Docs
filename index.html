@@ -1302,20 +1302,20 @@ const HEB_ALPHABET = "אבגדהוזחטיכלמנסעפצקרשת";
 const SNIPPETS = [
   { group: "טקסט", items: [
     { label: "מודגש", icon: "B", before: "**", after: "**", ph: "טקסט" },
-    { label: "נטוי", icon: "I", before: "*", after: "*", ph: "טקסט" },
-    { label: "קו חוצה", icon: "S", before: "~~", after: "~~", ph: "טקסט" },
-    { label: "הדגשה", icon: "H", before: "==", after: "==", ph: "טקסט" },
-    { label: "קוד", icon: "</>", before: "`", after: "`", ph: "code" },
+    { label: "נטוי", icon: "/", before: "*", after: "*", ph: "טקסט" },
+    { label: "קו חוצה", icon: "~", before: "~~", after: "~~", ph: "טקסט" },
+    { label: "הדגשה", icon: "=", before: "==", after: "==", ph: "טקסט" },
+    { label: "קוד", icon: "`", before: "`", after: "`", ph: "code" },
     { label: "קישור", icon: "🔗", before: "[", after: "](https://)", ph: "טקסט הקישור" }
   ] },
   { group: "מבנה", items: [
     { label: "כותרת 2", icon: "H2", before: "## ", after: "", ph: "כותרת", block: true },
     { label: "כותרת 3", icon: "H3", before: "### ", after: "", ph: "כותרת", block: true },
-    { label: "רשימה", icon: "•", before: "- ", after: "", ph: "פריט", block: true },
+    { label: "רשימה", icon: "-", before: "- ", after: "", ph: "פריט", block: true },
     { label: "רשימה ממוספרת", icon: "1.", before: "1. ", after: "", ph: "פריט", block: true },
     { label: "ציטוט", icon: "❝", before: "> ", after: "", ph: "ציטוט", block: true },
     { label: "משימות", icon: "☑", before: "- [ ] ", after: "", ph: "משימה", block: true },
-    { label: "בלוק קוד", icon: "▤", before: "```\n", after: "\n```", ph: "קוד", block: true },
+    { label: "בלוק קוד", icon: "</>", before: "```\n", after: "\n```", ph: "קוד", block: true },
     { label: "טבלה", icon: "▦", before: "", after: "", block: true,
       ph: "| עמודה | עמודה |\n|---|---|\n| תא | תא |" },
     { label: "קו מפריד", icon: "—", before: "", after: "", ph: "---", block: true },

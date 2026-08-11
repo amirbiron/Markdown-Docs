@@ -533,7 +533,7 @@ dir: rtl
         <span style="font-family:var(--mono);font-size:14px;font-weight:500;color:var(--accent-text)">01</span>
         טיפוגרפיה וכותרות
       </h2>
-      <p style="margin:0 0 18px;font-size:16.5px;line-height:1.85;color:var(--text);text-wrap:pretty">היררכיית הכותרות היא ההסכם היחיד בין הכותב לקורא. <strong style="color:var(--ink);font-weight:700">H2 פותח נושא</strong>, <em style="color:var(--head)">H3 מחלק אותו</em>, ו‑H4 הוא הגבול — מעבר לזה כבר צריך עמוד נפרד. טקסט <del style="color:var(--faint)">שאינו רלוונטי</del> מסומן ולא נמחק, ושמות ערכים נכתבים כ‑<code style="font-family:var(--mono);font-size:0.88em;background:var(--card);border:1px solid var(--line-2);border-radius:var(--r-sm);padding:2px 6px;color:var(--code-inline)">inline code</code>. קישורים כמו <a href="#sec-06">רפרנס ה‑API</a> תמיד מקבלים טקסט שמתאר את היעד.<sup style="font-size:11px"><a href="#footnotes" style="padding-inline-start:2px">1</a></sup></p>
+      <p style="margin:0 0 18px;font-size:16.5px;line-height:1.85;color:var(--text);text-wrap:pretty">היררכיית הכותרות היא ההסכם היחיד בין הכותב לקורא. <strong style="color:var(--ink);font-weight:700">H2 פותח נושא</strong>, <em style="color:var(--head)">H3 מחלק אותו</em>, ו‑H4 עד H6 מחלקים בתוכו. שש הרמות מרונדרות כל אחת בגודל ובמשקל משלה, אבל תוכן העניינים בצד עוצר ב‑H3 — מעבר לזה הוא מציף את עצמו. טקסט <del style="color:var(--faint)">שאינו רלוונטי</del> מסומן ולא נמחק, ושמות ערכים נכתבים כ‑<code style="font-family:var(--mono);font-size:0.88em;background:var(--card);border:1px solid var(--line-2);border-radius:var(--r-sm);padding:2px 6px;color:var(--code-inline)">inline code</code>. קישורים כמו <a href="#sec-06">רפרנס ה‑API</a> תמיד מקבלים טקסט שמתאר את היעד.<sup style="font-size:11px"><a href="#footnotes" style="padding-inline-start:2px">1</a></sup></p>
       <h3 style="margin:26px 0 12px;font-family:var(--display);font-size:var(--ref-h3);font-weight:700;color:var(--green)">H3 — כותרת משנית</h3>
       <p style="margin:0 0 18px;font-size:16.5px;line-height:1.85;color:var(--text);text-wrap:pretty">ברמה הזאת נכנסים לפרטים: מה קורה בפועל, מה נכשל, ואיך מזהים את זה. פסקה אחת לרעיון אחד.</p>
       <h4 style="margin:22px 0 10px;font-size:16px;font-weight:700;color:var(--amber)">H4 — מקרה קצה</h4>
@@ -580,16 +580,8 @@ dir: rtl
       </div>
       <div style="margin:24px 0 0">
         <div style="margin:0 0 12px;font-family:var(--mono);font-size:11px;letter-spacing:0.1em;text-transform:uppercase;color:var(--faint)">רשימת הגדרות</div>
-        <dl style="margin:0;display:grid;gap:14px">
-          <div style="padding-inline-start:14px;border-inline-start:2px solid var(--accent)">
-            <dt style="font-weight:700;color:var(--head);font-size:15.5px">בלוק</dt>
-            <dd style="margin:2px 0 0;font-size:15.5px;color:var(--soft)">יחידת התוכן הקטנה ביותר שהתיעוד מרנדר בנפרד.</dd>
-          </div>
-          <div style="padding-inline-start:14px;border-inline-start:2px solid var(--green)">
-            <dt style="font-weight:700;color:var(--head);font-size:15.5px">קטע</dt>
-            <dd style="margin:2px 0 0;font-size:15.5px;color:var(--soft)">אוסף בלוקים תחת כותרת H2 אחת, עם עוגן משלו.</dd>
-          </div>
-        </dl>
+        <!-- נבנה מ-Markdown ולא כתוב כאן כ-HTML. ראו referenceDefs. -->
+        <div>{{ referenceDefs }}</div>
       </div>
     </section>
 
@@ -1302,23 +1294,24 @@ const HEB_ALPHABET = "אבגדהוזחטיכלמנסעפצקרשת";
 const SNIPPETS = [
   { group: "טקסט", items: [
     { label: "מודגש", icon: "B", before: "**", after: "**", ph: "טקסט" },
-    { label: "נטוי", icon: "I", before: "*", after: "*", ph: "טקסט" },
-    { label: "קו חוצה", icon: "S", before: "~~", after: "~~", ph: "טקסט" },
-    { label: "הדגשה", icon: "H", before: "==", after: "==", ph: "טקסט" },
-    { label: "קוד", icon: "</>", before: "`", after: "`", ph: "code" },
+    { label: "נטוי", icon: "/", before: "*", after: "*", ph: "טקסט" },
+    { label: "קו חוצה", icon: "~", before: "~~", after: "~~", ph: "טקסט" },
+    { label: "הדגשה", icon: "=", before: "==", after: "==", ph: "טקסט" },
+    { label: "קוד", icon: "`", before: "`", after: "`", ph: "code" },
     { label: "קישור", icon: "🔗", before: "[", after: "](https://)", ph: "טקסט הקישור" }
   ] },
   { group: "מבנה", items: [
     { label: "כותרת 2", icon: "H2", before: "## ", after: "", ph: "כותרת", block: true },
     { label: "כותרת 3", icon: "H3", before: "### ", after: "", ph: "כותרת", block: true },
-    { label: "רשימה", icon: "•", before: "- ", after: "", ph: "פריט", block: true },
+    { label: "רשימה", icon: "-", before: "- ", after: "", ph: "פריט", block: true },
     { label: "רשימה ממוספרת", icon: "1.", before: "1. ", after: "", ph: "פריט", block: true },
     { label: "ציטוט", icon: "❝", before: "> ", after: "", ph: "ציטוט", block: true },
     { label: "משימות", icon: "☑", before: "- [ ] ", after: "", ph: "משימה", block: true },
-    { label: "בלוק קוד", icon: "▤", before: "```\n", after: "\n```", ph: "קוד", block: true },
+    { label: "בלוק קוד", icon: "</>", before: "```\n", after: "\n```", ph: "קוד", block: true },
     { label: "טבלה", icon: "▦", before: "", after: "", block: true,
       ph: "| עמודה | עמודה |\n|---|---|\n| תא | תא |" },
     { label: "קו מפריד", icon: "—", before: "", after: "", ph: "---", block: true },
+    { label: "רשימת הגדרות", icon: ":", before: "מונח\n: ", after: "", ph: "ההגדרה", block: true },
     { label: "בלוק מתקפל", icon: "▸", before: "::: details כותרת\n", after: "\n:::", ph: "תוכן", block: true }
   ] }
 ];
@@ -1337,6 +1330,54 @@ SNIPPETS.push({
     block: true
   }))
 });
+
+/* ═══════════════════════════════════════════════════════════════════
+   הכותרות העמוקות — 4, 5 ו-6
+
+   שלושתן קיבלו קודם ענף else אחד, כלומר אותו תג ואותו עיצוב בדיוק.
+   הפרסר תמיד הבדיל ביניהן (level נגזר מאורך רצף ה-#), אבל הרינדור
+   איחד אותן — כותב ש-##### מתחת ל-#### קיבל שתי שורות זהות.
+
+   הסולם נפתח כלפי מעלה ולא כלפי מטה: טקסט הגוף הוא 16.5, ו-H4 היה
+   16 — כלומר כבר קטן ממנו. הקטנה נוספת ל-5 ול-6 הייתה נותנת שתי
+   כותרות בגודל הערת שוליים. לכן H4 עולה ל-18, מעל טקסט הגוף, ומתחתיו
+   נפתח מקום לשתי רמות אמיתיות.
+
+   הגודל אינו הסימן היחיד: כל רמה יורדת גם במשקל ובעוצמת הצבע, כדי
+   שההיררכיה תיקרא גם כשהכותרות לא זו לצד זו וגם למי שאינו מבחין בין
+   הגוונים.
+   ═══════════════════════════════════════════════════════════════════ */
+/* שתי עמודות גודל, כי הערכות הכתבתיות גדולות לאורך כל הסולם: טקסט
+   הגוף שלהן 17.5 מול 16.5, ו-H3 שלהן 23 מול 20. עמודה אחת משותפת
+   הייתה מציבה שם את H5 מתחת לטקסט הגוף. */
+const DEEP_HEADINGS = {
+  4: { tag: "h4", size: 18, edSize: 20, weight: 700, margin: "26px 0 10px", tracking: "0.01em",
+       fg: "var(--amber)", edFg: "var(--accent)" },
+  5: { tag: "h5", size: 16, edSize: 18, weight: 700, margin: "22px 0 8px", tracking: "0.01em",
+       fg: "var(--head)", edFg: "var(--head)" },
+  6: { tag: "h6", size: 14, edSize: 15.5, weight: 600, margin: "20px 0 8px", tracking: "0.04em",
+       fg: "var(--soft)", edFg: "var(--soft)" }
+};
+
+/* שורת הגדרה ברשימת הגדרות: נקודתיים, רווח, ואז תוכן.
+
+   הרווח הוא מה שמפריד בין ": הגדרה" לבין ":::" של ההתראות, וה-lookahead
+   פוסל שורה שכולה ": " בלי תוכן. */
+const DEF_LINE = /^:\s+(?=\S)/;
+
+/* המקור של ההדגמה בדף הרפרנס. Markdown ולא HTML, בכוונה — ראו
+   referenceDefs. */
+const REFERENCE_DEFS = [
+  "בלוק",
+  ": יחידת התוכן הקטנה ביותר שהתיעוד מרנדר בנפרד.",
+  "",
+  "קטע",
+  ": אוסף בלוקים תחת כותרת H2 אחת, עם עוגן משלו."
+].join("\n");
+
+/* פתיחה של בלוק אחר. הייתה כתובה פעמיים — בלולאת הפסקה ובבדיקת המונח —
+   ושתי עותקות של אותה תבנית נפרדות זו מזו בשקט ברגע שמוסיפים תחביר. */
+const BLOCK_START = /^(#{1,6}\s|```|:::|>|\||!\[|[-*+]\s|\d+[.)]\s|-{3,}$)/;
 
 const FALLBACK_HUE = "gray";
 
@@ -2897,6 +2938,7 @@ class Component extends DCLogic {
       copiedPage: s.codeCopied === "page",
       notCopiedPage: s.codeCopied !== "page",
       referenceTasks: this.referenceTasks(),
+      referenceDefs: this.referenceDefs(),
       voted: s.voted,
       voteYes: () => this.setState({ voted: true }),
       voteNo: () => this.setState({ voted: true })
@@ -3113,6 +3155,18 @@ class Component extends DCLogic {
       }));
   }
 
+  /* רשימת ההגדרות שבדף הרפרנס, מ-Markdown אמיתי.
+
+     קודם היא הייתה HTML קפוא בתבנית — והדגימה רכיב שלא היה שום תחביר
+     לייצר אותו במסמך. עכשיו היא עוברת באותם parse ו-render_blocks של
+     כל מסמך, ולכן היא לא יכולה להתרחק ממה שהמערכת באמת עושה: אם
+     התחביר יישבר, הרפרנס יישבר לעין. אותו שיקול בדיוק כמו ב-
+     referenceTasks. */
+  referenceDefs() {
+    return React.createElement("div", null,
+      this.render_blocks(this.parse(REFERENCE_DEFS), { numbered: false }));
+  }
+
   /* העתקת המסמך כולו. משתמשת באותו מסלול של העתקת בלוק קוד, כולל
      הנפילה ל-textarea זמני כשה-clipboard API חסום. */
   async copyDocument() {
@@ -3294,8 +3348,47 @@ class Component extends DCLogic {
         }
         if (rows.length) { blocks.push({ t: "table", rows: rows }); continue; }
       }
+      /* רשימת הגדרות: שורת מונח, ומתחתיה שורה שמתחילה ב-": ".
+
+         הזיהוי הוא לפי השורה הבאה ולא לפי הנוכחית — המונח עצמו הוא טקסט
+         רגיל לגמרי, ומה שהופך אותו למונח הוא מה שבא אחריו.
+
+         הרווח אחרי הנקודתיים אינו קוסמטי: הוא מה שמפריד בין ": הגדרה"
+         לבין ":::" של ההתראות. ענף ההתראות רץ ממילא קודם, אבל הסתמכות
+         על סדר הענפים לבדה נשברת בשקט ברגע שמישהו מזיז אחד מהם. */
+      if (i + 1 < lines.length && DEF_LINE.test(lines[i + 1].trim()) && !DEF_LINE.test(line)) {
+        const items = [];
+        while (i < lines.length) {
+          const term = lines[i].trim();
+          /* המונח חייב להיות שורה רגילה. בלי הבדיקה הזאת "## כותרת"
+             שאחריה שורת הגדרה הייתה נבלעת לתוך ה-dl ומאבדת את היותה
+             כותרת — והעוגן שלה בתוכן העניינים היה נעלם איתה. */
+          if (!term || BLOCK_START.test(term) || !DEF_LINE.test((lines[i + 1] || "").trim())) break;
+          i++;
+          const defs = [];
+          while (i < lines.length && DEF_LINE.test(lines[i].trim())) {
+            defs.push(lines[i].trim().replace(DEF_LINE, ""));
+            i++;
+          }
+          items.push({ term: term, defs: defs });
+          /* שורה ריקה בודדת בין זוגות אינה מסיימת את הרשימה, בדיוק כמו
+             ב"רשימה רופפת" שלמעלה. שתיים כן. כלל אחד לשני המקומות. */
+          if (!lines[i] || !lines[i].trim()) {
+            if (i + 2 < lines.length && lines[i + 1].trim() && DEF_LINE.test(lines[i + 2].trim())) {
+              i++;
+              continue;
+            }
+            break;
+          }
+        }
+        if (items.length) { blocks.push({ t: "dl", items: items }); continue; }
+      }
+
       const para = [];
-      while (i < lines.length && lines[i].trim() && !/^(#{1,6}\s|```|:::|>|\||!\[|[-*+]\s|\d+[.)]\s|-{3,}$)/.test(lines[i].trim())) {
+      while (i < lines.length && lines[i].trim() && !BLOCK_START.test(lines[i].trim())) {
+        /* עצירה לפני שורת המונח ולא אחריה: אילו הפסקה הייתה בולעת אותו,
+           שורת ההגדרה שמתחתיו הייתה נשארת יתומה ומוצגת עם ":" גלויה. */
+        if (DEF_LINE.test((lines[i + 1] || "").trim())) break;
         para.push(lines[i].trim());
         i++;
       }
@@ -3504,9 +3597,14 @@ class Component extends DCLogic {
             ? { margin: "32px 0 12px", fontFamily: "var(--display)", fontSize: 23, fontWeight: 700, color: "var(--ink)", scrollMarginTop: 90 }
             : { margin: "28px 0 12px", fontSize: 20, fontWeight: 700, color: "var(--green)", scrollMarginTop: 90 } }, this.inline(b.text)));
         } else {
-          out.push(React.createElement("h4", { key: key, id: "h-" + hi, style: ed
-            ? { margin: "24px 0 10px", fontSize: 15, fontWeight: 700, letterSpacing: "0.02em", color: "var(--accent)", scrollMarginTop: 90 }
-            : { margin: "22px 0 10px", fontSize: 16, fontWeight: 700, color: "var(--amber)", scrollMarginTop: 90 } }, this.inline(b.text)));
+          /* התג נגזר מהרמה ולא קבוע h4: כותרת שנכתבה ###### יוצאת
+             <h6>, וקורא מסך שומע את העומק הנכון. */
+          const deep = DEEP_HEADINGS[b.level] || DEEP_HEADINGS[6];
+          out.push(React.createElement(deep.tag, { key: key, id: "h-" + hi, style: {
+            margin: deep.margin, fontSize: ed ? deep.edSize : deep.size, fontWeight: deep.weight,
+            letterSpacing: deep.tracking, color: ed ? deep.edFg : deep.fg,
+            scrollMarginTop: 90
+          } }, this.inline(b.text)));
         }
 
       } else if (b.t === "p") {
@@ -3515,6 +3613,27 @@ class Component extends DCLogic {
           : ed
             ? { margin: "0 0 20px", fontSize: 17.5, lineHeight: 1.9, color: "var(--text)", maxWidth: "68ch", textWrap: "pretty" }
             : { margin: "0 0 18px", fontSize: 16.5, lineHeight: 1.85, color: "var(--text)", textWrap: "pretty" } }, this.inline(b.text)));
+
+      } else if (b.t === "dl") {
+        /* פס אחיד לכל הזוגות ולא צבע מתחלף. ההדגמה שהייתה בדף הרפרנס
+           החליפה צבע בין שני הזוגות שלה, וזה נעים בשניים ומתעייף
+           בעשרה: צבע שמתחלף בלי משמעות מאחוריו שולח את הקורא לחפש
+           כלל שאינו קיים. */
+        out.push(React.createElement("dl", { key: key, style: {
+          margin: "0 0 22px", display: "grid", gap: 14
+        } }, b.items.map((it, j) =>
+          React.createElement("div", { key: j, style: {
+            paddingInlineStart: 14, borderInlineStart: "2px solid var(--accent)"
+          } }, [
+            React.createElement("dt", { key: "t", style: {
+              fontSize: ed ? 16.5 : 15.5, fontWeight: 700, color: "var(--head)"
+            } }, this.inline(it.term)),
+            /* כמה הגדרות למונח אחד — שורות ":" רצופות. */
+            it.defs.map((d, k) => React.createElement("dd", { key: "d" + k, style: {
+              margin: "2px 0 0", fontSize: ed ? 16.5 : 15.5,
+              lineHeight: ed ? 1.8 : 1.75, color: "var(--soft)"
+            } }, this.inline(d)))
+          ]))));
 
       } else if (b.t === "hr") {
         out.push(ed

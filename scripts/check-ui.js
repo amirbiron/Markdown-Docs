@@ -104,6 +104,27 @@ const check = (label, ok, extra) => {
     '> ציטוט ראשון',
     '> ציטוט שני',
     '',
+    '#### כותרת H4',
+    '',
+    '##### כותרת H5',
+    '',
+    '###### כותרת H6',
+    '',
+    '## הגדרות',
+    '',
+    'בלוק',
+    ': יחידת התוכן הקטנה ביותר.',
+    '',
+    'מונח עם שתיים',
+    ': ההגדרה הראשונה.',
+    ': ההגדרה השנייה.',
+    '',
+    '::: note',
+    'ההתראה חייבת לשרוד את התחביר החדש',
+    ':::',
+    '',
+    ': שורה יתומה בלי מונח לפניה',
+    '',
   ].join('\n'));
   await p.getByRole('button', { name: 'הוספה לפרויקט' }).click();
   await p.waitForTimeout(2500);
@@ -192,6 +213,55 @@ const check = (label, ok, extra) => {
       quote: rects(quote),
     };
   });
+  // ── רשימת הגדרות ──────────────────────────────────────────────────
+  // התחביר החדש מתחיל בנקודתיים, בדיוק כמו ההתראות. לכן נמדד כאן לא רק
+  // שהוא עובד אלא גם שהוא לא בלע את מה שהיה קודם: ההתראה חייבת לשרוד,
+  // ושורת ":" בלי מונח לפניה חייבת להישאר טקסט ולא להפוך להגדרה.
+  const defs = await p.evaluate(() => {
+    const dls = [...document.querySelectorAll('[data-doc] dl')];
+    const pairs = dls.flatMap((dl) => [...dl.querySelectorAll('dt')].map((dt) => ({
+      term: dt.textContent.trim(),
+      defs: [...dt.parentElement.querySelectorAll('dd')].map((d) => d.textContent.trim()),
+    })));
+    return {
+      // שורה ריקה בין זוגות ממשיכה את אותה רשימה ולא פותחת חדשה
+      lists: dls.length,
+      pairs: pairs.length,
+      first: pairs[0] || null,
+      multi: (pairs.find((x) => x.term === 'מונח עם שתיים') || {}).defs || [],
+      callout: document.body.innerText.includes('ההתראה חייבת לשרוד'),
+      orphanIsText: [...document.querySelectorAll('[data-doc] p')]
+        .some((e) => e.textContent.includes(': שורה יתומה'))
+        && ![...document.querySelectorAll('[data-doc] dd')]
+          .some((e) => e.textContent.includes('יתומה')),
+    };
+  });
+  check('רשימת הגדרות נבנית מהתחביר',
+    defs.lists === 1 && defs.pairs === 2
+      && !!defs.first && defs.first.term === 'בלוק' && defs.first.defs.length === 1
+      && defs.multi.length === 2
+      && defs.callout && defs.orphanIsText,
+    JSON.stringify(defs));
+
+  // ── שלוש הרמות העמוקות ────────────────────────────────────────────
+  // הן חלקו ענף else אחד, כלומר אותו תג ואותו גודל בדיוק. נמדד מה
+  // שנשבר: תג נפרד לכל רמה, וגודל שיורד ממש בין רמה לרמה.
+  const deep = await p.evaluate(() => {
+    const of = (tag) => {
+      const el = [...document.querySelectorAll('[data-doc] ' + tag)]
+        .find((e) => (e.textContent || '').includes('כותרת ' + tag.toUpperCase()));
+      if (!el) return null;
+      const cs = getComputedStyle(el);
+      return { size: parseFloat(cs.fontSize), weight: Number(cs.fontWeight), color: cs.color };
+    };
+    return { h4: of('h4'), h5: of('h5'), h6: of('h6') };
+  });
+  check('H4, H5 ו-H6 נבדלות זו מזו',
+    !!deep.h4 && !!deep.h5 && !!deep.h6
+      && deep.h4.size > deep.h5.size && deep.h5.size > deep.h6.size
+      && new Set([deep.h4.color, deep.h6.color]).size === 2,
+    JSON.stringify(deep));
+
   check('שורות בפסקה נשברות כפי שנכתבו',
     lineBreaks.three === 3 && lineBreaks.separate
       && lineBreaks.bold === 2 && lineBreaks.strong

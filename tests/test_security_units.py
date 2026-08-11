@@ -294,3 +294,29 @@ def test_guard_accepts_loopback_only_when_enabled():
     assert relaxed._accepts("http://localhost:8070")
     assert not relaxed._accepts("https://evil.example")
     assert not relaxed._accepts("")
+
+
+@pytest.mark.anyio
+async def test_the_app_shell_must_revalidate(anon):
+    """מעטפת האפליקציה מוגשת עם no-cache, וה-API בלי הכותרת.
+
+    בלי זה התשובה יוצאת עם ETag ו-Last-Modified בלבד ובלי הנחיית טריות,
+    ואז הדפדפן בוחר לעצמו זמן חיים היוריסטי — כעשר שעות על קובץ שלא
+    השתנה ארבעה ימים. זה מה שהחזיק גרסה ישנה של האפליקציה אצל משתמש
+    שכבר נפרסה לו גרסה חדשה, בלי שום סימן.
+    """
+    # הסטטוס נבדק לפני הכותרת: המידלוור מוסיף את Cache-Control לכל תשובה
+    # בנתיב הזה, ולכן גם 500 היה עובר את הבדיקה שמתחתיו
+    shell = await anon.get("/")
+    assert shell.status_code == 200
+    assert shell.headers.get("Cache-Control") == "no-cache"
+
+    asset = await anon.get("/assets/support.js")
+    assert asset.status_code == 200
+    assert asset.headers.get("Cache-Control") == "no-cache"
+
+    # ל-API אין ETag ואין Last-Modified, ולכן אין בסיס להיוריסטיקה
+    api = await anon.get("/api/health")
+    assert api.status_code == 200
+    assert "Cache-Control" not in api.headers
+    assert "Last-Modified" not in api.headers

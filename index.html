@@ -580,16 +580,8 @@ dir: rtl
       </div>
       <div style="margin:24px 0 0">
         <div style="margin:0 0 12px;font-family:var(--mono);font-size:11px;letter-spacing:0.1em;text-transform:uppercase;color:var(--faint)">רשימת הגדרות</div>
-        <dl style="margin:0;display:grid;gap:14px">
-          <div style="padding-inline-start:14px;border-inline-start:2px solid var(--accent)">
-            <dt style="font-weight:700;color:var(--head);font-size:15.5px">בלוק</dt>
-            <dd style="margin:2px 0 0;font-size:15.5px;color:var(--soft)">יחידת התוכן הקטנה ביותר שהתיעוד מרנדר בנפרד.</dd>
-          </div>
-          <div style="padding-inline-start:14px;border-inline-start:2px solid var(--green)">
-            <dt style="font-weight:700;color:var(--head);font-size:15.5px">קטע</dt>
-            <dd style="margin:2px 0 0;font-size:15.5px;color:var(--soft)">אוסף בלוקים תחת כותרת H2 אחת, עם עוגן משלו.</dd>
-          </div>
-        </dl>
+        <!-- נבנה מ-Markdown ולא כתוב כאן כ-HTML. ראו referenceDefs. -->
+        <div>{{ referenceDefs }}</div>
       </div>
     </section>
 
@@ -1319,6 +1311,7 @@ const SNIPPETS = [
     { label: "טבלה", icon: "▦", before: "", after: "", block: true,
       ph: "| עמודה | עמודה |\n|---|---|\n| תא | תא |" },
     { label: "קו מפריד", icon: "—", before: "", after: "", ph: "---", block: true },
+    { label: "רשימת הגדרות", icon: ":", before: "מונח\n: ", after: "", ph: "ההגדרה", block: true },
     { label: "בלוק מתקפל", icon: "▸", before: "::: details כותרת\n", after: "\n:::", ph: "תוכן", block: true }
   ] }
 ];
@@ -1365,6 +1358,26 @@ const DEEP_HEADINGS = {
   6: { tag: "h6", size: 14, edSize: 15.5, weight: 600, margin: "20px 0 8px", tracking: "0.04em",
        fg: "var(--soft)", edFg: "var(--soft)" }
 };
+
+/* שורת הגדרה ברשימת הגדרות: נקודתיים, רווח, ואז תוכן.
+
+   הרווח הוא מה שמפריד בין ": הגדרה" לבין ":::" של ההתראות, וה-lookahead
+   פוסל שורה שכולה ": " בלי תוכן. */
+const DEF_LINE = /^:\s+(?=\S)/;
+
+/* המקור של ההדגמה בדף הרפרנס. Markdown ולא HTML, בכוונה — ראו
+   referenceDefs. */
+const REFERENCE_DEFS = [
+  "בלוק",
+  ": יחידת התוכן הקטנה ביותר שהתיעוד מרנדר בנפרד.",
+  "",
+  "קטע",
+  ": אוסף בלוקים תחת כותרת H2 אחת, עם עוגן משלו."
+].join("\n");
+
+/* פתיחה של בלוק אחר. הייתה כתובה פעמיים — בלולאת הפסקה ובבדיקת המונח —
+   ושתי עותקות של אותה תבנית נפרדות זו מזו בשקט ברגע שמוסיפים תחביר. */
+const BLOCK_START = /^(#{1,6}\s|```|:::|>|\||!\[|[-*+]\s|\d+[.)]\s|-{3,}$)/;
 
 const FALLBACK_HUE = "gray";
 
@@ -2925,6 +2938,7 @@ class Component extends DCLogic {
       copiedPage: s.codeCopied === "page",
       notCopiedPage: s.codeCopied !== "page",
       referenceTasks: this.referenceTasks(),
+      referenceDefs: this.referenceDefs(),
       voted: s.voted,
       voteYes: () => this.setState({ voted: true }),
       voteNo: () => this.setState({ voted: true })
@@ -3141,6 +3155,18 @@ class Component extends DCLogic {
       }));
   }
 
+  /* רשימת ההגדרות שבדף הרפרנס, מ-Markdown אמיתי.
+
+     קודם היא הייתה HTML קפוא בתבנית — והדגימה רכיב שלא היה שום תחביר
+     לייצר אותו במסמך. עכשיו היא עוברת באותם parse ו-render_blocks של
+     כל מסמך, ולכן היא לא יכולה להתרחק ממה שהמערכת באמת עושה: אם
+     התחביר יישבר, הרפרנס יישבר לעין. אותו שיקול בדיוק כמו ב-
+     referenceTasks. */
+  referenceDefs() {
+    return React.createElement("div", null,
+      this.render_blocks(this.parse(REFERENCE_DEFS), { numbered: false }));
+  }
+
   /* העתקת המסמך כולו. משתמשת באותו מסלול של העתקת בלוק קוד, כולל
      הנפילה ל-textarea זמני כשה-clipboard API חסום. */
   async copyDocument() {
@@ -3322,8 +3348,47 @@ class Component extends DCLogic {
         }
         if (rows.length) { blocks.push({ t: "table", rows: rows }); continue; }
       }
+      /* רשימת הגדרות: שורת מונח, ומתחתיה שורה שמתחילה ב-": ".
+
+         הזיהוי הוא לפי השורה הבאה ולא לפי הנוכחית — המונח עצמו הוא טקסט
+         רגיל לגמרי, ומה שהופך אותו למונח הוא מה שבא אחריו.
+
+         הרווח אחרי הנקודתיים אינו קוסמטי: הוא מה שמפריד בין ": הגדרה"
+         לבין ":::" של ההתראות. ענף ההתראות רץ ממילא קודם, אבל הסתמכות
+         על סדר הענפים לבדה נשברת בשקט ברגע שמישהו מזיז אחד מהם. */
+      if (i + 1 < lines.length && DEF_LINE.test(lines[i + 1].trim()) && !DEF_LINE.test(line)) {
+        const items = [];
+        while (i < lines.length) {
+          const term = lines[i].trim();
+          /* המונח חייב להיות שורה רגילה. בלי הבדיקה הזאת "## כותרת"
+             שאחריה שורת הגדרה הייתה נבלעת לתוך ה-dl ומאבדת את היותה
+             כותרת — והעוגן שלה בתוכן העניינים היה נעלם איתה. */
+          if (!term || BLOCK_START.test(term) || !DEF_LINE.test((lines[i + 1] || "").trim())) break;
+          i++;
+          const defs = [];
+          while (i < lines.length && DEF_LINE.test(lines[i].trim())) {
+            defs.push(lines[i].trim().replace(DEF_LINE, ""));
+            i++;
+          }
+          items.push({ term: term, defs: defs });
+          /* שורה ריקה בודדת בין זוגות אינה מסיימת את הרשימה, בדיוק כמו
+             ב"רשימה רופפת" שלמעלה. שתיים כן. כלל אחד לשני המקומות. */
+          if (!lines[i] || !lines[i].trim()) {
+            if (i + 2 < lines.length && lines[i + 1].trim() && DEF_LINE.test(lines[i + 2].trim())) {
+              i++;
+              continue;
+            }
+            break;
+          }
+        }
+        if (items.length) { blocks.push({ t: "dl", items: items }); continue; }
+      }
+
       const para = [];
-      while (i < lines.length && lines[i].trim() && !/^(#{1,6}\s|```|:::|>|\||!\[|[-*+]\s|\d+[.)]\s|-{3,}$)/.test(lines[i].trim())) {
+      while (i < lines.length && lines[i].trim() && !BLOCK_START.test(lines[i].trim())) {
+        /* עצירה לפני שורת המונח ולא אחריה: אילו הפסקה הייתה בולעת אותו,
+           שורת ההגדרה שמתחתיו הייתה נשארת יתומה ומוצגת עם ":" גלויה. */
+        if (DEF_LINE.test((lines[i + 1] || "").trim())) break;
         para.push(lines[i].trim());
         i++;
       }
@@ -3548,6 +3613,27 @@ class Component extends DCLogic {
           : ed
             ? { margin: "0 0 20px", fontSize: 17.5, lineHeight: 1.9, color: "var(--text)", maxWidth: "68ch", textWrap: "pretty" }
             : { margin: "0 0 18px", fontSize: 16.5, lineHeight: 1.85, color: "var(--text)", textWrap: "pretty" } }, this.inline(b.text)));
+
+      } else if (b.t === "dl") {
+        /* פס אחיד לכל הזוגות ולא צבע מתחלף. ההדגמה שהייתה בדף הרפרנס
+           החליפה צבע בין שני הזוגות שלה, וזה נעים בשניים ומתעייף
+           בעשרה: צבע שמתחלף בלי משמעות מאחוריו שולח את הקורא לחפש
+           כלל שאינו קיים. */
+        out.push(React.createElement("dl", { key: key, style: {
+          margin: "0 0 22px", display: "grid", gap: 14
+        } }, b.items.map((it, j) =>
+          React.createElement("div", { key: j, style: {
+            paddingInlineStart: 14, borderInlineStart: "2px solid var(--accent)"
+          } }, [
+            React.createElement("dt", { key: "t", style: {
+              fontSize: ed ? 16.5 : 15.5, fontWeight: 700, color: "var(--head)"
+            } }, this.inline(it.term)),
+            /* כמה הגדרות למונח אחד — שורות ":" רצופות. */
+            it.defs.map((d, k) => React.createElement("dd", { key: "d" + k, style: {
+              margin: "2px 0 0", fontSize: ed ? 16.5 : 15.5,
+              lineHeight: ed ? 1.8 : 1.75, color: "var(--soft)"
+            } }, this.inline(d)))
+          ]))));
 
       } else if (b.t === "hr") {
         out.push(ed

@@ -949,7 +949,10 @@ console.<span style="color:var(--tok-fn)">log</span>(doc.<span style="color:var(
   </main>
 
   <sc-if value="{{ tocVisible }}" hint-placeholder-val="{{ true }}">
-  <aside style="position:sticky;top:var(--bar-h);width:214px;box-sizing:border-box;height:calc(100vh - var(--bar-h));overflow-y:auto;padding:40px 16px 36px;border-inline-start:1px solid var(--hair)">
+  <!-- data-toc הוא נקודת אחיזה לבדיקות. בלעדיו הן מזהות את הרשימה לפי
+       href שמתחיל ב-"#h-", וזה נכון רק כל עוד אין במסמך קישור לעוגן של
+       כותרת — קישור לגיטימי לגמרי שהיה מפיל בדיקה ירוקה. -->
+  <aside data-toc="1" style="position:sticky;top:var(--bar-h);width:214px;box-sizing:border-box;height:calc(100vh - var(--bar-h));overflow-y:auto;padding:40px 16px 36px;border-inline-start:1px solid var(--hair)">
     <div style="{{ chrome.railLabel }}">בעמוד הזה</div>
     <div style="position:relative;padding-inline-start:12px">
       <span style="position:absolute;inset-inline-start:0;top:0;bottom:0;width:1px;background:var(--hair)"></span>
@@ -1364,20 +1367,45 @@ const DEEP_HEADINGS = {
 
    הרווח הוא מה שמפריד בין ": הגדרה" לבין ":::" של ההתראות, וה-lookahead
    פוסל שורה שכולה ": " בלי תוכן. */
+const DEF_LINE = /^:\s+(?=\S)/;
+
+/* תבנית הסימון הפנימי, במקום אחד.
+
+   inline ו-plainText חייבות להסכים על מה נחשב סימון: אחת מרנדרת אותו
+   והשנייה מסירה אותו. תווית בתוכן העניינים שנגזרת מכלל אחר מזה שרינדר
+   את הכותרת מתארת כותרת אחרת מזו שעל המסך.
+
+   נשמרת בלי הדגל g, וכל אתר בונה לעצמו עותק טרי. inline קוראת ל-kids
+   בתוך לולאת ה-exec שלה, כלומר נכנסת לעצמה רקורסיבית — אובייקט regex
+   משותף עם lastIndex משותף היה מדלג על חצי מהטקסט בקריאה המקוננת. */
+const INLINE_MARKUP = /(`[^`]+`)|(\*\*[^*]+\*\*)|(\*[^\s*](?:[^*]*[^\s*])?\*)|(~~[^~]+~~)|(==[^=]+==)|(\[[^\]]+\]\([^)]+\))/;
+
 /* Markdown לטקסט נקי, למקומות שאינם יכולים לשאת רכיבים.
 
    פריט בתוכן העניינים יושב בתוך <a> ולכן חייב להישאר מחרוזת, ורינדור
-   דרך inline אינו אפשרות שם. מחיקת תווי הסימון לבדה לא הספיקה: היא
-   הסירה ` * ~ = ולא נגעה בקישורים, וכותרת עם קישור הופיעה בסיידבר
-   כ-"[טקסט](url)" — כלומר עם הכתובת המלאה בתוך רשימת הניווט. */
-function plainText(text) {
-  return String(text || "")
-    .replace(/\[([^\]]+)\]\([^)]+\)/g, "$1")
-    .replace(/[`*~=]/g, "")
-    .trim();
-}
+   דרך inline אינו אפשרות שם.
 
-const DEF_LINE = /^:\s+(?=\S)/;
+   מחיקה של כל התווים — replace(/[`*~=]/g, "") — מוחקת גם תווים
+   מילוליים: הכותרת "5 * 3 = 15" הפכה ל-"5  3  15", כלומר הטקסט עצמו
+   אבד ולא רק הסימון. לכן מוסר כאן רק מה שהוא זוג סימון תקף, לפי אותה
+   תבנית שמרנדרת.
+
+   מעבר אחד ולא שרשרת replace, וזה מה שמטפל ב-code span: בכל מקום
+   התבנית מנסה קודם גרש אחורי, ולכן `[טקסט](url)` בתוך code span נבלע
+   כיחידה אחת ומוחזר כלשונו — בדיוק כפי ש-inline מרנדרת אותו. שרשרת
+   replace הייתה מפרקת את הקישור עוד לפני שהגיעה ל-code span.
+
+   הרקורסיה מקבילה ל-kids: הדגשה יכולה להכיל קוד או קישור בתוכה. */
+function plainText(text) {
+  return String(text || "").replace(new RegExp(INLINE_MARKUP.source, "g"), (m) => {
+    if (m[0] === "`") return m.slice(1, -1);
+    if (m.indexOf("**") === 0 || m.indexOf("~~") === 0 || m.indexOf("==") === 0) {
+      return plainText(m.slice(2, -2));
+    }
+    if (m[0] === "*") return plainText(m.slice(1, -1));
+    return plainText(m.replace(/^\[([^\]]+)\]\([^)]+\)$/, "$1"));
+  }).trim();
+}
 
 /* המקור של ההדגמה בדף הרפרנס. Markdown ולא HTML, בכוונה — ראו
    referenceDefs. */
@@ -3480,8 +3508,12 @@ class Component extends DCLogic {
        פשוט להתיר \n (`[^*]+`) מחזיר את הבאג שהוא הסתיר: `5 * 3 ועוד * 2`
        הופך ל-em. לכן הכלל שנכנס במקומו הוא זה של CommonMark עצמו —
        הפותחת אינה מלווה ברווח והסוגרת אינה מוקדמת ברווח. `**` נשאר
-       כפי שהיה: הוא כבר התיר \n, והוא נדיר מספיק בטקסט ספרותי. */
-    const re = /(`[^`]+`)|(\*\*[^*]+\*\*)|(\*[^\s*](?:[^*]*[^\s*])?\*)|(~~[^~]+~~)|(==[^=]+==)|(\[[^\]]+\]\([^)]+\))/g;
+       כפי שהיה: הוא כבר התיר \n, והוא נדיר מספיק בטקסט ספרותי.
+
+       התבנית עצמה יושבת ב-INLINE_MARKUP, כי plainText חייבת להסיר
+       בדיוק את מה שכאן מרונדר. עותק טרי בכל קריאה, כי הלולאה כאן
+       נכנסת לעצמה דרך kids ו-lastIndex משותף היה מדלג על טקסט. */
+    const re = new RegExp(INLINE_MARKUP.source, "g");
     let last = 0, m, k = 0;
     while ((m = re.exec(text))) {
       if (m.index > last) pushText(text.slice(last, m.index));

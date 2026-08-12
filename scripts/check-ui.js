@@ -87,6 +87,9 @@ const check = (label, ok, extra) => {
     'פסקת פתיחה עם [קישור בפתיח](https://example.org/פתיח) ו-**מודגש**.',
     'שורה שנייה של הפתיח.', '',
     '## שלב ראשון', '', '- פריט', '- פריט נוסף', '',
+    // כותרת עם תווים מילוליים: תוכן העניינים חייב להציג אותה כלשונה,
+    // ולא למחוק ממנה את הכוכבית ואת שווה כאילו היו סימון
+    '## החישוב 5 * 3 = 15', '', 'טקסט.', '',
     '## טבלה רחבה', '',
     '| מזהה | שם הפרויקט | בעלים | נראות | מסמכים | קישורים | נוצר בתאריך | עודכן לאחרונה |',
     '| --- | --- | --- | --- | --- | --- | --- | --- |',
@@ -242,15 +245,22 @@ const check = (label, ok, extra) => {
       raw: /\]\(http/.test(header.textContent),
       leadLines: lead ? lines(lead) : 0,
       /* פריט בתוכן העניינים יושב בתוך <a> וחייב להישאר טקסט נקי.
-         מזוהה לפי היעד (#h-) ולא לפי מיקומו במסך — כל עוגן אחר בעמוד
-         הוא ניווט או קישור אמיתי, ואין סיבה שהבדיקה תיגע בו. */
-      tocHasUrl: [...document.querySelectorAll('a[href^="#h-"]')]
+
+         מזוהה דרך [data-toc] ולא לפי href שמתחיל ב-"#h-": קישור במסמך
+         שמצביע לעוגן של כותרת הוא קישור לגיטימי לגמרי, והבורר הרחב היה
+         מפיל את הבדיקה עליו בזמן שהתוויות עצמן נקיות. */
+      tocHasUrl: [...document.querySelectorAll('[data-toc] a')]
         .some((a) => /\]\(|https?:\/\//.test(a.textContent)),
+      /* והצד השני של אותו מטבע: הסרת סימון שמוחקת גם תווים מילוליים.
+         "5 * 3 = 15" הוצג כ-"5  3  15", כלומר הטקסט אבד ולא הסימון. */
+      tocKeepsLiterals: [...document.querySelectorAll('[data-toc] a')]
+        .some((a) => a.textContent.trim() === 'החישוב 5 * 3 = 15'),
     };
   });
   check('הכותרת והפתיח מרונדרים ולא גולמיים',
     !!promoted && promoted.h1Link && promoted.leadLink && promoted.leadStrong
-      && !promoted.raw && promoted.leadLines === 2 && !promoted.tocHasUrl,
+      && !promoted.raw && promoted.leadLines === 2
+      && !promoted.tocHasUrl && promoted.tocKeepsLiterals,
     JSON.stringify(promoted));
 
   // ── רשימת הגדרות ──────────────────────────────────────────────────

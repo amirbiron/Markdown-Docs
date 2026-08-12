@@ -489,10 +489,10 @@ body, aside, header, section, main { transition: background-color 0.2s ease, bor
               <!-- "עריכת הקישור" ולא "עריכה": כפתור עריכת המסמך באותו
                    מסך כבר נושא "עריכה", ושני tooltips זהים על פעולות
                    שונות אינם אומרים כלום. -->
-              <button onClick="{{ link.edit }}" title="עריכת הקישור" style="flex:none;padding:2px 6px;border:none;background:none;color:{{ link.editColor }};font-size:14px;line-height:1;cursor:pointer" style-hover="color:var(--accent-text)">✎</button>
+              <button onClick="{{ link.edit }}" title="עריכת הקישור" aria-label="{{ link.editLabel }}" style="flex:none;padding:2px 6px;border:none;background:none;color:{{ link.editColor }};font-size:14px;line-height:1;cursor:pointer" style-hover="color:var(--accent-text)">✎</button>
               </sc-if>
               <sc-if value="{{ canEdit }}" hint-placeholder-val="{{ false }}">
-              <button onClick="{{ link.remove }}" title="מחיקה" style="flex:none;padding:2px 6px;border:none;background:none;color:var(--faint);font-size:14px;line-height:1;cursor:pointer" style-hover="color:var(--red)">×</button>
+              <button onClick="{{ link.remove }}" title="מחיקה" aria-label="{{ link.removeLabel }}" style="flex:none;padding:2px 6px;border:none;background:none;color:var(--faint);font-size:14px;line-height:1;cursor:pointer" style-hover="color:var(--red)">×</button>
               </sc-if>
             </div>
           </sc-for>
@@ -2085,7 +2085,12 @@ class Component extends DCLogic {
   async openProject(slug, docSlug) {
     const project = await this.guard(() => this.api("/projects/" + encodeURIComponent(slug)));
     if (!project) return;
-    this.setState({ screen: "project", project: project, active: 0, doc: null, docSlug: null, q: "" });
+    /* טופס הקישורים מתאפס במעבר פרויקט. הנכונות כבר מובטחת ב-
+       activeEditLinkId, אבל טקסט שנשאר בשדות מפרויקט אחר הוא רעש. */
+    this.setState({
+      screen: "project", project: project, active: 0, doc: null, docSlug: null, q: "",
+      editLinkId: null, newLinkTitle: "", newLinkUrl: ""
+    });
     window.scrollTo({ top: 0 });
 
     const first = docSlug || (project.documents[0] && project.documents[0].slug);
@@ -2899,6 +2904,10 @@ class Component extends DCLogic {
       try { return new URL(url).host; } catch (e) { return url; }
     };
 
+    /* נגזר פעם אחת ומשמש גם בשורות הקישורים וגם בטופס שמתחתן, כדי
+       ששניהם לא יוכלו להציג מצבים סותרים. */
+    const activeLinkEdit = this.activeEditLinkId();
+
     return {
       /* --- ערכת עיצוב --- */
       theme: s.theme,
@@ -3042,6 +3051,9 @@ class Component extends DCLogic {
       }),
 
       /* --- קישורים --- */
+      /* נגזר פעם אחת ומשמש גם בשורות וגם בטופס, כדי ששניהם לא
+         יוכלו להציג מצבים סותרים. */
+
       hasLinksSection: onProject && !!project && (canEdit || (project.links && project.links.length > 0)),
       links: (project ? project.links : []).map((link) => ({
         title: link.title,
@@ -3051,7 +3063,11 @@ class Component extends DCLogic {
            המסונן לטופס הייתה שומרת בחזרה כתובת שונה ממה שנשמר. */
         /* השורה הנערכת מסומנת בצבע הכפתור שלה. בלי סימן, טופס שהתמלא
            למטה אינו אומר איזה קישור הוא עורך. */
-        editColor: s.editLinkId === link.id ? "var(--accent-text)" : "var(--faint)",
+        editColor: activeLinkEdit === link.id ? "var(--accent-text)" : "var(--faint)",
+        /* התווית כוללת את שם הקישור: ברשימה כל השורות נושאות את אותם
+           שני כפתורים, ו-"עריכה" לבדו אינו מבדיל ביניהן בקורא מסך. */
+        editLabel: "עריכת הקישור " + link.title,
+        removeLabel: "מחיקת הקישור " + link.title,
         edit: () => this.setState({
           editLinkId: link.id, newLinkTitle: link.title, newLinkUrl: link.url
         }),
@@ -3072,8 +3088,8 @@ class Component extends DCLogic {
       onNewLinkUrl: (e) => this.setState({ newLinkUrl: e.target.value }),
       onNewLinkKey: (e) => { if (e.key === "Enter") this.submitLink(); },
       submitLink: () => this.submitLink(),
-      linkFormLabel: s.editLinkId ? "עדכון" : "הוספה",
-      linkEditing: !!s.editLinkId,
+      linkFormLabel: activeLinkEdit ? "עדכון" : "הוספה",
+      linkEditing: !!activeLinkEdit,
       cancelLinkEdit: () => this.setState({ editLinkId: null, newLinkTitle: "", newLinkUrl: "" }),
 
       /* --- המסמך --- */
@@ -3256,6 +3272,23 @@ class Component extends DCLogic {
     await this.openProject(project.slug);
   }
 
+  /* מזהה הקישור שנערך — רק אם הוא עדיין קיים בפרויקט הפתוח.
+
+     editLinkId לבדו אינו מספיק כמקור אמת: הוא שורד מעבר לפרויקט אחר,
+     והוא שורד גם מחיקה של הקישור שהוא מצביע עליו. בשני המקרים הטופס
+     היה נשאר במצב "עדכון" וה-PATCH היה יוצא למזהה שאינו קיים —
+     והמשתמש היה צריך ללחוץ "ביטול" כדי לצאת ממצב שלא בחר בו.
+
+     אפשר היה לאפס אותו בכל מקום שמשנה פרויקט או מוחק קישור, אבל אז
+     כל מסלול חדש שיתווסף יצטרך לזכור את זה. כאן התקפות נגזרת מהנתונים
+     עצמם, ולכן היא נכונה גם במסלולים שטרם נכתבו. */
+  activeEditLinkId() {
+    const project = this.state.project;
+    const id = this.state.editLinkId;
+    if (!id || !project) return null;
+    return (project.links || []).some((l) => l.id === id) ? id : null;
+  }
+
   /* שמירת קישור — הוספה או עדכון, לפי editLinkId.
 
      טופס אחד לשני המצבים ולא טופס עריכה נפרד, מאותו שיקול שבו מסך
@@ -3271,7 +3304,7 @@ class Component extends DCLogic {
     const url = this.state.newLinkUrl.trim();
     if (!project || !title || !url) return;
 
-    const id = this.state.editLinkId;
+    const id = this.activeEditLinkId();
     const base = "/projects/" + encodeURIComponent(project.slug) + "/links";
     const saved = await this.guard(() => id
       ? this.api(base + "/" + encodeURIComponent(id), { method: "PATCH", body: { title: title, url: url } })

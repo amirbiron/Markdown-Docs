@@ -164,6 +164,23 @@ body, aside, header, section, main { transition: background-color 0.2s ease, bor
 </div>
 </sc-if>
 
+<!-- אישור מחיקה. שכבה מעל המסך ולא החלפה שלו, בשונה ממסך הכניסה:
+     אישור שמסתיר את מה שעומדים למחוק מכריח לזכור על מה לחצת. -->
+<sc-if value="{{ confirmOpen }}" hint-placeholder-val="{{ false }}">
+<div style="position:fixed;inset:0;z-index:60;display:grid;place-items:center;padding:20px;background:rgba(0,0,0,0.45)">
+  <div style="width:100%;max-width:400px;padding:24px;border:1px solid var(--line);border-radius:var(--r-md);background:var(--panel);box-shadow:var(--shadow)">
+    <h2 style="margin:0 0 8px;font-family:var(--display);font-size:20px;font-weight:700;color:var(--ink)">{{ confirmQuestion }}</h2>
+    <!-- השם מוצג במפורש. אישור שאינו אומר על מה מדובר מאמן ללחוץ
+         "כן" בלי לקרוא, וזה בדיוק מה שהוא בא למנוע. -->
+    <p dir="auto" style="margin:0 0 20px;font-size:15px;line-height:1.7;color:var(--soft);word-break:break-word">{{ confirmTitle }}</p>
+    <div style="display:flex;gap:9px">
+      <button onClick="{{ runConfirm }}" disabled="{{ confirmBusy }}" style="flex:1;padding:9px 16px;border:1px solid var(--red);border-radius:var(--r-sm);background:var(--red);color:var(--accent-on);font-family:inherit;font-size:14px;font-weight:600;cursor:pointer">{{ confirmLabel }}</button>
+      <button onClick="{{ cancelConfirm }}" style="flex:1;padding:9px 16px;border:1px solid var(--rule);border-radius:var(--r-sm);background:none;color:var(--muted);font-family:inherit;font-size:14px;cursor:pointer">ביטול</button>
+    </div>
+  </div>
+</div>
+</sc-if>
+
 <sc-if value="{{ loginOpen }}" hint-placeholder-val="{{ false }}">
 <div style="max-width:420px;margin:60px auto;padding:0 20px">
   <div style="padding:28px;border:1px solid var(--line);border-radius:var(--r-md);background:var(--panel);box-shadow:var(--shadow)">
@@ -226,6 +243,11 @@ body, aside, header, section, main { transition: background-color 0.2s ease, bor
 
     <sc-if value="{{ onReference }}" hint-placeholder-val="{{ false }}">
     <div>
+      <!-- מוצג רק כשיש מסמך לחזור אליו, כלומר כשהגיעו לרפרנס מתוך
+           מסמך ולא ישירות מרשימת הפרויקטים. -->
+      <sc-if value="{{ backVisible }}" hint-placeholder-val="{{ false }}">
+      <a href="#top" onClick="{{ goBackToDoc }}" style="display:block;margin-bottom:14px;font-family:var(--mono);font-size:11px;letter-spacing:0.08em;color:var(--faint);white-space:nowrap;overflow:hidden;text-overflow:ellipsis" style-hover="color:var(--accent-text)">← {{ backLabel }}</a>
+      </sc-if>
       <div style="display:flex;align-items:center;gap:11px;margin:0 0 var(--rail-head-gap)">
         <sc-if value="{{ chrome.mark }}" hint-placeholder-val="{{ true }}">
         <span style="flex:none;display:grid;place-items:center;width:34px;height:34px;border-radius:var(--r-sm);background:var(--accent);color:var(--accent-on);font-family:var(--mono);font-weight:700;font-size:17px">N</span>
@@ -1710,6 +1732,10 @@ class Component extends DCLogic {
     doc: null,          // המסמך הפתוח, עם התוכן המלא
 
     loginOpen: false, loginEmail: "", loginPassword: "", loggingIn: false,
+
+    /* confirm — מה שממתין לאישור מחיקה: { kind, id, title }. נתונים
+       בלבד ולא פונקציה, ראו runConfirm. */
+    confirm: null, confirmBusy: false,
     newProjectName: "", newProjectDesc: "", newLinkTitle: "", newLinkUrl: "",
     migrating: false, migrateNote: "", copiedDoc: false,
     creating: false, draftTitle: "",
@@ -1768,6 +1794,22 @@ class Component extends DCLogic {
       }
     };
     document.addEventListener("keydown", this.onFsKey);
+
+    /* שני האירועים, כי הם מכסים מקרים שונים.
+
+       popstate נורה על אחורה/קדימה. hashchange נורה כשה-hash משתנה
+       בלי ניווט — עריכה ידנית של שורת הכתובת, או הדבקת קישור לאותו
+       עמוד עם עוגן אחר. בלי השני, מי שמדביק כתובת של מסמך בזמן
+       שהאפליקציה כבר פתוחה לא היה מגיע לשום מקום.
+
+       pushState אינו יורה אף אחד מהם, ולכן הראוטר לא מגיב למה שהוא
+       עצמו כתב. לחיצה על עוגן בעמוד (#h-6) כן יורה hashchange, אבל
+       routeFromHash מחזירה null על כל hash שאינו מתחיל ב-"#/" — ולכן
+       היא אינה ניווט. applyRoute אידמפוטנטית, ושני האירועים יחד
+       בטוחים גם כשהם נורים על אותו שינוי. */
+    this.onPop = () => { this.applyRoute(); };
+    window.addEventListener("popstate", this.onPop);
+    window.addEventListener("hashchange", this.onPop);
 
     this.onScroll = () => {
       const sel = this.state.screen === "reference" ? "[data-sec]" : "[data-h2]";
@@ -1841,6 +1883,10 @@ class Component extends DCLogic {
       document.removeEventListener("webkitfullscreenchange", this.onFsChange);
     }
     if (this.onFsKey) document.removeEventListener("keydown", this.onFsKey);
+    if (this.onPop) {
+      window.removeEventListener("popstate", this.onPop);
+      window.removeEventListener("hashchange", this.onPop);
+    }
     if (this.libTick) clearInterval(this.libTick);
     clearTimeout(this.codeTimer);
     clearTimeout(this.previewTimer);
@@ -1890,6 +1936,114 @@ class Component extends DCLogic {
     }
   }
 
+  /* ביצוע המחיקה שאושרה.
+
+     המחיקה עצמה יושבת כאן ולא בתוך ה-props, כדי שמה שנשמר ב-state
+     יהיה נתונים בלבד — kind, id ושם לתצוגה — ולא פונקציה. אישור
+     שמחזיק פונקציה סגורה על ערכים ישנים מוחק את מה שהיה נכון בזמן
+     הלחיצה, ולא את מה שמוצג עכשיו. */
+  async runConfirm() {
+    const target = this.state.confirm;
+    const project = this.state.project;
+    if (!target || !project) return;
+    this.setState({ confirmBusy: true });
+
+    const base = "/projects/" + encodeURIComponent(project.slug);
+    const path = target.kind === "link"
+      ? base + "/links/" + encodeURIComponent(target.id)
+      : base + "/docs/" + encodeURIComponent(target.id);
+    await this.guard(() => this.api(path, { method: "DELETE" }));
+
+    /* המסמך שנמחק הוא זה שפתוח — המסך חייב להתרוקן, והכתובת איתו,
+       אחרת רענון היה מנסה לפתוח מסמך שאינו קיים. */
+    if (target.kind === "doc" && this.state.docSlug === target.id) {
+      this.setState({ doc: null, docSlug: null });
+      this.replaceHash(this.docHash(project.slug, null));
+    }
+    this.setState({ confirm: null, confirmBusy: false });
+    await this.refreshProject();
+  }
+
+  /* ═══════════════════════════════════════════════════════════════════
+     ניתוב
+
+     עד כאן המצב חי בזיכרון בלבד, ולכן כל רענון החזיר את המשתמש לרשימת
+     הפרויקטים — ומאותה סיבה לא הייתה חזרה מהרפרנס: לא נשמר לאן לחזור.
+
+     ה-hash הוא הכתובת, בצורה `#/פרויקט/מסמך`. אין צורך בתמיכת שרת,
+     ולכן הוא עובד גם בטעינה ישירה של כתובת שהודבקה.
+
+     `#top` ו-`#h-6` שכבר קיימים בעמוד אינם ניווט אלא עוגנים, ולכן
+     הראוטר מתעלם מכל hash שאינו מתחיל ב-"#/". בלי ההבחנה הזאת לחיצה
+     על פריט בתוכן העניינים הייתה נקראת כבקשה לעבור מסך.
+
+     הכתיבה היא pushState ולא השמה ל-location.hash: השמה יורה
+     hashchange, שהיה מפעיל את הראוטר על מה שהראוטר עצמו זה עתה כתב.
+     popstate נורה רק על אחורה/קדימה, וזו בדיוק ההבחנה שנחוצה.
+     ═══════════════════════════════════════════════════════════════════ */
+  routeFromHash() {
+    const raw = String(window.location.hash || "");
+    if (raw.indexOf("#/") !== 0) return null;
+    const parts = raw.slice(2).split("/").filter(Boolean);
+    if (!parts.length) return { screen: "projects" };
+    let decoded;
+    try {
+      decoded = parts.map(decodeURIComponent);
+    } catch (_) {
+      /* כתובת שנערכה ידנית יכולה להכיל % לא תקין. אין טעם ליפול עליה. */
+      return null;
+    }
+    if (decoded[0] === "reference") return { screen: "reference" };
+    return { screen: "project", project: decoded[0], doc: decoded[1] || null };
+  }
+
+  docHash(projectSlug, docSlug) {
+    return "#/" + encodeURIComponent(projectSlug)
+      + (docSlug ? "/" + encodeURIComponent(docSlug) : "");
+  }
+
+  pushHash(hash) {
+    /* בזמן שהראוטר מיישם כתובת, הניווטים שהוא מפעיל לא כותבים בחזרה. */
+    if (this.applyingRoute) return;
+    if (window.location.hash === hash) return;
+    window.history.pushState(null, "", hash);
+  }
+
+  /* replace ולא push: שינוי שם מסמך אינו ניווט חדש, והוא לא צריך
+     להוסיף שלב להיסטוריה שחזרה אליו תוביל לכתובת שכבר לא קיימת. */
+  replaceHash(hash) {
+    if (window.location.hash === hash) return;
+    window.history.replaceState(null, "", hash);
+  }
+
+  async applyRoute() {
+    const route = this.routeFromHash();
+    if (!route) return;
+    const s = this.state;
+    this.applyingRoute = true;
+    try {
+      if (route.screen === "reference") {
+        if (s.screen !== "reference") this.setState({ screen: "reference", active: 0 });
+        return;
+      }
+      if (route.screen === "projects") {
+        if (s.screen !== "projects") {
+          this.setState({ screen: "projects", project: null, doc: null, docSlug: null, active: 0 });
+        }
+        return;
+      }
+      const here = s.project && s.project.slug === route.project;
+      if (here && (!route.doc || s.docSlug === route.doc)) {
+        if (s.screen !== "project") this.setState({ screen: "project", active: 0 });
+        return;
+      }
+      if (here && route.doc) { await this.openDoc(route.doc); return; }
+      await this.openProject(route.project, route.doc);
+    } finally {
+      this.applyingRoute = false;
+    }
+  }
+
   async bootstrap() {
     /* /auth/me מחזיר 200 גם לאנונימי, עם authenticated=false. אין כאן
        מסלול שגיאה, ולכן גם אין רעש בקונסולה בכל טעינה. */
@@ -1898,6 +2052,9 @@ class Component extends DCLogic {
     if (who && who.authenticated) me = who;
     const projects = (await this.guard(() => this.api("/projects"))) || [];
     this.setState({ me: me, projects: projects, ready: true });
+    /* אחרי טעינת הרשימה ולא לפניה: הראוטר פותח פרויקט, וזה דורש
+       שהמצב הבסיסי כבר יהיה שם. */
+    await this.applyRoute();
   }
 
   async reloadProjects() {
@@ -1912,7 +2069,10 @@ class Component extends DCLogic {
     window.scrollTo({ top: 0 });
 
     const first = docSlug || (project.documents[0] && project.documents[0].slug);
+    /* openDoc כותב את הכתובת בעצמו. כאן כותבים רק כשאין מסמך לפתוח,
+       אחרת נדחפות שתי רשומות היסטוריה על ניווט אחד. */
     if (first) await this.openDoc(first);
+    else this.pushHash(this.docHash(slug, null));
   }
 
   async openDoc(docSlug) {
@@ -1933,6 +2093,7 @@ class Component extends DCLogic {
       /* העורך נשאר פתוח במעבר בין מסמכים, אבל התוכן שלו מוחלף. */
       editBuf: content, editView: content, saveState: ""
     });
+    this.pushHash(this.docHash(project.slug, docSlug));
     window.scrollTo({ top: 0 });
   }
 
@@ -2250,6 +2411,9 @@ class Component extends DCLogic {
       docSlug: result.document.slug,
       renameTitle: result.document.title
     });
+    /* הכתובת מכילה את ה-slug, ולכן שינוי שם חייב לעדכן אותה — אחרת
+       רענון היה מנסה לפתוח מסמך שכבר אינו קיים בשם הזה. */
+    this.replaceHash(this.docHash(project.slug, result.document.slug));
     await this.refreshProject();
   }
 
@@ -2774,11 +2938,29 @@ class Component extends DCLogic {
         if (e) e.preventDefault();
         if (!this.confirmLeaveCreating()) return;
         this.setState({ screen: "projects", project: null, doc: null, docSlug: null, active: 0 });
+        this.pushHash("#/");
         window.scrollTo({ top: 0 });
       },
       goReference: () => {
         if (!this.confirmLeaveCreating()) return;
+        /* הפרויקט והמסמך נשארים ב-state ורק המסך מתחלף, ולכן החזרה
+           היא החלפת מסך בלבד ולא טעינה מחדש. */
         this.setState({ screen: "reference", active: 0 });
+        this.pushHash("#/reference");
+        window.scrollTo({ top: 0 });
+      },
+
+      /* חזרה מהרפרנס למסמך שממנו הגיעו. כפתור אחורה של הדפדפן עושה את
+         אותו הדבר, אבל בנייד לא תמיד משתמשים בו, ומסך שאין ממנו יציאה
+         גלויה נראה כמו מבוי סתום. */
+      backVisible: s.screen === "reference" && !!s.project && !!s.doc,
+      backLabel: s.doc ? "חזרה ל" + s.doc.title : "חזרה",
+      goBackToDoc: (e) => {
+        if (e) e.preventDefault();
+        const project = s.project;
+        if (!project) return;
+        this.setState({ screen: "project", active: 0 });
+        this.pushHash(this.docHash(project.slug, s.docSlug));
         window.scrollTo({ top: 0 });
       },
 
@@ -2833,13 +3015,9 @@ class Component extends DCLogic {
             ? "flex:1;min-width:0;font-size:14.5px;font-weight:" + (on ? "700" : "400") + ";color:" + (on ? "var(--accent-text)" : "var(--text)") + ";white-space:nowrap;overflow:hidden;text-overflow:ellipsis"
             : "flex:1;min-width:0;padding:8px 11px;font-size:14px;color:" + (on ? "var(--accent-hover)" : "var(--soft)") + ";white-space:nowrap;overflow:hidden;text-overflow:ellipsis",
           open: (e) => { if (e) e.preventDefault(); if (this.confirmLeaveCreating()) this.openDoc(d.slug); },
-          remove: async () => {
-            await this.guard(() =>
-              this.api("/projects/" + encodeURIComponent(project.slug) + "/docs/" + encodeURIComponent(d.slug), { method: "DELETE" })
-            );
-            if (s.docSlug === d.slug) this.setState({ doc: null, docSlug: null });
-            await this.refreshProject();
-          }
+          /* לא מוחק — פותח אישור. מחיקה בלחיצה אחת על × שיושב צמוד
+             לשם המסמך היא הסוג שקורה בטעות, ואין לה ביטול. */
+          remove: () => this.setState({ confirm: { kind: "doc", id: d.slug, title: d.title } })
         };
       }),
 
@@ -2849,13 +3027,17 @@ class Component extends DCLogic {
         title: link.title,
         href: safeHref(link.url),
         host: hostOf(link.url),
-        remove: async () => {
-          await this.guard(() =>
-            this.api("/projects/" + encodeURIComponent(project.slug) + "/links/" + encodeURIComponent(link.id), { method: "DELETE" })
-          );
-          await this.refreshProject();
-        }
+        remove: () => this.setState({ confirm: { kind: "link", id: link.id, title: link.title } })
       })),
+
+      /* --- אישור מחיקה --- */
+      confirmOpen: !!s.confirm,
+      confirmTitle: s.confirm ? s.confirm.title : "",
+      confirmQuestion: s.confirm && s.confirm.kind === "link" ? "למחוק את הקישור?" : "למחוק את המסמך?",
+      confirmBusy: s.confirmBusy,
+      confirmLabel: s.confirmBusy ? "מוחק…" : "מחיקה",
+      cancelConfirm: () => this.setState({ confirm: null }),
+      runConfirm: () => this.runConfirm(),
       newLinkTitle: s.newLinkTitle,
       newLinkUrl: s.newLinkUrl,
       onNewLinkTitle: (e) => this.setState({ newLinkTitle: e.target.value }),
@@ -3552,7 +3734,16 @@ class Component extends DCLogic {
            האותיות היורדות, ו-underline-offset מרחיק אותו מהן מלכתחילה.
            בעברית זה לא נוי — ק, ן, ץ, ך יורדות מתחת לקו הבסיס מספיק
            כדי להתנגש בקו במרחק ברירת המחדל, והקישור נראה מרוח. */
-        out.push(React.createElement("a", { key: k, href: safeHref(mm[2]), rel: "noopener noreferrer", style: {
+        /* קישור חיצוני נפתח בכרטיסייה חדשה, ועוגן בתוך המסמך לא.
+
+           הבחנה ולא target גורף: `[חזרה](#סיכום)` שנפתח בכרטיסייה חדשה
+           היה טוען את האפליקציה מחדש רק כדי לגלול, ומאבד את מה שנכתב
+           בעורך. safeHref כבר החזיר כאן כתובת מסוננת, ולכן הבדיקה היא
+           על מה שבאמת ייכנס ל-href ולא על מה שנכתב במקור. */
+        const href = safeHref(mm[2]);
+        const external = /^(https?|mailto):/i.test(href);
+        out.push(React.createElement("a", { key: k, href: href, rel: "noopener noreferrer",
+          target: external ? "_blank" : undefined, style: {
           color: "var(--accent-text)",
           textDecorationLine: "underline",
           textDecorationColor: "var(--accent-ring)",

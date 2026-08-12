@@ -372,7 +372,13 @@ body, aside, header, section, main { transition: background-color 0.2s ease, bor
       <div data-doc="1" style="{{ docBoxStyle }}">
         <header style="margin:0 0 var(--doc-head-gap)">
           <div style="display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin:0 0 14px">
-            <span dir="ltr" style="{{ chrome.fileBadge }}">{{ fileName }}</span>
+            <!-- auto ולא ltr: שם קובץ נגזר מכותרת המסמך ולכן הוא לרוב
+                 עברי. ltr קבוע מכריח כיוון בסיס משמאל לימין, ואז קטע
+                 העברית מונח כיחידה בצד שמאל והסיומת ".md" שנכתבה אחרונה
+                 מופיעה ראשונה לעין — "סיכום-המצב-במטא-ב-app.md" נראה
+                 מתחיל מ-app.md. auto קובע כיוון לפי התו החזק הראשון,
+                 ולכן שם אנגלי ממשיך להיקרא משמאל לימין כרגיל. -->
+            <span data-filename="1" dir="auto" style="{{ chrome.fileBadge }}">{{ fileName }}</span>
             <span style="font-size:13px;color:var(--faint)">{{ meta }}</span>
 
             <span style="flex:1"></span>
@@ -400,7 +406,7 @@ body, aside, header, section, main { transition: background-color 0.2s ease, bor
         <sc-if value="{{ showSource }}" hint-placeholder-val="{{ false }}">
         <div style="margin:0 0 28px;border:1px solid var(--line);border-radius:var(--r-md);overflow:hidden;background:var(--card)">
           <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 16px;background:var(--tint);border-bottom:1px solid var(--line)">
-            <span dir="ltr" style="font-family:var(--mono);font-size:12px;color:var(--muted)">{{ fileName }}</span>
+            <span dir="auto" style="font-family:var(--mono);font-size:12px;color:var(--muted)">{{ fileName }}</span>
             <button onClick="{{ copySource }}" style="padding:4px 10px;border:1px solid var(--rule);border-radius:var(--r-sm);background:none;font-family:inherit;font-size:12px;color:var(--muted);cursor:pointer" style-hover="color:var(--head)">{{ copyLabel }}</button>
           </div>
           <pre dir="auto" style="margin:0;padding:18px 20px;font-family:var(--mono);font-size:12.5px;line-height:1.85;color:var(--text);white-space:pre-wrap;word-break:break-word">{{ source }}</pre>
@@ -416,7 +422,7 @@ body, aside, header, section, main { transition: background-color 0.2s ease, bor
         <article>{{ body }}</article>
 
         <div style="display:flex;flex-wrap:wrap;align-items:center;gap:12px;margin:34px 0 0;padding:16px 20px;border:1px dashed var(--rule);border-radius:var(--r-md)">
-          <span style="font-size:14.5px;color:var(--text)">נוצר מתוך <span dir="ltr" style="font-family:var(--mono);font-size:13px">{{ fileName }}</span></span>
+          <span style="font-size:14.5px;color:var(--text)">נוצר מתוך <span dir="auto" style="font-family:var(--mono);font-size:13px">{{ fileName }}</span></span>
           <button onClick="{{ download }}" style="padding:7px 15px;border:1px solid var(--rule);border-radius:var(--r-pill);background:none;color:var(--text);font-family:inherit;font-size:13.5px;cursor:pointer" style-hover="border-color:var(--accent)">הורדת המקור</button>
         </div>
         </div>
@@ -3520,7 +3526,12 @@ class Component extends DCLogic {
       const s = m[0];
       k++;
       if (s[0] === "`") {
-        out.push(React.createElement("code", { key: k, dir: "ltr", style: { fontFamily: "var(--mono)", fontSize: ed ? "0.85em" : "0.87em", background: ed ? "var(--tint)" : "var(--card)", border: "1px solid var(--line-2)", borderRadius: "var(--r-sm)", padding: ed ? "1px 5px" : "2px 6px", color: "var(--code-inline)", unicodeBidi: "isolate" } }, s.slice(1, -1)));
+        /* dir="auto" ולא "ltr". שם של פונקציה או מפתח הוא אנגלי ונקרא
+           משמאל לימין, וזה נשאר נכון — auto קובע לפי התו החזק הראשון.
+           אבל code span מחזיק גם הודעות שגיאה ומחרוזות בעברית, ועליהן
+           ltr קבוע הפך את סדר הקריאה. isolate נשאר: הוא מונע מהקוד
+           לגרור את הפיסוק של הטקסט שסביבו, וזה תפקיד נפרד מהכיוון. */
+        out.push(React.createElement("code", { key: k, dir: "auto", style: { fontFamily: "var(--mono)", fontSize: ed ? "0.85em" : "0.87em", background: ed ? "var(--tint)" : "var(--card)", border: "1px solid var(--line-2)", borderRadius: "var(--r-sm)", padding: ed ? "1px 5px" : "2px 6px", color: "var(--code-inline)", unicodeBidi: "isolate" } }, s.slice(1, -1)));
       } else if (s.indexOf("**") === 0) {
         out.push(React.createElement("strong", { key: k, style: { color: "var(--ink)", fontWeight: 700 } }, this.kids(s.slice(2, -2))));
       } else if (s[0] === "*") {

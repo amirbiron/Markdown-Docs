@@ -445,7 +445,11 @@ function bigDocument(lines) {
 
   const nameField = p.locator('input[placeholder="שם המסמך"]');
   const beforeRename = await p.evaluate(() => ({
-    badge: (document.querySelector('[data-doc] header span[dir="ltr"]') || {}).textContent,
+    /* [data-filename] ולא dir ולא סיומת. הבורר הקודם נשען על dir="ltr",
+       מאפיין של כיוון כתיבה, ונשבר כשהוא שונה ל-auto — הבדיקה נפלה על
+       שינוי שאינו קשור אליה. זיהוי לפי ".md" היה מחליף תלות אחת בשנייה:
+       הוא נשען על פורמט התצוגה של השם. */
+    badge: (document.querySelector('[data-filename]') || {}).textContent,
     button: [...document.querySelectorAll('button')].filter((b) => b.textContent.trim() === 'שינוי שם').length,
   }));
   check('כפתור שינוי השם מוסתר כשהשם לא שונה', beforeRename.button === 0, JSON.stringify(beforeRename));
@@ -456,7 +460,11 @@ function bigDocument(lines) {
   await p.waitForTimeout(2500);
 
   const afterRename = await p.evaluate(() => ({
-    badge: (document.querySelector('[data-doc] header span[dir="ltr"]') || {}).textContent,
+    /* [data-filename] ולא dir ולא סיומת. הבורר הקודם נשען על dir="ltr",
+       מאפיין של כיוון כתיבה, ונשבר כשהוא שונה ל-auto — הבדיקה נפלה על
+       שינוי שאינו קשור אליה. זיהוי לפי ".md" היה מחליף תלות אחת בשנייה:
+       הוא נשען על פורמט התצוגה של השם. */
+    badge: (document.querySelector('[data-filename]') || {}).textContent,
     firstLine: (document.querySelector('textarea') || {}).value.split('\n')[0],
   }));
   check('שורת ה-md נעה עם השם',

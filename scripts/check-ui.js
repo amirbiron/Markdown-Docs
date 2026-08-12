@@ -87,6 +87,8 @@ const check = (label, ok, extra) => {
     'פסקת פתיחה עם [קישור בפתיח](https://example.org/פתיח) ו-**מודגש**.',
     'שורה שנייה של הפתיח.', '',
     '## שלב ראשון', '', '- פריט', '- פריט נוסף', '',
+    // אחד עברי ואחד אנגלי: כיוון הקריאה של code span נגזר מתוכנו
+    'הודעה `תוכן זה אינו זמין` ומזהה `pages_read_engagement`.', '',
     // כותרת עם תווים מילוליים: תוכן העניינים חייב להציג אותה כלשונה,
     // ולא למחוק ממנה את הכוכבית ואת שווה כאילו היו סימון
     '## החישוב 5 * 3 = 15', '', 'טקסט.', '',
@@ -221,6 +223,53 @@ const check = (label, ok, extra) => {
       quote: rects(quote),
     };
   });
+  // ── כיוון הכתיבה בשם הקובץ ובקוד השורתי ───────────────────────────
+  // dir="ltr" קבוע הפך את סדר הקריאה של שם עברי: "…-app.md" נראה מתחיל
+  // מ-app.md. הבדיקה מודדת את הסדר הוויזואלי בפועל, ולא את הערך של
+  // התכונה — כי מה שנשבר הוא מה שהעין רואה.
+  //
+  // שני הכיוונים נמדדים. השני הוא החשוב: הוא מה שייפול אם מישהו
+  // "יתקן" בעתיד ל-dir="rtl" ויהפוך את שמות האנגלית.
+  const bidi = await p.evaluate(() => {
+    /* התו הראשון מושווה לתיבת השורה הראשונה, ולא לתו האחרון.
+
+       השוואה בין ראשון לאחרון נכונה רק כשהטקסט יושב על שורה אחת. ברגע
+       שהוא גולש, השניים על שורות שונות והמיקום היחסי ביניהם מפסיק
+       להעיד על כיוון. כאן נמדד לאיזה קצה של השורה שלו התו הראשון צמוד,
+       וזה נכון מבנייה ולא במקרה.
+
+       צמתי טקסט ולא firstChild: React מפצל טקסט לכמה צמתים, וסטייה
+       מעבר לצומת הראשון זורקת IndexSizeError. */
+    const startsRight = (el) => {
+      if (!el) return null;
+      const w = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
+      let node = w.nextNode();
+      while (node && !node.textContent.length) node = w.nextNode();
+      if (!node) return null;
+      const span = document.createRange();
+      span.setStart(node, 0); span.setEnd(node, 1);
+      const first = span.getBoundingClientRect();
+      const all = document.createRange();
+      all.selectNodeContents(el);
+      const line = [...all.getClientRects()][0];
+      if (!line) return null;
+      return (line.right - first.right) < (first.left - line.left);
+    };
+    const badge = document.querySelector('[data-doc] [data-filename]');
+    const codes = [...document.querySelectorAll('[data-doc] code')];
+    const heb = codes.find((c) => /^[֐-׿]/.test(c.textContent.trim()));
+    const eng = codes.find((c) => /^[A-Za-z]/.test(c.textContent.trim()));
+    return {
+      badgeText: badge ? badge.textContent.trim() : null,
+      badgeStartsRight: startsRight(badge),
+      hebCode: startsRight(heb),
+      engCode: startsRight(eng),
+    };
+  });
+  check('שם קובץ וקוד שורתי נקראים לפי תוכנם',
+    bidi.badgeStartsRight === true && bidi.hebCode === true && bidi.engCode === false,
+    JSON.stringify(bidi));
+
   // ── הכותרת והפתיח ─────────────────────────────────────────────────
   // שניהם נלקחים מבלוקים של המסמך ומוזרקים לכותרת העמוד, ולכן הם עברו
   // במסלול נפרד מהגוף. התוצאה הייתה שאותה פסקה נראתה תקינה בפריוויו

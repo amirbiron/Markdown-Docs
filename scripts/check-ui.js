@@ -231,24 +231,31 @@ const check = (label, ok, extra) => {
   // שני הכיוונים נמדדים. השני הוא החשוב: הוא מה שייפול אם מישהו
   // "יתקן" בעתיד ל-dir="rtl" ויהפוך את שמות האנגלית.
   const bidi = await p.evaluate(() => {
-    /* צמתי טקסט ולא firstChild: React מפצל טקסט לכמה צמתים, וסטייה
+    /* התו הראשון מושווה לתיבת השורה הראשונה, ולא לתו האחרון.
+
+       השוואה בין ראשון לאחרון נכונה רק כשהטקסט יושב על שורה אחת. ברגע
+       שהוא גולש, השניים על שורות שונות והמיקום היחסי ביניהם מפסיק
+       להעיד על כיוון. כאן נמדד לאיזה קצה של השורה שלו התו הראשון צמוד,
+       וזה נכון מבנייה ולא במקרה.
+
+       צמתי טקסט ולא firstChild: React מפצל טקסט לכמה צמתים, וסטייה
        מעבר לצומת הראשון זורקת IndexSizeError. */
     const startsRight = (el) => {
       if (!el) return null;
-      const nodes = [];
       const w = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
-      for (let n = w.nextNode(); n; n = w.nextNode()) if (n.textContent.length) nodes.push(n);
-      if (!nodes.length) return null;
-      const rect = (node, i) => {
-        const r = document.createRange();
-        r.setStart(node, i); r.setEnd(node, i + 1);
-        return r.getBoundingClientRect();
-      };
-      const last = nodes[nodes.length - 1];
-      return rect(nodes[0], 0).left > rect(last, last.textContent.length - 1).left;
+      let node = w.nextNode();
+      while (node && !node.textContent.length) node = w.nextNode();
+      if (!node) return null;
+      const span = document.createRange();
+      span.setStart(node, 0); span.setEnd(node, 1);
+      const first = span.getBoundingClientRect();
+      const all = document.createRange();
+      all.selectNodeContents(el);
+      const line = [...all.getClientRects()][0];
+      if (!line) return null;
+      return (line.right - first.right) < (first.left - line.left);
     };
-    const badge = [...document.querySelectorAll('[data-doc] header span')]
-      .find((s) => /\.md$/.test(s.textContent.trim()));
+    const badge = document.querySelector('[data-doc] [data-filename]');
     const codes = [...document.querySelectorAll('[data-doc] code')];
     const heb = codes.find((c) => /^[֐-׿]/.test(c.textContent.trim()));
     const eng = codes.find((c) => /^[A-Za-z]/.test(c.textContent.trim()));

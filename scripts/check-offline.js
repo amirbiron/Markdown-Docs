@@ -149,10 +149,19 @@ if (!SP) {
   let rendered = { tokens: 0, languages: [], mermaid: 0 };
   let cleanup = null;
   if (!doc.error) {
+    // שני השלבים נחוצים, וכל אחד מסיבה אחרת.
+    //
+    // מאז שנוסף ניתוב, טעינה מחדש משחזרת את המקום שבו היינו — כאן מסך
+    // הרפרנס — ולא נוחתת ברשימת הפרויקטים, ולכן הכתובת מאופסת ל-"#/".
+    //
+    // אבל שינוי hash לבדו אינו טעינה מחדש: הרשימה שבזיכרון נשארת זו
+    // שנטענה לפני שהפרויקט נוצר, והפרויקט החדש אינו בה. reload מריץ
+    // את ה-bootstrap מחדש ומביא רשימה עדכנית.
+    await p.goto(BASE + '/#/', { waitUntil: 'load' });
     await p.reload({ waitUntil: 'load' });
     await p.waitForSelector('#dc-root', { timeout: 20000 });
     await p.waitForTimeout(3000);
-    // הטעינה נוחתת ברשימת הפרויקטים, ולכן נכנסים לפרויקט ורק אז למסמך.
+    // נכנסים לפרויקט ורק אז למסמך.
     await p.getByText(doc.name).first().click();
     await p.waitForTimeout(2500);
     await p.getByText('בדיקת צביעה').first().click();

@@ -187,6 +187,9 @@ const check = (label, ok, extra) => {
     return (await r.json()).slug;
   }, [partialName]);
 
+  // הכתובת מאופסת לרשימת הפרויקטים לפני הטעינה מחדש: מאז שנוסף ניתוב,
+  // reload משחזר את המסמך שהיה פתוח ולא נוחת ברשימה.
+  await p.goto(BASE + '/#/', { waitUntil: 'load' });
   await p.reload({ waitUntil: 'load' });
   await p.waitForSelector('#dc-root', { timeout: 20000 });
   const partialLink = p.getByText(partialName).first();

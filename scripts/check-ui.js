@@ -47,6 +47,22 @@ const check = (label, ok, extra) => {
 
   check('הדף עולה כאנונימי', await p.getByRole('button', { name: 'כניסה' }).isVisible());
 
+  // האייקון של הלשונית. נבדק דרך הכתובת שהתגית באמת פותרת ולא דרך קיום
+  // הקובץ בדיסק: תגית שמצביעה לנתיב שגוי נראית תקינה בקוד ומחזירה 404
+  // בדפדפן, ו-404 של אייקון אינו מפיל כלום — הוא פשוט לא מופיע.
+  //
+  // דפדפן headless אינו מושך אייקון בכלל, כי אין לו לשונית להציג אותו
+  // בה. לכן הבקשה נשלחת כאן במפורש ולא נמדדת מתעבורת הדף.
+  const icon = await p.evaluate(async () => {
+    const link = document.querySelector('link[rel="icon"]');
+    if (!link) return { missing: true };
+    const res = await fetch(link.href, { credentials: 'same-origin' });
+    return { href: link.getAttribute('href'), status: res.status, type: res.headers.get('content-type') };
+  });
+  check('אייקון הלשונית נטען',
+    !icon.missing && icon.status === 200 && /^image\//.test(icon.type || ''),
+    JSON.stringify(icon));
+
   await p.getByRole('button', { name: 'כניסה' }).click();
   await p.waitForTimeout(600);
   await p.fill('input[type="email"]', EMAIL);

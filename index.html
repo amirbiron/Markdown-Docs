@@ -486,6 +486,12 @@ body, aside, header, section, main { transition: background-color 0.2s ease, bor
               <a href="{{ link.href }}" target="_blank" rel="noopener noreferrer" style="flex:1;min-width:0;font-size:15px;color:var(--accent-text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ link.title }}</a>
               <span dir="ltr" style="flex:none;max-width:40%;font-family:var(--mono);font-size:11.5px;color:var(--faint);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ link.host }}</span>
               <sc-if value="{{ canEdit }}" hint-placeholder-val="{{ false }}">
+              <!-- "עריכת הקישור" ולא "עריכה": כפתור עריכת המסמך באותו
+                   מסך כבר נושא "עריכה", ושני tooltips זהים על פעולות
+                   שונות אינם אומרים כלום. -->
+              <button onClick="{{ link.edit }}" title="עריכת הקישור" style="flex:none;padding:2px 6px;border:none;background:none;color:{{ link.editColor }};font-size:14px;line-height:1;cursor:pointer" style-hover="color:var(--accent-text)">✎</button>
+              </sc-if>
+              <sc-if value="{{ canEdit }}" hint-placeholder-val="{{ false }}">
               <button onClick="{{ link.remove }}" title="מחיקה" style="flex:none;padding:2px 6px;border:none;background:none;color:var(--faint);font-size:14px;line-height:1;cursor:pointer" style-hover="color:var(--red)">×</button>
               </sc-if>
             </div>
@@ -496,7 +502,12 @@ body, aside, header, section, main { transition: background-color 0.2s ease, bor
         <div style="display:flex;flex-wrap:wrap;gap:8px">
           <input dir="auto" placeholder="שם הקישור" value="{{ newLinkTitle }}" onChange="{{ onNewLinkTitle }}" style="{{ chrome.field }};flex:1;min-width:140px" />
           <input dir="ltr" placeholder="https://…" value="{{ newLinkUrl }}" onChange="{{ onNewLinkUrl }}" onKeyDown="{{ onNewLinkKey }}" style="{{ chrome.field }};flex:2;min-width:200px" />
-          <button onClick="{{ addLink }}" style="{{ chrome.addBtn }}">הוספה</button>
+          <button onClick="{{ submitLink }}" style="{{ chrome.addBtn }}">{{ linkFormLabel }}</button>
+          <!-- הביטול מופיע רק במצב עריכה. בהוספה אין ממה לבטל, וכפתור
+               שלא עושה כלום ברוב הזמן מלמד להתעלם ממנו. -->
+          <sc-if value="{{ linkEditing }}" hint-placeholder-val="{{ false }}">
+          <button onClick="{{ cancelLinkEdit }}" style="padding:8px 14px;border:1px solid var(--rule);border-radius:var(--r-sm);background:none;color:var(--muted);font-family:inherit;font-size:13.5px;cursor:pointer">ביטול</button>
+          </sc-if>
         </div>
         </sc-if>
       </div>
@@ -1743,6 +1754,9 @@ class Component extends DCLogic {
        בלבד ולא פונקציה, ראו runConfirm. */
     confirm: null, confirmBusy: false,
     newProjectName: "", newProjectDesc: "", newLinkTitle: "", newLinkUrl: "",
+    /* editLinkId — מזהה הקישור שהטופס למטה עורך כרגע, או null בהוספה.
+       שדות הטופס משותפים לשני המצבים, וזה מה שמבדיל ביניהם. */
+    editLinkId: null,
     migrating: false, migrateNote: "", copiedDoc: false,
     creating: false, draftTitle: "",
     /* renameTitle — שדה השם במסך העריכה. נזרע מ-doc.title בפתיחת
@@ -3033,6 +3047,14 @@ class Component extends DCLogic {
         title: link.title,
         href: safeHref(link.url),
         host: hostOf(link.url),
+        /* ה-url הגולמי ולא href: safeHref מסנן לתצוגה, וטעינת הערך
+           המסונן לטופס הייתה שומרת בחזרה כתובת שונה ממה שנשמר. */
+        /* השורה הנערכת מסומנת בצבע הכפתור שלה. בלי סימן, טופס שהתמלא
+           למטה אינו אומר איזה קישור הוא עורך. */
+        editColor: s.editLinkId === link.id ? "var(--accent-text)" : "var(--faint)",
+        edit: () => this.setState({
+          editLinkId: link.id, newLinkTitle: link.title, newLinkUrl: link.url
+        }),
         remove: () => this.setState({ confirm: { kind: "link", id: link.id, title: link.title } })
       })),
 
@@ -3048,8 +3070,11 @@ class Component extends DCLogic {
       newLinkUrl: s.newLinkUrl,
       onNewLinkTitle: (e) => this.setState({ newLinkTitle: e.target.value }),
       onNewLinkUrl: (e) => this.setState({ newLinkUrl: e.target.value }),
-      onNewLinkKey: (e) => { if (e.key === "Enter") this.addLink(); },
-      addLink: () => this.addLink(),
+      onNewLinkKey: (e) => { if (e.key === "Enter") this.submitLink(); },
+      submitLink: () => this.submitLink(),
+      linkFormLabel: s.editLinkId ? "עדכון" : "הוספה",
+      linkEditing: !!s.editLinkId,
+      cancelLinkEdit: () => this.setState({ editLinkId: null, newLinkTitle: "", newLinkUrl: "" }),
 
       /* --- המסמך --- */
       crumb: onReference ? "רכיבי Markdown" : (project ? project.name + (doc ? " / " + doc.title : "") : "פרויקטים"),
@@ -3101,7 +3126,12 @@ class Component extends DCLogic {
       /* אייקונים בלי טקסט: עיפרון לעריכה, דיסקט לשמירה. הכותרת נושאת
          את המשמעות לקורא מסך ולריחוף. */
       editLabel: s.editing ? "שמירה" : "עריכה",
-      editGlyph: s.editing ? "🖫" : "✎",
+      /* ✓ ולא 🖫. האחרון הוא U+1F5AB, אחד מסימני ה-Wingdings הישנים
+         שנכנסו ליוניקוד ולא קיבלו ייצוג אמוג׳י — כיסוי הגופנים שלו דל,
+         ובאנדרואיד הוא יצא ריבוע ריק. ✓ הוא U+2713 מגוש Dingbats, אותו
+         גוש של ✎ שכבר מרונדר שם, והוא מונוכרום ולכן יורש את הצבע כמו
+         שלושת האייקונים שלידו — 💾 היה אמוג׳י בצבע קבוע וצורם ביניהם. */
+      editGlyph: s.editing ? "✓" : "✎",
       /* ⛶ בשני המצבים, והכותרת היא שאומרת לאן הלחיצה תוביל — כמו
          בכפתור התמה. סמל יציאה נפרד היה מחייב עוד גליף שאינו מוכר. */
       fullscreenTitle: s.fullscreen ? "יציאה ממסך מלא" : "מסך מלא",
@@ -3226,19 +3256,29 @@ class Component extends DCLogic {
     await this.openProject(project.slug);
   }
 
-  async addLink() {
+  /* שמירת קישור — הוספה או עדכון, לפי editLinkId.
+
+     טופס אחד לשני המצבים ולא טופס עריכה נפרד, מאותו שיקול שבו מסך
+     היצירה ומסך העריכה של מסמך הם רכיב אחד: שני טפסים זהים שנשמרים
+     בנפרד מתפצלים בשקט ברגע שמישהו מוסיף שדה לאחד מהם.
+
+     טעינת קישור לעריכה דורסת מה שהוקלד בטופס בלי לשאול. שני שדות
+     קצרים שרואים אותם מתמלאים על המסך אינם מצדיקים אישור — בשונה
+     מטיוטת מסמך, שעליה יש confirmLeaveCreating. */
+  async submitLink() {
     const project = this.state.project;
     const title = this.state.newLinkTitle.trim();
     const url = this.state.newLinkUrl.trim();
     if (!project || !title || !url) return;
-    const created = await this.guard(() =>
-      this.api("/projects/" + encodeURIComponent(project.slug) + "/links", {
-        method: "POST",
-        body: { title: title, url: url }
-      })
+
+    const id = this.state.editLinkId;
+    const base = "/projects/" + encodeURIComponent(project.slug) + "/links";
+    const saved = await this.guard(() => id
+      ? this.api(base + "/" + encodeURIComponent(id), { method: "PATCH", body: { title: title, url: url } })
+      : this.api(base, { method: "POST", body: { title: title, url: url } })
     );
-    if (!created) return;
-    this.setState({ newLinkTitle: "", newLinkUrl: "" });
+    if (!saved) return;
+    this.setState({ newLinkTitle: "", newLinkUrl: "", editLinkId: null });
     await this.refreshProject();
   }
 

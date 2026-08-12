@@ -81,7 +81,15 @@ const check = (label, ok, extra) => {
   // הטבלה כאן רחבה בכוונה: היא מה שמוודא שטבלה שאינה נכנסת ברוחב
   // גוללת בתוך מעטפת במקום להיחתך.
   await p.fill('textarea', [
-    '# מדריך התקנה', '', 'פסקת פתיחה.', '', '## שלב ראשון', '', '- פריט', '- פריט נוסף', '',
+    // הפסקה הראשונה מקודמת לכותרת העמוד ולכן מרונדרת במסלול נפרד מהגוף.
+    // הקישור וההדגשה כאן הם מה שמבדיל בין המסלולים.
+    '# מדריך התקנה עם [קישור](https://example.org/מדריך)', '',
+    'פסקת פתיחה עם [קישור בפתיח](https://example.org/פתיח) ו-**מודגש**.',
+    'שורה שנייה של הפתיח.', '',
+    '## שלב ראשון', '', '- פריט', '- פריט נוסף', '',
+    // כותרת עם תווים מילוליים: תוכן העניינים חייב להציג אותה כלשונה,
+    // ולא למחוק ממנה את הכוכבית ואת שווה כאילו היו סימון
+    '## החישוב 5 * 3 = 15', '', 'טקסט.', '',
     '## טבלה רחבה', '',
     '| מזהה | שם הפרויקט | בעלים | נראות | מסמכים | קישורים | נוצר בתאריך | עודכן לאחרונה |',
     '| --- | --- | --- | --- | --- | --- | --- | --- |',
@@ -213,6 +221,48 @@ const check = (label, ok, extra) => {
       quote: rects(quote),
     };
   });
+  // ── הכותרת והפתיח ─────────────────────────────────────────────────
+  // שניהם נלקחים מבלוקים של המסמך ומוזרקים לכותרת העמוד, ולכן הם עברו
+  // במסלול נפרד מהגוף. התוצאה הייתה שאותה פסקה נראתה תקינה בפריוויו
+  // של העורך וגולמית במסמך. נמדד <a href> אמיתי ולא טקסט שנראה כמוהו.
+  const promoted = await p.evaluate(() => {
+    const header = document.querySelector('[data-doc] header');
+    if (!header) return null;
+    const h1 = header.querySelector('h1'), lead = header.querySelector('p');
+    /* השבירה בפתיח נמדדת בשורות ויזואליות: היא עבדה קודם דרך
+       white-space:pre-line, שהוסר יחד עם המחרוזת הגולמית. */
+    const lines = (el) => {
+      const r = document.createRange();
+      r.selectNodeContents(el);
+      const tops = [...r.getClientRects()].map((b) => b.top).sort((a, b) => a - b);
+      return tops.length ? tops.reduce((n, t, i) => (i && t - tops[i - 1] > 8 ? n + 1 : n), 1) : 0;
+    };
+    return {
+      h1Link: !!(h1 && h1.querySelector('a[href^="https://"]')),
+      leadLink: !!(lead && lead.querySelector('a[href^="https://"]')),
+      leadStrong: !!(lead && lead.querySelector('strong')),
+      // ")(" של קישור לא נמחק על ידי ה-replace שהיה כאן, ולכן הוא הסימן
+      raw: /\]\(http/.test(header.textContent),
+      leadLines: lead ? lines(lead) : 0,
+      /* פריט בתוכן העניינים יושב בתוך <a> וחייב להישאר טקסט נקי.
+
+         מזוהה דרך [data-toc] ולא לפי href שמתחיל ב-"#h-": קישור במסמך
+         שמצביע לעוגן של כותרת הוא קישור לגיטימי לגמרי, והבורר הרחב היה
+         מפיל את הבדיקה עליו בזמן שהתוויות עצמן נקיות. */
+      tocHasUrl: [...document.querySelectorAll('[data-toc] a')]
+        .some((a) => /\]\(|https?:\/\//.test(a.textContent)),
+      /* והצד השני של אותו מטבע: הסרת סימון שמוחקת גם תווים מילוליים.
+         "5 * 3 = 15" הוצג כ-"5  3  15", כלומר הטקסט אבד ולא הסימון. */
+      tocKeepsLiterals: [...document.querySelectorAll('[data-toc] a')]
+        .some((a) => a.textContent.trim() === 'החישוב 5 * 3 = 15'),
+    };
+  });
+  check('הכותרת והפתיח מרונדרים ולא גולמיים',
+    !!promoted && promoted.h1Link && promoted.leadLink && promoted.leadStrong
+      && !promoted.raw && promoted.leadLines === 2
+      && !promoted.tocHasUrl && promoted.tocKeepsLiterals,
+    JSON.stringify(promoted));
+
   // ── רשימת הגדרות ──────────────────────────────────────────────────
   // התחביר החדש מתחיל בנקודתיים, בדיוק כמו ההתראות. לכן נמדד כאן לא רק
   // שהוא עובד אלא גם שהוא לא בלע את מה שהיה קודם: ההתראה חייבת לשרוד,

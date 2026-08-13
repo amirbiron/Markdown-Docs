@@ -80,6 +80,65 @@ async def load_document_by_id(
     return document
 
 
+async def list_project_documents(session: AsyncSession, project: Project) -> list[Document]:
+    """מסמכי הפרויקט, בשאילתה מפורשת.
+
+    בכוונה לא project.documents: היחס הזה נטען עצלנית, ובקוד אסינכרוני
+    גישה אליו מחוץ להקשר שטען אותו זורקת MissingGreenlet (כלל 5).
+    שאילתה מפורשת עובדת בכל הקשר, ומשאירה את מסלול השליפה הרגיל זול —
+    הוא אינו צריך את הרשימה כלל.
+    """
+    return list(
+        (
+            await session.execute(
+                select(Document)
+                .where(Document.project_id == project.id)
+                .order_by(Document.position, Document.id)
+            )
+        )
+        .scalars()
+        .all()
+    )
+
+
+async def list_versions(session: AsyncSession, document: Document) -> list[DocumentVersion]:
+    """היסטוריית הגרסאות, מהחדשה לישנה."""
+    return list(
+        (
+            await session.execute(
+                select(DocumentVersion)
+                .where(DocumentVersion.document_id == document.id)
+                .order_by(DocumentVersion.created_at.desc(), DocumentVersion.id.desc())
+            )
+        )
+        .scalars()
+        .all()
+    )
+
+
+async def load_version(
+    session: AsyncSession, version_id: uuid.UUID, viewer: User | None
+) -> DocumentVersion:
+    """שולף גרסה בודדת אחרי בדיקת נראות של המסמך שאליו היא שייכת.
+
+    מזהה גרסה הוא מזהה משאב ככל אחר, ולכן הוא IDOR עד שהוכח אחרת:
+    השליפה חייבת לעבור דרך המסמך ודרך הפרויקט, ולא להסתפק בכך
+    שה-UUID קיים בטבלה.
+    """
+    version = (
+        await session.execute(
+            select(DocumentVersion).where(DocumentVersion.id == version_id)
+        )
+    ).scalar_one_or_none()
+    if version is None:
+        raise NotFound("version")
+
+    # load_document_by_id הוא שמחיל את כללי הנראות. אם הוא זורק,
+    # הגרסה אינה נגישה — בלי קשר לכך שהיא קיימת.
+    await load_document_by_id(session, version.document_id, viewer)
+    return version
+
+
 async def trim_versions(session: AsyncSession, document_id, keep: int) -> None:
     """שומר רק את N הגרסאות האחרונות.
 

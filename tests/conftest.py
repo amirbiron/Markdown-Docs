@@ -2,14 +2,26 @@
 
 from __future__ import annotations
 
-import pytest
-from httpx import ASGITransport, AsyncClient
-from sqlalchemy import text
+import os
 
-from app.config import get_settings
-from app.db import SessionLocal
-from app.main import app
-from app.seed import seed_admin
+# חייב לקרות לפני הייבוא של app: ההגדרות נטענות פעם אחת בזמן ייבוא,
+# ושרת ה-MCP נבנה ומורכב רק אם יש טוקן. בלי זה נתיב /mcp לא היה קיים
+# בבדיקות כלל, וכל הכיסוי שלו היה נעלם בשקט.
+#
+# השמה ולא setdefault: משתנה סביבה קיים — למשל ריק ב-CI, או ערך אחר
+# במכונת פיתוח — היה משתלט על הריצה. ריק היה מכבה את ההרכבה, וערך אחר
+# היה מפיל את בדיקות האימות. הבדיקות חייבות להיות דטרמיניסטיות.
+MCP_TOKEN = "m" * 40
+os.environ["MCP_TOKEN"] = MCP_TOKEN
+
+import pytest  # noqa: E402
+from httpx import ASGITransport, AsyncClient  # noqa: E402
+from sqlalchemy import text  # noqa: E402
+
+from app.config import get_settings  # noqa: E402
+from app.db import SessionLocal  # noqa: E402
+from app.main import app  # noqa: E402
+from app.seed import seed_admin  # noqa: E402
 
 _settings = get_settings()
 _allowlist = sorted(_settings.origin_allowlist)

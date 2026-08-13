@@ -44,6 +44,15 @@ services:
           property: connectionString
       - key: SESSION_SECRET
         generateValue: true
+
+      # הטוקן של שרת ה-MCP. ריק => הנתיב /mcp כלל אינו נרשם.
+      #
+      # sync: false ולא generateValue, בכוונה: את הערך צריך להזין גם
+      # בצד הלקוח, וערך שנוצר אוטומטית מתחלף בכל יצירה מחדש של השירות
+      # ומנתק את החיבור בלי שום הודעה.
+      - key: MCP_TOKEN
+        sync: false
+
       - key: ENVIRONMENT
         value: production
       - key: PYTHON_VERSION

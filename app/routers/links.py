@@ -15,6 +15,8 @@ from app.deps import optional_user, require_user
 from app.models import Project, ProjectLink, User
 from app.routers.projects import NOT_FOUND, load_project
 from app.schemas import LinkCreate, LinkPrivate, LinkPublic, LinkUpdate
+from app.services import projects as project_service
+from app.services.errors import NotFound
 
 router = APIRouter(prefix="/projects/{project_slug}/links", tags=["links"])
 
@@ -22,10 +24,15 @@ LINK_NOT_FOUND = "הקישור לא נמצא"
 
 
 async def _owned_project(session: AsyncSession, slug: str, user: User) -> Project:
-    project = await load_project(session, slug, user)
-    if project.owner_id != user.id:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, NOT_FOUND)
-    return project
+    """עטיפת HTTP סביב project_service.owned_project.
+
+    זהה לזו שב-routers/documents.py, ושתיהן קוראות עכשיו לאותה פונקציה
+    אחת בשכבת ה-service במקום לשכפל את הבדיקה.
+    """
+    try:
+        return await project_service.owned_project(session, slug, user)
+    except NotFound:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, NOT_FOUND) from None
 
 
 async def _load_link(session: AsyncSession, project: Project, link_id: uuid.UUID) -> ProjectLink:

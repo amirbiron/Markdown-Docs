@@ -29,6 +29,7 @@ from app.routers import links as links_router
 from app.routers import projects as projects_router
 from app.routers import search as search_router
 from app import scheduler
+from app.mcp import server as mcp_server
 from app.seed import seed_admin
 
 # בלי הגדרת רמה מפורשת, logger.info לא מגיע לפלט של uvicorn — ובדיקת
@@ -137,7 +138,41 @@ async def lifespan(app: FastAPI):
     await engine.dispose()
 
 
-app = FastAPI(title="Markdown Docs", lifespan=lifespan, docs_url=None, redoc_url=None)
+# נבנה רק כשיש טוקן. בלעדיו הנתיב כלל אינו קיים — נעילה במפתח ולא
+# בשומר.
+_mcp_app = mcp_server.build_asgi_app() if mcp_server.is_enabled() else None
+
+
+@asynccontextmanager
+async def combined_lifespan(app: FastAPI):
+    """משרשר את ה-lifespan של האפליקציה עם זה של ה-MCP.
+
+    streamable_http מחזיק את מנהל הסשנים שלו בתוך ה-lifespan של
+    תת-האפליקציה, ו-Starlette אינה מריצה lifespan של אפליקציה
+    ממורכבת. בלי השרשור כאן, הבקשה הראשונה ל-/mcp נופלת על
+    "task group was not initialized" — והשרת נראה עולה תקין עד אז.
+
+    הפתרון המקובל הוא להעביר lifespan=mcp_app.lifespan ל-FastAPI, אבל
+    כאן הוא היה דורס את ה-lifespan הקיים ומבטל את בדיקת הקידוד, את
+    ה-seed ואת מתזמן הגיבויים. הסדר מכוון: הקיים בחוץ, כדי שבסיס
+    הנתונים יהיה מוכן לפני שה-MCP עולה.
+    """
+    async with lifespan(app):
+        if _mcp_app is None:
+            yield
+        else:
+            # מעבירים את תת־האפליקציה ולא את ההורה. כרגע ה-SDK מגדיר
+            # lifespan=lambda app: session_manager.run() ומתעלם מהארגומנט
+            # לחלוטין, ולכן זה אינו משנה בפועל — אבל אפליקציה שמריצה
+            # lifespan של אפליקציה אחרת היא בדיוק סוג הקוד שנשבר בשקט
+            # כשגרסה עתידית תתחיל להשתמש בו.
+            async with _mcp_app.router.lifespan_context(_mcp_app):
+                yield
+
+
+app = FastAPI(
+    title="Markdown Docs", lifespan=combined_lifespan, docs_url=None, redoc_url=None
+)
 
 
 @app.exception_handler(RequestValidationError)
@@ -240,3 +275,10 @@ async def index() -> FileResponse:
 # מאונט על /assets בלבד. כל נתיב אחר שאינו /api ואינו / מקבל 404, ולכן
 # אין דרך להגיע לקוד או לקונפיגורציה דרך השרת.
 app.mount("/assets", StaticFiles(directory=ASSETS_DIR), name="assets")
+
+# שרת ה-MCP, אם הופעל. שימו לב ש-/mcp אינו מתחיל ב-/api ולכן OriginGuard
+# אינו חל עליו — ההגנה שם היא טוקן Bearer בלבד, וזהות מ-cookie נדחית
+# במפורש. ראו app/mcp/auth.py.
+if _mcp_app is not None:
+    app.mount("/mcp", _mcp_app)
+    logger.info("שרת ה-MCP מחובר על /mcp")

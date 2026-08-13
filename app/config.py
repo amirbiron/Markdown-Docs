@@ -65,6 +65,16 @@ class Settings(BaseSettings):
     # היסטוריה שגדלה בלי גבול, ולכן הישנות נמחקות.
     document_versions_kept: int = 50
 
+    # ── שרת MCP ──────────────────────────────────────────────────────
+    # הטוקן שמאפשר לסוכן להתחבר. ריק => הנתיב /mcp כלל אינו נרשם.
+    # נעילה במפתח ולא בשומר: אין נתיב, ולא רק "אין הרשאה".
+    mcp_token: str | None = None
+
+    # ההרשאות של הטוקן, מופרדות בפסיק. המערכת חד-משתמשית ולכן יש טוקן
+    # אחד, אבל המבנה קיים מראש בכוונה: שינוי scopes אחרי שלקוח כבר
+    # נרשם מחייב אותו להירשם מחדש, ואי אפשר לכפות את זה מהשרת.
+    mcp_token_scopes: str = "read,write"
+
     # ── גיבויים ──────────────────────────────────────────────────────
     # היעד הוא הדיסק הקבוע ב-Render. ברירת המחדל מקומית, כדי שפיתוח
     # ובדיקות לא ידרשו הרשאות כתיבה מחוץ לפרויקט.
@@ -109,9 +119,47 @@ class Settings(BaseSettings):
             )
         return self
 
+    @model_validator(mode="after")
+    def _reject_weak_mcp_token_in_production(self) -> "Settings":
+        """אותו היגיון של SESSION_SECRET, על טוקן ה-MCP.
+
+        טוקן חלש כאן חמור יותר מ-cookie מזויף: הוא נותן קריאה וכתיבה
+        לכל המסמכים דרך נתיב שאינו מוגן ב-OriginGuard. טוקן ריק אינו
+        שגיאה — הוא פשוט מכבה את השרת — אבל טוקן קצר או placeholder
+        הוא כוונה להפעיל אותו בלי להגן עליו, ולכן מפילים את העלייה.
+        """
+        if self.environment != "production" or self.mcp_token is None:
+            return self
+        token = self.mcp_token.strip()
+        if not token:
+            return self
+        if token in PLACEHOLDER_SECRETS:
+            raise ValueError("MCP_TOKEN נשאר ערך ברירת מחדל בפרודקשן")
+        if len(token) < MIN_SECRET_LENGTH:
+            raise ValueError(
+                f"MCP_TOKEN קצר מדי בפרודקשן — נדרשים לפחות {MIN_SECRET_LENGTH} תווים"
+            )
+        return self
+
     @property
     def is_production(self) -> bool:
         return self.environment == "production"
+
+    @property
+    def mcp_enabled(self) -> bool:
+        """השרת נרשם רק כשיש טוקן. ראו mcp_token."""
+        return bool((self.mcp_token or "").strip())
+
+    @property
+    def mcp_scopes(self) -> frozenset[str]:
+        """ההרשאות של הטוקן היחיד.
+
+        ערך לא מוכר מושמט ולא מתפרש כהרשאה: scope שנכתב בטעות חייב
+        להצטמצם להרשאות, לא להרחיב אותן.
+        """
+        known = {"read", "write"}
+        parsed = {s.strip().lower() for s in self.mcp_token_scopes.split(",") if s.strip()}
+        return frozenset(parsed & known)
 
     @property
     def origin_allowlist(self) -> frozenset[str]:

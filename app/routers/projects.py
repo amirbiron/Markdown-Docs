@@ -5,16 +5,16 @@ from __future__ import annotations
 import logging
 
 from fastapi import APIRouter, Depends, HTTPException, Response, status
-from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import selectinload
 
 from app import slugs
 from app.db import get_session
 from app.deps import optional_user, require_user
-from app.models import Document, Project, ProjectLink, User, Visibility
+from app.models import Document, Project, ProjectLink, User
 from app.schemas import ProjectCreate, ProjectPrivate, ProjectPublic, ProjectUpdate
+from app.services import projects as project_service
+from app.services.errors import NotFound
 
 logger = logging.getLogger("markdown_docs.projects")
 
@@ -28,20 +28,18 @@ NOT_FOUND = "הפרויקט לא נמצא"
 async def load_project(
     session: AsyncSession, slug: str, viewer: User | None, *, with_documents: bool = False
 ) -> Project:
-    """שולף פרויקט לפי הכללים של מי שמסתכל, או זורק 404."""
-    query = select(Project).where(Project.slug == slugs.normalize(slug).lower())
-    if with_documents:
-        query = query.options(selectinload(Project.documents), selectinload(Project.links))
+    """עטיפת HTTP סביב שכבת ה-service.
 
-    project = (await session.execute(query)).scalar_one_or_none()
-    if project is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, NOT_FOUND)
-
-    if project.visibility is Visibility.PUBLIC:
-        return project
-    if viewer is not None and project.owner_id == viewer.id:
-        return project
-    raise HTTPException(status.HTTP_404_NOT_FOUND, NOT_FOUND)
+    הלוגיקה עצמה יושבת ב-app/services/projects.py, כדי ששרת ה-MCP
+    יוכל לאכוף את אותם כללי נראות בדיוק בלי לייבא HTTPException לתוך
+    שכבה שאינה HTTP. כאן נשאר רק התרגום לשפת ה-API.
+    """
+    try:
+        return await project_service.load_project(
+            session, slug, viewer, with_documents=with_documents
+        )
+    except NotFound:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, NOT_FOUND) from None
 
 
 def _payload(project: Project, documents: list[Document], links: list[ProjectLink]) -> dict:
@@ -84,15 +82,7 @@ async def list_projects(
     session: AsyncSession = Depends(get_session),
 ):
     """בלי session מוחזרים פומביים בלבד."""
-    query = select(Project).options(selectinload(Project.documents), selectinload(Project.links))
-    if viewer is None:
-        query = query.where(Project.visibility == Visibility.PUBLIC)
-    else:
-        query = query.where(Project.owner_id == viewer.id)
-
-    # שם ואז id — בלי ה-id שני פרויקטים בעלי אותו שם מקבלים סדר שרירותי.
-    query = query.order_by(Project.name, Project.id)
-    projects = (await session.execute(query)).scalars().all()
+    projects = await project_service.list_visible_projects(session, viewer)
 
     model = ProjectPrivate if viewer is not None else ProjectPublic
     return [

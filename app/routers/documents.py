@@ -5,17 +5,17 @@ from __future__ import annotations
 import logging
 
 from fastapi import APIRouter, Depends, HTTPException, Response, status
-from sqlalchemy import delete, func, select
-from sqlalchemy.dialects.postgresql import insert as pg_insert
-from sqlalchemy.exc import IntegrityError
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app import slugs
 from app.config import get_settings
 from app.db import get_session
 from app.deps import optional_user, require_user
 from app.models import Document, DocumentVersion, Project, User
 from app.routers.projects import NOT_FOUND, load_project
+from app.services import documents as document_service
+from app.services import projects as project_service
+from app.services.errors import Conflict, InvalidInput, NotFound
 from app.schemas import (
     DocumentCreate,
     DocumentPrivate,
@@ -34,48 +34,28 @@ DOC_NOT_FOUND = "המסמך לא נמצא"
 
 
 async def _load_document(session: AsyncSession, project: Project, slug: str, *, lock: bool = False) -> Document:
-    query = select(Document).where(
-        Document.project_id == project.id,
-        Document.slug == slugs.normalize(slug).lower(),
-    )
-    if lock:
-        # נועל את השורה עד סוף הטרנזקציה. בלי זה, קריאת המצב הקודם
-        # והכתיבה החדשה הן שתי פעולות נפרדות ששתי בקשות יכולות לשזור
-        # ביניהן — ואז גרסה נשמרת פעמיים או בכלל לא (כלל 2).
-        query = query.with_for_update()
-
-    document = (await session.execute(query)).scalar_one_or_none()
-    if document is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, DOC_NOT_FOUND)
-    return document
+    """עטיפת HTTP סביב document_service.load_document."""
+    try:
+        return await document_service.load_document(session, project, slug, lock=lock)
+    except NotFound:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, DOC_NOT_FOUND) from None
 
 
 async def _owned_project(session: AsyncSession, slug: str, user: User) -> Project:
-    project = await load_project(session, slug, user)
-    if project.owner_id != user.id:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, NOT_FOUND)
-    return project
+    """עטיפת HTTP סביב project_service.owned_project.
+
+    הבדיקה עצמה ישבה כאן וב-routers/links.py בשני עותקים זהים. עכשיו
+    יש עותק אחד בשכבת ה-service, ושרת ה-MCP משתמש באותו אחד.
+    """
+    try:
+        return await project_service.owned_project(session, slug, user)
+    except NotFound:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, NOT_FOUND) from None
 
 
 async def _trim_versions(session: AsyncSession, document_id) -> None:
-    """שומר רק את N הגרסאות האחרונות.
-
-    בלי זה, שמירה אוטומטית כל כמה שניות מייצרת היסטוריה שגדלה בלי גבול
-    לאורך יום עריכה אחד. אותו היגיון כמו ניקוי הגיבויים מהדיסק.
-    """
-    keep = settings.document_versions_kept
-    survivors = (
-        select(DocumentVersion.id)
-        .where(DocumentVersion.document_id == document_id)
-        .order_by(DocumentVersion.created_at.desc(), DocumentVersion.id.desc())
-        .limit(keep)
-        .scalar_subquery()
-    )
-    await session.execute(
-        delete(DocumentVersion).where(
-            DocumentVersion.document_id == document_id,
-            DocumentVersion.id.not_in(survivors),
-        )
+    await document_service.trim_versions(
+        session, document_id, keep=settings.document_versions_kept
     )
 
 
@@ -89,40 +69,21 @@ async def create_document(
     project = await _owned_project(session, project_slug, user)
 
     try:
-        slug = slugs.resolve(payload.slug, payload.title)
-    except slugs.SlugError as error:
-        raise HTTPException(422, str(error)) from None
-
-    # המקום מחושב *בתוך* פקודת ה-INSERT, ולא בשאילתה נפרדת שקודמת לה.
-    # SELECT MAX ואז INSERT הן שתי פעולות ששתי יצירות במקביל יכולות
-    # לשזור ביניהן, ושתיהן היו מקבלות את אותו מקום (כלל 2).
-    if payload.position is None:
-        next_position = (
-            select(func.coalesce(func.max(Document.position), -1) + 1)
-            .where(Document.project_id == project.id)
-            .scalar_subquery()
-        )
-    else:
-        next_position = payload.position
-
-    statement = (
-        pg_insert(Document)
-        .values(
-            project_id=project.id,
-            slug=slug,
-            title=payload.title.strip(),
+        document_id = await document_service.create_document(
+            session,
+            project,
+            title=payload.title,
             content=payload.content,
-            position=next_position,
+            slug=payload.slug,
+            position=payload.position,
         )
-        .returning(Document.id)
-    )
-
-    try:
-        document_id = (await session.execute(statement)).scalar_one()
         await session.commit()
-    except IntegrityError:
-        await session.rollback()
-        raise HTTPException(status.HTTP_409_CONFLICT, "כבר קיים מסמך עם המזהה הזה בפרויקט") from None
+    except InvalidInput as error:
+        raise HTTPException(422, str(error)) from None
+    except Conflict:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT, "כבר קיים מסמך עם המזהה הזה בפרויקט"
+        ) from None
 
     document = await session.get(Document, document_id)
     return DocumentPrivate.model_validate(document)
@@ -174,44 +135,32 @@ async def update_document(
         await session.rollback()  # משחרר את הנעילה שנתפסה ב-FOR UPDATE
         return DocumentWriteResult(applied=False, document=snapshot)
 
-    # הגרסה הקודמת נשמרת רק כשהתוכן באמת השתנה. בלי התנאי, כל שמירה
-    # אוטומטית שלא שינתה כלום הייתה מייצרת עוד עותק זהה.
-    if payload.content is not None and payload.content != document.content:
-        session.add(DocumentVersion(document_id=document.id, content=document.content))
-
-    if payload.title is not None:
-        document.title = payload.title.strip()
-    # slug מפורש גובר על גזירה מהכותרת, כדי שבקשה שנותנת את שניהם לא
-    # תהיה תלויה בסדר הבדיקות כאן.
-    if payload.slug is not None or (payload.slug_from_title and payload.title is not None):
-        # אותו אימות בדיוק כמו ביצירה. slug פסול הוא שגיאת קלט ולא
-        # התנגשות, ולכן 422 ולא 409.
-        try:
-            document.slug = slugs.resolve(payload.slug, payload.title or "")
-        except slugs.SlugError as error:
-            await session.rollback()
-            raise HTTPException(422, str(error)) from None
-    if payload.content is not None:
-        document.content = payload.content
-    if payload.position is not None:
-        document.position = payload.position
+    # סדר הכתיבות שייך לממשק ולא ללוגיקת המסמך: הוא נועד להגן על טאב
+    # דפדפן מפני שמירה אוטומטית שלו עצמו שאיחרה. לכן הוא נשאר כאן ולא
+    # עובר לשכבת ה-service, שאין לה מושג מה זה עורך.
     if payload.client_seq is not None:
         document.last_client_seq = payload.client_seq
         document.last_editor_id = payload.editor_id
 
-    # ה-flush הוא המקום שבו UniqueConstraint על (project_id, slug) נאכף.
-    # התפיסה כאן ולא בדיקת SELECT מראש, מאותה סיבה שבה היצירה עושה את
-    # זה: בדיקה ואז כתיבה הן שתי פעולות ששתי בקשות מקבילות משזרות
-    # ביניהן, ושתיהן היו עוברות אותה (כלל 2).
     try:
-        await session.flush()
-    except IntegrityError:
-        await session.rollback()
+        await document_service.apply_update(
+            session,
+            document,
+            title=payload.title,
+            content=payload.content,
+            slug=payload.slug,
+            slug_from_title=payload.slug_from_title,
+            position=payload.position,
+            keep_versions=settings.document_versions_kept,
+        )
+    except InvalidInput as error:
+        # slug פסול הוא שגיאת קלט ולא התנגשות, ולכן 422 ולא 409.
+        raise HTTPException(422, str(error)) from None
+    except Conflict:
         raise HTTPException(
             status.HTTP_409_CONFLICT, "כבר קיים מסמך עם המזהה הזה בפרויקט"
         ) from None
 
-    await _trim_versions(session, document.id)
     await session.commit()
     await session.refresh(document)
 

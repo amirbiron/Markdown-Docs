@@ -279,7 +279,40 @@ async def loop() -> None:
             raise
         except Exception:
             logger.exception("סבב הגיבוי נכשל")
+
+        try:
+            await purge_mcp_oauth()
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            logger.exception("ניקוי טוקני ה-MCP נכשל")
+
         await asyncio.sleep(TICK_SECONDS)
+
+
+async def purge_mcp_oauth() -> int:
+    """מוחק קודים וטוקנים של MCP שפג תוקפם.
+
+    רוכב על הדופק הקיים ולא על מתזמן משלו: אין כאן דחיפות, והשעון
+    היחיד שמובטח לרוץ בשירות הוא זה. בלי הניקוי הטבלאות גדלות לנצח,
+    כי כל רענון טוקן מוסיף שורות שלעולם לא יישלפו שוב.
+
+    בנפרד מהגיבוי כדי שכישלון של אחד לא יבטל את השני.
+
+    התנאי הוא mcp_enabled ולא mcp_oauth_enabled: האחרון תלוי גם
+    ב-RENDER_EXTERNAL_URL, וכיבוי הזרימה — או הסרת הכתובת — אינם סיבה
+    להשאיר רשומות שפג תוקפן בטבלה לנצח. מחיקת רשומות פגות בטוחה תמיד.
+    """
+    if not get_settings().mcp_enabled:
+        return 0
+    from app.db import SessionLocal
+    from app.mcp import oauth_store
+
+    async with SessionLocal() as session:
+        removed = await oauth_store.purge_expired(session)
+    if removed:
+        logger.info("נוקו %d רשומות OAuth שפג תוקפן", removed)
+    return removed
 
 
 def next_run_at() -> str | None:

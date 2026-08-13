@@ -29,6 +29,7 @@ from app.routers import links as links_router
 from app.routers import projects as projects_router
 from app.routers import search as search_router
 from app import scheduler
+from app.mcp import oauth_consent
 from app.mcp import server as mcp_server
 from app.seed import seed_admin
 
@@ -141,6 +142,34 @@ async def lifespan(app: FastAPI):
 # נבנה רק כשיש טוקן. בלעדיו הנתיב כלל אינו קיים — נעילה במפתח ולא
 # בשומר.
 _mcp_app = mcp_server.build_asgi_app() if mcp_server.is_enabled() else None
+
+
+def _mount_well_known(parent: FastAPI, mcp_app) -> None:
+    """מעתיק את נתיבי ה-.well-known של ה-OAuth לשורש הדומיין.
+
+    ה-SDK רושם אותם בתוך תת-האפליקציה, ולכן אחרי ההרכבה על /mcp הם
+    מגיעים כ-/mcp/.well-known/... — והלקוח מחפש אותם בשורש. RFC 8414
+    ו-RFC 9728 קובעים שם קבוע ביחס לשורש המארח, ולא ביחס לנתיב
+    השירות, ולכן אין לזה מעקף בצד הלקוח.
+
+    ה-endpoint עצמו ממוחזר כמו שהוא ולא נבנה מחדש: התוכן צריך להיות
+    זהה, ושכפול היה מתפצל מה-SDK בשקט בשדרוג גרסה.
+
+    שאר הנתיבים — /authorize, /token, /register, /revoke — נשארים תחת
+    /mcp, וזה תקין: המטא-דאטה מצהירה עליהם ככתובות מלאות, וה-issuer
+    מוגדר כ-<host>/mcp כדי שההצהרה תתאים למציאות.
+    """
+    for route in mcp_app.routes:
+        path = getattr(route, "path", "")
+        if not path.startswith("/.well-known/"):
+            continue
+        parent.router.add_route(
+            path,
+            route.endpoint,
+            methods=list(getattr(route, "methods", None) or ["GET"]),
+            include_in_schema=False,
+        )
+        logger.info("נתיב גילוי OAuth נרשם בשורש: %s", path)
 
 
 @asynccontextmanager
@@ -280,5 +309,7 @@ app.mount("/assets", StaticFiles(directory=ASSETS_DIR), name="assets")
 # אינו חל עליו — ההגנה שם היא טוקן Bearer בלבד, וזהות מ-cookie נדחית
 # במפורש. ראו app/mcp/auth.py.
 if _mcp_app is not None:
-    app.mount("/mcp", _mcp_app)
-    logger.info("שרת ה-MCP מחובר על /mcp")
+    _mount_well_known(app, _mcp_app)
+    app.include_router(oauth_consent.router)
+    app.mount(mcp_server.MOUNT_PATH, _mcp_app)
+    logger.info("שרת ה-MCP מחובר על %s", mcp_server.MOUNT_PATH)

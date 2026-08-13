@@ -75,12 +75,20 @@ class OriginGuard:
         self,
         app,
         allowlist: frozenset[str],
-        protected_prefix: str = "/api",
+        protected_prefixes: tuple[str, ...] = ("/api", "/mcp-consent"),
         allow_loopback: bool = False,
     ) -> None:
         self.app = app
         self.allowlist = allowlist
-        self.protected_prefix = protected_prefix
+        # יותר מקידומת אחת, כי מסך אישור ה-OAuth של ה-MCP הוא טופס HTML
+        # רגיל שאינו יושב תחת /api. בלי ההגנה כאן, מי שנרשם כלקוח MCP
+        # (הרישום פתוח — כך claude.ai מתחבר) יכול לייצר בקשת authorize
+        # משלו ולגרום לדפדפן של המשתמש המחובר לאשר אותה בלי ידיעתו.
+        #
+        # /mcp עצמו אינו ברשימה בכוונה: הוא מאמת ב-Bearer בלבד ודוחה
+        # cookie, ולכן אינו פגיע ל-CSRF מלכתחילה — וכפיית Origin עליו
+        # הייתה חוסמת כל לקוח שאינו דפדפן.
+        self.protected_prefixes = tuple(protected_prefixes)
         self.allow_loopback = allow_loopback
 
     def _accepts(self, origin: str) -> bool:
@@ -91,7 +99,7 @@ class OriginGuard:
     async def __call__(self, scope, receive, send):
         if scope["type"] != "http":
             return await self.app(scope, receive, send)
-        if scope["method"] in MUTATING_METHODS and scope["path"].startswith(self.protected_prefix):
+        if scope["method"] in MUTATING_METHODS and scope["path"].startswith(self.protected_prefixes):
             origin = _headers(scope).get("origin", "").rstrip("/")
             if not self._accepts(origin):
                 logger.warning(

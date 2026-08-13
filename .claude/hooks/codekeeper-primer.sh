@@ -42,13 +42,18 @@ trap 'rm -f "$body"' EXIT INT TERM
 cd / || exit 0
 
 # No -f: the status code is the signal, not curl's exit status. --max-time 6
-# is load-bearing against Render cold starts — the hook's own timeout is 10s,
+# is load-bearing against Render cold starts — the hook's own timeout is 20s,
 # so a sleeping server must cost seconds, never a hang.
+#
+# curl's stderr is deliberately NOT discarded: on a connection failure its own
+# line names the cause — could not resolve host, connection refused, timed out
+# — which the 000 branch below cannot tell apart. It goes to stderr, so it can
+# never reach the primer on stdout.
 code=$(
   curl -sS -o "$body" -w '%{http_code}' --max-time 6 \
     -H "Authorization: Bearer ${CODEKEEPER_PAT}" \
     -H "Accept: text/plain" \
-    "$CODEKEEPER_PRIMER_URL" 2>/dev/null
+    "$CODEKEEPER_PRIMER_URL"
 ) || code="000"
 
 case "$code" in

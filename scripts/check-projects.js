@@ -65,15 +65,24 @@ const ok = (l, v, x) => { R.push(v); console.log(`  ${v ? '✓' : '✗'}  ${l}${
     await p.waitForTimeout(2400);
 
     // שני פרויקטים: אחד למחיקה ואחד שחייב לשרוד אותה.
+    //
+    // כל POST נבדק. בלי זה, כניסה שנכשלה מחזירה 401, ה-slug יוצא
+    // undefined, וכל המדדים נופלים על סלקטורים ריקים — כלומר הפלט
+    // מצביע על המסך בזמן שהבעיה בהכנה. כשל מפורש חוסך את החיפוש.
     const setup = await p.evaluate(async ([stamp]) => {
-      const post = (u, b) => fetch(u, {
-        method: 'POST', credentials: 'same-origin',
-        headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(b),
-      });
+      const post = async (u, b) => {
+        const r = await fetch(u, {
+          method: 'POST', credentials: 'same-origin',
+          headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(b),
+        });
+        if (!r.ok) throw new Error('POST ' + u + ' החזיר ' + r.status);
+        return r;
+      };
       const doomedName = 'למחיקה ' + stamp;
       const keptName = 'לשמירה ' + stamp;
       const doomed = (await (await post('/api/projects', { name: doomedName })).json()).slug;
       const kept = (await (await post('/api/projects', { name: keptName })).json()).slug;
+      if (!doomed || !kept) throw new Error('יצירת הפרויקט לא החזירה slug');
       await post(`/api/projects/${encodeURIComponent(doomed)}/docs`, { title: 'ראשון', content: '# ראשון\n' });
       await post(`/api/projects/${encodeURIComponent(doomed)}/docs`, { title: 'שני', content: '# שני\n' });
       await post(`/api/projects/${encodeURIComponent(doomed)}/links`, { title: 'קישור', url: 'https://example.com' });

@@ -2006,7 +2006,11 @@ class Component extends DCLogic {
     const target = this.state.confirm;
     if (!target) return false;
     if (!target.needsText) return true;
-    return this.state.confirmText.trim() === target.title;
+    /* trim על שני הצדדים. השרת עושה strip לשם הפרויקט ביצירה ובעדכון,
+       ולכן שם עם רווח בקצה אינו אמור להגיע לכאן — אבל אם הוא בכל זאת
+       יגיע, המשתמש רואה שם שאי אפשר להקליד במדויק, והפרויקט הופך
+       ללא-ניתן-למחוק דרך הממשק. השוואה חד-צדדית קונה כאן כלום. */
+    return this.state.confirmText.trim() === String(target.title).trim();
   }
 
   /* ביצוע המחיקה שאושרה.

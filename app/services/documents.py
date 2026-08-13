@@ -8,13 +8,15 @@ from __future__ import annotations
 
 import uuid
 
-from sqlalchemy import delete, select
+from sqlalchemy import delete, func, select
+from sqlalchemy.dialects.postgresql import insert as pg_insert
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app import slugs
 from app.models import Document, DocumentVersion, Project, User, Visibility
-from app.services.errors import NotFound
+from app.services.errors import Conflict, InvalidInput, NotFound
 
 
 async def load_document(
@@ -137,6 +139,106 @@ async def load_version(
     # הגרסה אינה נגישה — בלי קשר לכך שהיא קיימת.
     await load_document_by_id(session, version.document_id, viewer)
     return version
+
+
+async def create_document(
+    session: AsyncSession,
+    project: Project,
+    *,
+    title: str,
+    content: str = "",
+    slug: str | None = None,
+    position: int | None = None,
+) -> uuid.UUID:
+    """יוצר מסמך ומחזיר את המזהה שלו. אינו מבצע commit.
+
+    ה-position מחושב בתוך ה-INSERT ולא בשאילתה נפרדת: בדיקה ואז
+    כתיבה הן שתי פעולות ששתי בקשות מקבילות משזרות ביניהן (כלל 2).
+    """
+    try:
+        resolved = slugs.resolve(slug, title)
+    except slugs.SlugError as error:
+        raise InvalidInput(str(error)) from None
+
+    if position is None:
+        next_position = (
+            select(func.coalesce(func.max(Document.position), -1) + 1)
+            .where(Document.project_id == project.id)
+            .scalar_subquery()
+        )
+    else:
+        next_position = position
+
+    statement = (
+        pg_insert(Document)
+        .values(
+            project_id=project.id,
+            slug=resolved,
+            title=title.strip(),
+            content=content,
+            position=next_position,
+        )
+        .returning(Document.id)
+    )
+
+    try:
+        return (await session.execute(statement)).scalar_one()
+    except IntegrityError:
+        await session.rollback()
+        raise Conflict("document") from None
+
+
+async def apply_update(
+    session: AsyncSession,
+    document: Document,
+    *,
+    title: str | None = None,
+    content: str | None = None,
+    slug: str | None = None,
+    slug_from_title: bool = False,
+    position: int | None = None,
+    keep_versions: int,
+) -> None:
+    """מחיל שינוי על מסמך שכבר ננעל, כולל שמירת גרסה. בלי commit.
+
+    זו נקודת הכתיבה היחידה. מסלול עדכון שני היה יוצר גרסאות בכללים
+    משלו, והיסטוריית המסמך הייתה תלויה בשאלה דרך איזה ממשק נערך.
+
+    המסמך חייב להגיע נעול (with_for_update), אחרת קריאת התוכן הקודם
+    והכתיבה החדשה הן שתי פעולות ששתי בקשות משזרות ביניהן (כלל 2).
+    """
+    # הגרסה נשמרת רק כשהתוכן באמת השתנה. בלי התנאי, כל שמירה
+    # אוטומטית הייתה מייצרת עותק זהה.
+    if content is not None and content != document.content:
+        session.add(DocumentVersion(document_id=document.id, content=document.content))
+
+    if title is not None:
+        document.title = title.strip()
+
+    # slug מפורש גובר על גזירה מהכותרת, כדי שבקשה שנותנת את שניהם לא
+    # תהיה תלויה בסדר הבדיקות כאן.
+    #
+    # שימו לב שברירת המחדל היא לא לגעת ב-slug. זה מה שמאפשר לצרכן
+    # שמחזיק הקשר בין קריאות — שרת ה-MCP — לערוך מסמך בלי לשנות את
+    # הכתובת שלו בלי כוונה.
+    if slug is not None or (slug_from_title and title is not None):
+        try:
+            document.slug = slugs.resolve(slug, title or "")
+        except slugs.SlugError as error:
+            await session.rollback()
+            raise InvalidInput(str(error)) from None
+    if content is not None:
+        document.content = content
+    if position is not None:
+        document.position = position
+
+    try:
+        await session.flush()
+    except IntegrityError:
+        await session.rollback()
+        raise Conflict("document") from None
+
+    await trim_versions(session, document.id, keep=keep_versions)
 
 
 async def trim_versions(session: AsyncSession, document_id, keep: int) -> None:

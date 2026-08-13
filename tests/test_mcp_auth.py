@@ -98,6 +98,31 @@ def test_no_configured_token_rejects_everything(mcp_settings):
     assert auth.token_matches(TOKEN) is False
 
 
+@pytest.mark.parametrize(
+    "candidate",
+    ["טוקן־בעברית־שהודבק־בטעות", "token-with-emoji-🔑", "tökén"],
+    ids=["עברית", "אמוג'י", "ניקוד לטיני"],
+)
+def test_non_ascii_token_is_rejected_and_does_not_explode(mcp_settings, candidate):
+    """טוקן לא-ASCII מוחזר כ"לא תואם", לא כחריגה.
+
+    compare_digest על str זורק TypeError על תווים מחוץ ל-ASCII.
+    בלי המרה ל-bytes החריגה הייתה עוקפת את AuthError, והלקוח היה
+    מקבל internal_error במקום unauthorized — כלומר טעות הדבקה
+    נראית כמו תקלה בשרת.
+    """
+    mcp_settings()
+    assert auth.token_matches(candidate) is False
+
+
+def test_a_non_ascii_configured_token_still_works(mcp_settings):
+    """גם הצד השני: טוקן לא-ASCII בהגדרות אינו מפיל את ההשוואה."""
+    hebrew = "סוד־" + "א" * 40
+    mcp_settings(mcp_token=hebrew)
+    assert auth.token_matches(hebrew) is True
+    assert auth.token_matches(TOKEN) is False
+
+
 # ── זהות מלאה ─────────────────────────────────────────────────────────
 
 
@@ -141,6 +166,25 @@ def test_require_write_blocks_read_only():
     identity = auth.Identity(user=None, scopes=frozenset({"read"}))
     with pytest.raises(auth.PermissionError_):
         auth.require_write(identity)
+
+
+def test_require_read_passes_with_read_scope():
+    auth.require_read(auth.Identity(user=None, scopes=frozenset({"read"})))
+
+
+def test_require_read_accepts_write_as_well():
+    """כתיבה גוררת קריאה — כלי הכתיבה שולפים לפני שהם משנים."""
+    auth.require_read(auth.Identity(user=None, scopes=frozenset({"write"})))
+
+
+def test_require_read_blocks_a_token_with_no_scopes():
+    """הפער שהיה: טוקן בלי scopes בכלל נחסם מכתיבה אבל קרא הכול.
+
+    זה בדיוק המצב שנוצר מ-MCP_TOKEN_SCOPES ריק, או מערך שכולו
+    שגיאת כתיב — כי scope לא מוכר נשמט ב-mcp_scopes.
+    """
+    with pytest.raises(auth.PermissionError_):
+        auth.require_read(auth.Identity(user=None, scopes=frozenset()))
 
 
 def test_unknown_scope_is_dropped_not_honoured(mcp_settings):

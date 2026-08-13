@@ -70,12 +70,18 @@ def token_matches(candidate: str) -> bool:
 
     compare_digest ולא ==, כדי שזמן התשובה לא ידלוף כמה תווים
     ראשונים נוכחו.
+
+    ההשוואה על bytes ולא על str: compare_digest זורק TypeError על
+    מחרוזת שאינה ASCII. טוקן עם תו עברי או אמוג'י — קל להדביק כזה
+    בטעות — היה מפיל את הפונקציה, החריגה הייתה עוקפת את AuthError,
+    והלקוח היה מקבל internal_error במקום unauthorized. כלומר שגיאת
+    אימות רגילה נראית כמו תקלה בשרת.
     """
     settings = get_settings()
     expected = (settings.mcp_token or "").strip()
     if not expected:
         return False
-    return secrets.compare_digest(candidate, expected)
+    return secrets.compare_digest(candidate.encode("utf-8"), expected.encode("utf-8"))
 
 
 async def resolve_identity(session: AsyncSession, headers) -> Identity:
@@ -118,4 +124,22 @@ def require_write(identity: Identity) -> None:
     if not identity.has(SCOPE_WRITE):
         raise PermissionError_(
             "לטוקן אין הרשאת כתיבה. הוסיפו write ל-MCP_TOKEN_SCOPES."
+        )
+
+
+def require_read(identity: Identity) -> None:
+    """נקראת בכל כלי קריאה, בדיוק כמו require_write בכלי כתיבה.
+
+    בלי זה ה-scopes נאכפים רק לכיוון אחד: טוקן עם
+    MCP_TOKEN_SCOPES ריק — או עם ערך שכולו שגיאת כתיב, שנשמט
+    ב-mcp_scopes — היה נדחה מכתיבה אבל קורא הכול. ההצהרה חייבת
+    להיאכף בשני הכיוונים, אחרת היא אינה הצהרה.
+
+    כתיבה גוררת קריאה: כלי הכתיבה שולפים את המסמך לפני שהם משנים
+    אותו, ולכן טוקן write בלי read הוא רק מלכודת. זו הקלה מכוונת
+    ומוצהרת, לא פרצה — write הוא ההרשאה הרחבה מבין השתיים.
+    """
+    if not (identity.has(SCOPE_READ) or identity.has(SCOPE_WRITE)):
+        raise PermissionError_(
+            "לטוקן אין הרשאת קריאה. הוסיפו read ל-MCP_TOKEN_SCOPES."
         )

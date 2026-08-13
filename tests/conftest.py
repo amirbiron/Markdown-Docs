@@ -7,8 +7,12 @@ import os
 # חייב לקרות לפני הייבוא של app: ההגדרות נטענות פעם אחת בזמן ייבוא,
 # ושרת ה-MCP נבנה ומורכב רק אם יש טוקן. בלי זה נתיב /mcp לא היה קיים
 # בבדיקות כלל, וכל הכיסוי שלו היה נעלם בשקט.
+#
+# השמה ולא setdefault: משתנה סביבה קיים — למשל ריק ב-CI, או ערך אחר
+# במכונת פיתוח — היה משתלט על הריצה. ריק היה מכבה את ההרכבה, וערך אחר
+# היה מפיל את בדיקות האימות. הבדיקות חייבות להיות דטרמיניסטיות.
 MCP_TOKEN = "m" * 40
-os.environ.setdefault("MCP_TOKEN", MCP_TOKEN)
+os.environ["MCP_TOKEN"] = MCP_TOKEN
 
 import pytest  # noqa: E402
 from httpx import ASGITransport, AsyncClient  # noqa: E402

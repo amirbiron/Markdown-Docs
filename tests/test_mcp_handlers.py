@@ -100,9 +100,15 @@ async def test_search_with_content_answers_in_one_call(owner, identity):
 
 
 async def test_search_content_limit_is_clamped(owner, identity):
-    """ערך מוגזם נחתך ולא נדחה."""
+    """ערך מוגזם נחתך ולא נדחה.
+
+    יותר מסמכים מהתקרה, ובכוונה: עם שלושה מסמכים ותקרה של עשרה
+    הבדיקה הייתה עוברת גם אם החיתוך לא היה קיים בכלל. הוכחת חיתוך
+    דורשת שיהיה מה לחתוך.
+    """
     await make_project(owner)
-    for index in range(3):
+    total = handlers.CONTENT_LIMIT_MAX + 2
+    for index in range(total):
         await make_document(owner, slug=f"d{index}", title=f"התקנה {index}", content="גוף")
 
     async with SessionLocal() as session:
@@ -111,8 +117,9 @@ async def test_search_content_limit_is_clamped(owner, identity):
         )
 
     assert result["ok"] is True
+    assert len(result["results"]) == total, "כל המסמכים אמורים לחזור כתוצאות"
     with_content = [h for h in result["results"] if "content" in h]
-    assert len(with_content) <= handlers.CONTENT_LIMIT_MAX
+    assert len(with_content) == handlers.CONTENT_LIMIT_MAX
 
 
 async def test_empty_search_is_a_clear_error(owner, identity):

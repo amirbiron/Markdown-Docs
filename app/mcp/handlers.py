@@ -12,12 +12,13 @@ from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.config import get_settings
 from app.mcp.auth import Identity
 from app.mcp.formatting import clamp, did_you_mean, document_url, err, ok
 from app.services import documents as document_service
 from app.services import projects as project_service
 from app.services import search as search_service
-from app.services.errors import NotFound
+from app.services.errors import Conflict, InvalidInput, NotFound
 
 # תקרות. חותכים ולא דוחים — ראו formatting.clamp.
 SEARCH_LIMIT_DEFAULT = 20
@@ -142,9 +143,16 @@ async def search(
     if include_content:
         top = clamp(content_limit, 1, CONTENT_LIMIT_MAX, CONTENT_LIMIT_DEFAULT)
         for hit in hits[:top]:
-            document = await document_service.load_document_by_id(
-                session, uuid.UUID(hit["id"]), identity.user
-            )
+            try:
+                document = await document_service.load_document_by_id(
+                    session, uuid.UUID(hit["id"]), identity.user
+                )
+            except NotFound:
+                # מרוץ טבעי: החיפוש והשליפה הם שתי פעולות נפרדות, ובין
+                # לבין המסמך יכול להימחק או לשנות נראות. זה מצב צפוי ולא
+                # תקלת שרת — סימון השדה עדיף על הפלת כל הקריאה.
+                hit["content_unavailable"] = True
+                continue
             hit["content"] = document.content
 
     return ok(
@@ -306,6 +314,138 @@ async def list_versions(session: AsyncSession, identity: Identity, document_id: 
             else "אין עדיין גרסאות. גרסה נוצרת רק כשתוכן המסמך משתנה."
         ),
     )
+
+
+async def create_document(
+    session: AsyncSession,
+    identity: Identity,
+    project_slug: str,
+    title: str,
+    content: str = "",
+    slug: str | None = None,
+) -> dict:
+    """יוצר מסמך חדש בפרויקט."""
+    if not (title or "").strip():
+        return err("missing_title", message="נדרשת כותרת")
+
+    try:
+        project = await project_service.owned_project(session, project_slug, identity.user)
+    except NotFound:
+        return await _project_not_found(session, identity, project_slug)
+
+    try:
+        document_id = await document_service.create_document(
+            session, project, title=title, content=content, slug=slug
+        )
+        await session.commit()
+    except InvalidInput as error:
+        return err("invalid_slug", message=str(error))
+    except Conflict:
+        return err(
+            "slug_taken",
+            message="כבר קיים מסמך עם ה-slug הזה בפרויקט. בחרו slug אחר או השמיטו אותו.",
+        )
+
+    document = await document_service.load_document_by_id(session, document_id, identity.user)
+    return ok(document=_serialize(document, project), created=True)
+
+
+async def _load_for_write(session: AsyncSession, identity: Identity, document_id: str):
+    """שולף מסמך נעול לכתיבה, או מחזיר dict של שגיאה.
+
+    מחזיר זוג (document, error) כי שני הנתיבים הכותבים צריכים בדיוק את
+    אותה הכנה, ושכפול שלה היה מזמין הבדל בין השניים.
+    """
+    try:
+        parsed = uuid.UUID(document_id)
+    except ValueError:
+        return None, err("invalid_id", message="המזהה אינו UUID תקין")
+
+    try:
+        document = await document_service.load_document_by_id(
+            session, parsed, identity.user, lock=True, require_owner=True
+        )
+    except NotFound:
+        return None, err(
+            "not_found",
+            message="לא נמצא מסמך שניתן לעריכה עם המזהה הזה. השתמשו ב-mdocs_map כדי לקבל מזהים.",
+        )
+    return document, None
+
+
+async def update_document(
+    session: AsyncSession,
+    identity: Identity,
+    document_id: str,
+    content: str | None = None,
+    title: str | None = None,
+    new_slug: str | None = None,
+) -> dict:
+    """מעדכן מסמך קיים. התוכן הקודם נשמר כגרסה.
+
+    ה-slug אינו משתנה אלא אם התבקש במפורש דרך new_slug.
+    """
+    if content is None and title is None and new_slug is None:
+        return err("nothing_to_update", message="נדרש לפחות content, title או new_slug")
+
+    document, error = await _load_for_write(session, identity, document_id)
+    if error is not None:
+        return error
+
+    project = document.project
+    try:
+        await document_service.apply_update(
+            session,
+            document,
+            title=title,
+            content=content,
+            slug=new_slug,
+            keep_versions=get_settings().document_versions_kept,
+        )
+        await session.commit()
+    except InvalidInput as inner:
+        return err("invalid_slug", message=str(inner))
+    except Conflict:
+        return err("slug_taken", message="כבר קיים מסמך עם ה-slug הזה בפרויקט")
+
+    await session.refresh(document)
+    return ok(document=_serialize(document, project), updated=True)
+
+
+async def append_document(
+    session: AsyncSession, identity: Identity, document_id: str, text: str
+) -> dict:
+    """מוסיף טקסט בסוף מסמך, בלי לשלוח את כולו מחדש.
+
+    שימושי לעדכון roadmap או יומן: הוספת שורה אינה דורשת קריאה של כל
+    המסמך והחזרתו.
+    """
+    if not text:
+        return err("empty_text", message="נדרש טקסט להוספה")
+
+    document, error = await _load_for_write(session, identity, document_id)
+    if error is not None:
+        return error
+
+    project = document.project
+    # שורה ריקה מפרידה בין מה שהיה למה שנוסף, אחרת ההוספה נדבקת
+    # לפסקה האחרונה ומשנה את משמעות המארקדאון.
+    separator = "" if not document.content or document.content.endswith("\n\n") else "\n\n"
+    merged = f"{document.content}{separator}{text}"
+
+    try:
+        await document_service.apply_update(
+            session,
+            document,
+            content=merged,
+            keep_versions=get_settings().document_versions_kept,
+        )
+        await session.commit()
+    except Conflict:
+        return err("conflict", message="העדכון נכשל בגלל התנגשות. נסו שוב.")
+
+    await session.refresh(document)
+    return ok(document=_serialize(document, project), appended=True)
 
 
 async def get_version(session: AsyncSession, identity: Identity, version_id: str) -> dict:

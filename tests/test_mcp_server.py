@@ -31,13 +31,21 @@ GOOD = {
     "Accept": "application/json, text/event-stream",
 }
 
-EXPECTED_TOOLS = {
+READ_TOOLS = {
     "mdocs_map",
     "mdocs_search",
     "mdocs_get_document",
     "mdocs_list_versions",
     "mdocs_get_version",
 }
+
+WRITE_TOOLS = {
+    "mdocs_create_document",
+    "mdocs_update_document",
+    "mdocs_append_document",
+}
+
+EXPECTED_TOOLS = READ_TOOLS | WRITE_TOOLS
 
 
 def _rpc(request_id: int, method: str, params: dict | None = None) -> dict:
@@ -81,7 +89,18 @@ async def mcp_lifespan():
             await stopping.wait()
 
     task = asyncio.create_task(_run_lifespan())
-    await started.wait()
+
+    # לא await started.wait() לבדו: אם ה-lifespan נופל לפני set — למשל
+    # ה-DB לא זמין — האירוע לעולם לא נדלק והריצה נתלית בלי הודעה עד
+    # ה-timeout של ה-CI. ההמתנה על שניהם הופכת את זה לשגיאה מיידית
+    # שמראה את הסיבה האמיתית.
+    waiter = asyncio.create_task(started.wait())
+    done, _ = await asyncio.wait({waiter, task}, return_when=asyncio.FIRST_COMPLETED)
+    if waiter not in done:
+        waiter.cancel()
+        await task  # מרים את החריגה המקורית
+        raise RuntimeError("ה-lifespan הסתיים בלי לאותת על עלייה")
+
     yield
     stopping.set()
     await task
@@ -120,18 +139,43 @@ async def test_mount_is_alive(mcp):
     assert names == EXPECTED_TOOLS
 
 
-async def test_read_tools_declare_themselves_read_only(mcp):
+async def test_tools_declare_their_true_nature_over_the_wire(mcp):
+    """ה-annotations כפי שהלקוח באמת רואה אותן.
+
+    הבדיקה כאן ולא רק מול האובייקטים בפייתון, כי לקוח מקבל JSON —
+    וכלי כותב שמוצהר read-only מטעה כל לקוח שמסתמך על ההצהרה הזו
+    כדי להחליט אם לבקש אישור מהמשתמש.
+    """
     response = await mcp.post("/mcp/", json=_rpc(2, "tools/list"), headers=GOOD)
     for tool in _payload(response)["result"]["tools"]:
         annotations = tool.get("annotations") or {}
-        assert annotations.get("readOnlyHint") is True, tool["name"]
+        expected = tool["name"] in READ_TOOLS
+        assert annotations.get("readOnlyHint") is expected, tool["name"]
 
 
-async def test_existing_app_still_works_after_mounting(mcp):
-    """רגרסיה: שרשור ה-lifespan הוא בדיוק המקום שבו הגיבוי נשבר בשקט."""
+async def test_mount_path_without_trailing_slash_still_reaches_the_server(mcp):
+    """/mcp בלי לוכסן — כך לקוחות מגדירים את הכתובת בפועל.
+
+    ההרכבה מייצרת הפניה 307 ל-/mcp/. הבדיקה מוודאת שההפניה קיימת
+    ושהיא שומרת על POST ועל הגוף; 301/302 היו הופכים אותו ל-GET
+    והלקוח היה מקבל 405 בלי הסבר.
+    """
+    response = await mcp.post(
+        "/mcp", json=_rpc(7, "tools/list"), headers=GOOD, follow_redirects=True
+    )
+    assert response.status_code == 200, response.text
+    assert {t["name"] for t in _payload(response)["result"]["tools"]} == EXPECTED_TOOLS
+
+
+async def test_existing_app_still_works_after_mounting(mcp, owner):
+    """רגרסיה: שרשור ה-lifespan הוא בדיוק המקום שבו הגיבוי נשבר בשקט.
+
+    הגיבוי נבדק עם לקוח מחובר ומצפה ל-200 מדויק. קבלת 401 גם כן
+    הייתה עוברת גם אילו המסלול היה שבור לגמרי, כלומר לא בודקת כלום.
+    """
     assert (await mcp.get("/api/health")).status_code == 200
-    backup = await mcp.get("/api/backup")
-    assert backup.status_code in (200, 401), backup.text
+    backup = await owner.get("/api/backup")
+    assert backup.status_code == 200, backup.text
 
 
 # ── אימות ─────────────────────────────────────────────────────────────

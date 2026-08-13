@@ -161,7 +161,12 @@ async def combined_lifespan(app: FastAPI):
         if _mcp_app is None:
             yield
         else:
-            async with _mcp_app.router.lifespan_context(app):
+            # מעבירים את תת־האפליקציה ולא את ההורה. כרגע ה-SDK מגדיר
+            # lifespan=lambda app: session_manager.run() ומתעלם מהארגומנט
+            # לחלוטין, ולכן זה אינו משנה בפועל — אבל אפליקציה שמריצה
+            # lifespan של אפליקציה אחרת היא בדיוק סוג הקוד שנשבר בשקט
+            # כשגרסה עתידית תתחיל להשתמש בו.
+            async with _mcp_app.router.lifespan_context(_mcp_app):
                 yield
 
 

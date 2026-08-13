@@ -32,10 +32,15 @@ def clamp(value: Any, low: int, high: int, default: int) -> int:
 
     מודל ששלח limit=1000 התכוון ל"הרבה". דחייה מכריחה אותו לנחש שוב
     ולשרוף סיבוב; חיתוך נותן לו תשובה שימושית מיד.
+
+    OverflowError ברשימה: int(float("inf")) אינו ValueError אלא
+    OverflowError, ו-JSON יכול להגיע עם Infinity. פונקציה שכל תפקידה
+    הוא לא ליפול על קלט חריג לא אמורה ליפול על הקלט החריג ביותר.
+    NaN נתפס ב-ValueError.
     """
     try:
         number = int(value)
-    except (TypeError, ValueError):
+    except (TypeError, ValueError, OverflowError):
         return default
     return max(low, min(high, number))
 

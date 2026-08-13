@@ -20,7 +20,13 @@ from mcp.types import ToolAnnotations
 from app.config import get_settings
 from app.db import SessionLocal
 from app.mcp import handlers
-from app.mcp.auth import AuthError, PermissionError_, resolve_identity
+from app.mcp.auth import (
+    AuthError,
+    PermissionError_,
+    require_read,
+    require_write,
+    resolve_identity,
+)
 from app.mcp.formatting import err
 
 logger = logging.getLogger("markdown_docs.mcp")
@@ -59,19 +65,21 @@ async def _run(ctx: Context, handler, *args, needs_write: bool = False, **kwargs
     הכתיבה נעשית לפני שנפתחת עבודה כלשהי — ל-SDK אין scopes פר-כלי,
     והרישום אינו הצהרת הרשאה.
     """
-    from app.mcp.auth import require_write
-
     async with SessionLocal() as session:
         try:
             identity = await resolve_identity(session, ctx.headers)
         except AuthError as error:
             return err("unauthorized", message=str(error))
 
-        if needs_write:
-            try:
+        # גם כלי קריאה נבדק. אחרת ה-scopes נאכפים לכיוון אחד בלבד,
+        # וטוקן בלי read בכלל קורא הכול.
+        try:
+            if needs_write:
                 require_write(identity)
-            except PermissionError_ as error:
-                return err("insufficient_scope", message=str(error))
+            else:
+                require_read(identity)
+        except PermissionError_ as error:
+            return err("insufficient_scope", message=str(error))
 
         try:
             return await handler(session, identity, *args, **kwargs)
@@ -192,6 +200,85 @@ async def mdocs_get_version(ctx: Context, version_id: str) -> dict:
     מ-mdocs_list_versions.
     """
     return await _run(ctx, handlers.get_version, version_id)
+
+
+# ── כלי כתיבה ─────────────────────────────────────────────────────────
+
+
+@mcp.tool(
+    name="mdocs_create_document",
+    title="יצירת מסמך",
+    annotations=CREATE,
+)
+async def mdocs_create_document(
+    ctx: Context,
+    project_slug: str,
+    title: str,
+    content: str = "",
+    slug: str | None = None,
+) -> dict:
+    """יוצר מסמך חדש בפרויקט קיים.
+
+    השמיטו את slug כדי שייגזר מהכותרת. את רשימת הפרויקטים מקבלים
+    מ-mdocs_map.
+    """
+    return await _run(
+        ctx,
+        handlers.create_document,
+        project_slug,
+        title,
+        content=content,
+        slug=slug,
+        needs_write=True,
+    )
+
+
+@mcp.tool(
+    name="mdocs_update_document",
+    title="עדכון מסמך",
+    annotations=UPDATE,
+)
+async def mdocs_update_document(
+    ctx: Context,
+    document_id: str,
+    content: str | None = None,
+    title: str | None = None,
+    new_slug: str | None = None,
+) -> dict:
+    """מחליף את תוכן המסמך ו/או את כותרתו.
+
+    התוכן הקודם נשמר אוטומטית כגרסה, וניתן לשחזר אותו דרך
+    mdocs_list_versions ו-mdocs_get_version.
+
+    **ה-slug אינו משתנה** גם כשמשנים את הכותרת, אלא אם ביקשתם זאת
+    במפורש ב-new_slug. זו התנהגות מכוונת: שינוי slug שובר כל קישור
+    קיים למסמך.
+
+    שולח את כל התוכן. להוספה בסוף העדיפו mdocs_append_document.
+    """
+    return await _run(
+        ctx,
+        handlers.update_document,
+        document_id,
+        content=content,
+        title=title,
+        new_slug=new_slug,
+        needs_write=True,
+    )
+
+
+@mcp.tool(
+    name="mdocs_append_document",
+    title="הוספה בסוף מסמך",
+    annotations=APPEND,
+)
+async def mdocs_append_document(ctx: Context, document_id: str, text: str) -> dict:
+    """מוסיף טקסט בסוף מסמך קיים, בלי לשלוח את כולו מחדש.
+
+    זו הדרך הנכונה לעדכן roadmap או יומן. שורה ריקה נוספת אוטומטית
+    בין הקיים לחדש, כדי שההוספה לא תידבק לפסקה האחרונה.
+    """
+    return await _run(ctx, handlers.append_document, document_id, text, needs_write=True)
 
 
 # ── הרכבה ─────────────────────────────────────────────────────────────

@@ -194,8 +194,12 @@ class _BareMCPPath:
     ``Request`` ועוטף אותה; אובייקט callable מטופל כ-ASGI app.
     """
 
-    def __init__(self, mcp_app) -> None:
+    def __init__(self, mcp_app, mount_path: str) -> None:
         self.mcp_app = mcp_app
+        # מהקורא ולא מהקבוע הגלובלי: הנתיב שנרשם ב-route והנתיב שנכתב
+        # ל-root_path חייבים להיות אותו ערך, ושני מקורות היו מאפשרים
+        # להם להתפצל בלי שאף בדיקה תיגע בזה.
+        self.mount_path = mount_path
 
     async def __call__(self, scope, receive, send) -> None:
         # בדיוק מה ש-Mount היה עושה: הנתיב הפנימי הוא השורש של
@@ -203,7 +207,7 @@ class _BareMCPPath:
         inner = dict(scope)
         inner["path"] = "/"
         inner["raw_path"] = b"/"
-        inner["root_path"] = scope.get("root_path", "") + mcp_server.MOUNT_PATH
+        inner["root_path"] = scope.get("root_path", "") + self.mount_path
         await self.mcp_app(inner, receive, send)
 
 
@@ -211,7 +215,7 @@ def _mount_bare_path(parent: FastAPI, mcp_app, mount_path: str) -> None:
     """רושם את נקודת ה-MCP גם בלי הלוכסן הנגרר. ראו _BareMCPPath."""
     parent.router.add_route(
         mount_path,
-        _BareMCPPath(mcp_app),
+        _BareMCPPath(mcp_app, mount_path),
         methods=["GET", "POST", "DELETE"],
         include_in_schema=False,
     )

@@ -6,11 +6,14 @@
 
 from __future__ import annotations
 
+import uuid
+
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from app import slugs
-from app.models import Document, DocumentVersion, Project
+from app.models import Document, DocumentVersion, Project, User, Visibility
 from app.services.errors import NotFound
 
 
@@ -31,6 +34,49 @@ async def load_document(
     document = (await session.execute(query)).scalar_one_or_none()
     if document is None:
         raise NotFound("document")
+    return document
+
+
+async def load_document_by_id(
+    session: AsyncSession,
+    document_id: uuid.UUID,
+    viewer: User | None,
+    *,
+    lock: bool = False,
+    require_owner: bool = False,
+) -> Document:
+    """שולף מסמך לפי המזהה היציב שלו, אחרי בדיקת נראות מלאה.
+
+    מזהה שמגיע מבחוץ הוא IDOR עד שהוכח אחרת. אימות שה-UUID תקין אינו
+    בדיקת הרשאה — הוא רק אומר שהמחרוזת תקינה. לכן הפונקציה שולפת את
+    הפרויקט יחד עם המסמך ומחילה עליו בדיוק את אותם כללים שמחיל
+    services.projects.load_project, ולא רק בודקת שהשורה קיימת.
+
+    require_owner נדרש לנתיבי כתיבה: פרויקט פומבי של מישהו אחר גלוי,
+    אבל אינו ניתן לעריכה.
+    """
+    query = (
+        select(Document)
+        .where(Document.id == document_id)
+        .options(selectinload(Document.project))
+    )
+    if lock:
+        # נועל את שורת המסמך בלבד. selectinload מוציא את הפרויקט
+        # בשאילתה נפרדת, ולכן FOR UPDATE כאן אינו נוגע בו (כלל 2).
+        query = query.with_for_update(of=Document)
+
+    document = (await session.execute(query)).scalar_one_or_none()
+    if document is None:
+        raise NotFound("document")
+
+    project = document.project
+    is_owner = viewer is not None and project.owner_id == viewer.id
+    if require_owner:
+        if not is_owner:
+            raise NotFound("document")
+    elif project.visibility is not Visibility.PUBLIC and not is_owner:
+        raise NotFound("document")
+
     return document
 
 

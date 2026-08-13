@@ -88,13 +88,22 @@ class DocumentUpdate(BaseModel):
 
 
 class DocumentSummary(BaseModel):
-    """שורה ברשימת המסמכים של פרויקט. זהה לציבורי ולמאומת."""
+    """שורה ברשימת המסמכים של פרויקט, בתצוגה הציבורית."""
 
     model_config = ConfigDict(from_attributes=True)
 
     slug: str
     title: str
     position: int
+
+
+class DocumentSummaryPrivate(DocumentSummary):
+    """אותה שורה, עם המזהה היציב, לבעלים.
+
+    ראו DocumentPrivate.id להסבר למה המזהה נחשף בכלל.
+    """
+
+    id: uuid.UUID
 
 
 class DocumentPublic(BaseModel):
@@ -111,6 +120,17 @@ class DocumentPublic(BaseModel):
 
 class DocumentPrivate(DocumentPublic):
     """מה שהבעלים רואה בנוסף."""
+
+    # המזהה היציב היחיד של מסמך. ה-slug אינו מזהה: הוא משתנה בכל עדכון
+    # עם slug מפורש או slug_from_title, והייחודיות (project_id, slug)
+    # נאכפת רק ב-flush — כלומר slug שהתפנה ניתן לתפיסה מחדש על ידי מסמך
+    # אחר. צרכן שמחזיק slug ישן אינו מקבל שגיאה, אלא מגיע בשקט למסמך
+    # הלא נכון. זה נסבל בממשק שמרענן את הרשימה בכל טעינה, אבל לא לצרכן
+    # שמחזיק הקשר בין קריאות — ומכאן הצורך.
+    #
+    # נחשף לבעלים בלבד, לפי אותו היגיון של LinkPublic מול LinkPrivate:
+    # מזהה חסר שימוש למי שאינו יכול לערוך.
+    id: uuid.UUID
 
     created_at: datetime
     last_client_seq: int
@@ -144,6 +164,7 @@ class ProjectPublic(BaseModel):
 
 
 class ProjectPrivate(ProjectPublic):
+    documents: list[DocumentSummaryPrivate] = []
     links: list[LinkPrivate] = []
     visibility: Visibility
     created_at: datetime

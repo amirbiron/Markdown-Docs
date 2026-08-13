@@ -87,11 +87,25 @@ def _auth_kwargs() -> dict:
     return {
         "auth_server_provider": MarkdownDocsOAuthProvider(),
         "auth": AuthSettings(
-            # ה-issuer מצביע על נקודת ההרכבה ולא על השורש, כי שם באמת
-            # יושבים /authorize ו-/token: ה-SDK רושם אותם בתוך
-            # תת-האפליקציה, ו-build_metadata גוזר אותם מה-issuer. שני
-            # אלה חייבים להסכים, אחרת המטא-דאטה מפנה לנתיב שאינו קיים.
-            issuer_url=AnyHttpUrl(resource),
+            # ה-issuer הוא שורש הדומיין, ולא נקודת ההרכבה.
+            #
+            # בגרסה הראשונה הוא הוגדר כ-<host>/mcp, כי שם ה-SDK רושם
+            # בפועל את /authorize ו-/token, ו-build_metadata גוזר אותם
+            # מה-issuer — כך שהמטא-דאטה תאמה למציאות.
+            #
+            # זה נכון לפי המפרט, ובכל זאת לא עבד: claude.ai מתעלם מ-
+            # registration_endpoint שבמטא-דאטה ושולח את הרישום ל-
+            # <host>/register, כלומר מניח ששרת ההרשאות יושב בשורש. זה
+            # נראה בלוגים כ-404 חוזר על /register בזמן שהמטא-דאטה
+            # הצהירה על /mcp/register.
+            #
+            # לכן ה-issuer עבר לשורש, ונתיבי ה-OAuth נרשמים גם שם —
+            # ראו _mount_oauth_routes ב-app/main.py. הנתיבים תחת /mcp
+            # נשארים כפי שהם, ולכן לקוח שכן מכבד את המטא-דאטה ממשיך
+            # לעבוד בדיוק כמו קודם.
+            issuer_url=AnyHttpUrl(base),
+            # המשאב עצמו נשאר /mcp — הוא אינו שרת ההרשאות. מכאן נגזר
+            # /.well-known/oauth-protected-resource/mcp.
             resource_server_url=AnyHttpUrl(resource),
             client_registration_options=ClientRegistrationOptions(
                 # claude.ai אינו מקבל client_id ידני — הוא נרשם בעצמו.

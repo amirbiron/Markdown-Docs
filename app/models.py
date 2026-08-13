@@ -229,13 +229,25 @@ class MCPOAuthClient(Base):
 
     client_id: Mapped[str] = mapped_column(String(255), primary_key=True)
 
-    # הסוד נשמר hashed, כמו סיסמה. דליפת קריאה מה-DB לא אמורה לאפשר
-    # התחזות ללקוח.
-    client_secret_hash: Mapped[str | None] = mapped_column(String(255), nullable=True)
-
     # מסמך הרישום המלא כפי שה-SDK מצפה לקבל אותו חזרה. נשמר כ-JSON ולא
     # מפורק לעמודות: המבנה מוגדר ב-RFC וב-SDK, וכל שדה שנפרק לעמודה היה
     # צריך להתעדכן בכל שינוי במפרט.
+    #
+    # **המסמך כולל את client_secret בטקסט גלוי, וזו החלטה מודעת.**
+    # ClientAuthenticator של ה-SDK משווה hmac.compare_digest מול
+    # client.client_secret כפי ש-get_client החזיר אותו — אין נקודת
+    # הרחבה שמקבלת hash, ולכן שמירה מוצפנת הייתה מחייבת להחליף את
+    # שכבת אימות הלקוחות כולה.
+    #
+    # למה זה מקובל דווקא כאן: הסוד מזהה **תוכנה**, לא משתמש, ורישום
+    # לקוחות פתוח לכל דורש — כך claude.ai מתחבר. מי שקרא את ה-DB ורוצה
+    # להתחזות ללקוח יכול פשוט להירשם בעצמו ולקבל סוד חדש; הסוד הגנוב
+    # אינו נותן לו דבר. ההגנה האמיתית על הזרימה היא PKCE ואישור מפורש
+    # של המשתמש, ושניהם אינם נגזרים מהסוד.
+    #
+    # עמודת hash נפרדת שקדמה לשורות האלה הוסרה במכוון: היא לא נבדקה
+    # באף מסלול, ויצרה מראה של הגנה שלא הייתה קיימת. סודות **המשתמש** —
+    # קודים וטוקנים — כן נשמרים hashed. ראו MCPOAuthToken.
     registration: Mapped[dict] = mapped_column(JSONB, nullable=False)
 
     created_at: Mapped[datetime] = mapped_column(_TS, nullable=False, server_default=func.now())

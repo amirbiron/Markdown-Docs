@@ -24,7 +24,6 @@ def upgrade() -> None:
     op.create_table(
         "mcp_oauth_clients",
         sa.Column("client_id", sa.String(length=255), nullable=False),
-        sa.Column("client_secret_hash", sa.String(length=255), nullable=True),
         sa.Column("registration", postgresql.JSONB(astext_type=sa.Text()), nullable=False),
         sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.text("now()"), nullable=False),
         sa.Column("expires_at", sa.DateTime(timezone=True), nullable=True),

@@ -97,10 +97,11 @@ class MarkdownDocsOAuthProvider(
             await store.save_client(
                 session,
                 client_id=client_info.client_id,
-                client_secret=client_info.client_secret,
                 # mode="json" ולא ברירת המחדל: המסמך מכיל AnyUrl ו-datetime,
                 # ו-JSONB אינו יודע לסדר אותם. בלי זה הרישום נופל על
                 # שגיאת סריאליזציה רק כשלקוח אמיתי מנסה להירשם.
+                #
+                # client_secret נכלל, במכוון. ראו MCPOAuthClient.registration.
                 registration=client_info.model_dump(mode="json", exclude_none=True),
             )
         logger.info("נרשם לקוח MCP חדש: %s", client_info.client_id)
@@ -161,19 +162,20 @@ class MarkdownDocsOAuthProvider(
     async def exchange_authorization_code(
         self, client: OAuthClientInformationFull, authorization_code: AuthorizationCode
     ) -> OAuthToken:
-        """מחליף קוד בטוקנים. ה-SDK כבר אימת את ה-PKCE לפני הקריאה הזו."""
+        """מחליף קוד בטוקנים. ה-SDK כבר אימת את ה-PKCE לפני הקריאה הזו.
+
+        הצריכה קודמת להנפקה ובודקת שהיא הצליחה: ``consume_code`` מוחק
+        ומחזיר בהצהרה אחת, כך ששתי החלפות מקבילות של אותו קוד מסתיימות
+        בכך שרק אחת מנפיקה. בדיקה נפרדת לפני המחיקה הייתה TOCTOU.
+        """
         async with SessionLocal() as session:
-            row = await store.load_code(session, authorization_code.code)
+            row = await store.consume_code(session, authorization_code.code)
             if row is None or row.client_id != client.client_id:
                 raise ValueError("authorization code לא תקף")
-            user_id = row.user_id
-            # מחיקה לפני ההנפקה: הקוד חד-פעמי, ושתי החלפות מקבילות של
-            # אותו קוד חייבות להסתיים בכך שרק אחת מצליחה.
-            await store.consume_code(session, authorization_code.code)
             access, refresh, expires_in = await store.issue_pair(
                 session,
                 client_id=client.client_id,
-                user_id=user_id,
+                user_id=row.user_id,
                 scopes=list(authorization_code.scopes),
             )
         return OAuthToken(
@@ -221,13 +223,13 @@ class MarkdownDocsOAuthProvider(
             raise ValueError(f"רענון אינו יכול להרחיב scope: {sorted(extra)}")
 
         async with SessionLocal() as session:
-            row = await store.load_token(session, refresh_token.token, store.TOKEN_REFRESH)
+            # צריכה אטומית, ולא load-then-revoke: רוטציה שאפשר לרוץ
+            # אותה פעמיים במקביל אינה רוטציה.
+            row = await store.consume_refresh(session, refresh_token.token)
             if row is None or row.client_id != client.client_id:
                 raise ValueError("refresh token לא תקף")
-            user_id, grant_id = row.user_id, row.grant_id
-            await store.revoke_grant(session, grant_id)
             access, refresh, expires_in = await store.issue_pair(
-                session, client_id=client.client_id, user_id=user_id, scopes=granted
+                session, client_id=client.client_id, user_id=row.user_id, scopes=granted
             )
         return OAuthToken(
             access_token=access,

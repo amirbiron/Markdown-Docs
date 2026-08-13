@@ -4,8 +4,12 @@
 פג, מה מותר להחליף במה — יושב ב-oauth_provider.py, כדי שיהיה מקום אחד
 שאפשר לקרוא ולהבין ממנו את הפרוטוקול.
 
-**סודות אינם נשמרים בטקסט גלוי.** קודים, טוקנים וסודות לקוח נשמרים
-כ-hash בלבד. גיבוי שדלף, או קריאה מה-DB, אינם מאפשרים להתחזות.
+**סודות המשתמש אינם נשמרים בטקסט גלוי.** קודים וטוקנים נשמרים
+כ-hash בלבד, כך שגיבוי שדלף אינו מקנה גישה לתוכן.
+
+היוצא מן הכלל הוא ``client_secret``, שנשמר גלוי בתוך מסמך הרישום —
+ה-SDK משווה מולו ישירות ואין נקודת הרחבה ל-hash. הנימוק המלא, ולמה
+זה מקובל דווקא שם, נמצא ב-``MCPOAuthClient.registration``.
 """
 
 from __future__ import annotations
@@ -56,14 +60,12 @@ async def save_client(
     session: AsyncSession,
     *,
     client_id: str,
-    client_secret: str | None,
     registration: dict,
     expires_at: datetime | None = None,
 ) -> None:
     session.add(
         MCPOAuthClient(
             client_id=client_id,
-            client_secret_hash=token_hash(client_secret) if client_secret else None,
             registration=registration,
             expires_at=expires_at,
         )
@@ -117,16 +119,32 @@ async def create_code(
 
 
 async def load_code(session: AsyncSession, code: str) -> MCPOAuthCode | None:
+    """קריאה בלבד. **אינה** מספיקה כדי לצרוך את הקוד — ראו consume_code."""
     row = await session.get(MCPOAuthCode, token_hash(code))
     if row is None or row.expires_at <= now():
         return None
     return row
 
 
-async def consume_code(session: AsyncSession, code: str) -> None:
-    """מוחק את הקוד. קוד הוא חד-פעמי, וזו הנקודה שאוכפת את זה."""
-    await session.execute(delete(MCPOAuthCode).where(MCPOAuthCode.code_hash == token_hash(code)))
+async def consume_code(session: AsyncSession, code: str) -> MCPOAuthCode | None:
+    """מוחק את הקוד ומחזיר אותו — בהצהרה אחת, ורק למי שהספיק ראשון.
+
+    ‏DELETE ... RETURNING ולא load-then-delete: שתי הצהרות נפרדות הן
+    TOCTOU. שתי בקשות /token מקבילות עם אותו קוד היו שתיהן קוראות אותו
+    לפני שהמחיקה הראשונה נסגרה, ושתיהן היו מנפיקות טוקנים — כלומר
+    אישור אחד של המשתמש היה מייצר שתי הענקות תקפות.
+
+    כאן Postgres נועל את השורה, והמפסיד מקבל rowcount=0 ו-None.
+    התפוגה נבדקת באותה הצהרה, כדי שגם היא לא תהיה בדיקה נפרדת.
+    """
+    result = await session.execute(
+        delete(MCPOAuthCode)
+        .where(MCPOAuthCode.code_hash == token_hash(code), MCPOAuthCode.expires_at > now())
+        .returning(MCPOAuthCode)
+    )
+    row = result.scalar_one_or_none()
     await session.commit()
+    return row
 
 
 # ── טוקנים ────────────────────────────────────────────────────────────
@@ -180,6 +198,38 @@ async def load_token(session: AsyncSession, token: str, kind: str) -> MCPOAuthTo
         return None
     if row.expires_at is not None and row.expires_at <= now():
         return None
+    return row
+
+
+async def consume_refresh(session: AsyncSession, token: str) -> MCPOAuthToken | None:
+    """צורך טוקן רענון ומבטל את כל ההענקה — אטומית, ורק לראשון.
+
+    אותה מלכודת של consume_code, וכאן היא חמורה יותר: רוטציה שאינה
+    אטומית פשוט אינה רוטציה. שתי בקשות רענון מקבילות היו שתיהן מצליחות
+    ומייצרות שתי הענקות חדשות, וטוקן שנחשב "חד-פעמי" היה משמש פעמיים —
+    בדיוק התרחיש שהרוטציה נועדה למנוע.
+
+    המחיקה מוחקת את שתי השורות של ההענקה (גם טוקן הגישה), ומחזירה את
+    שורת הרענון בלבד. הזוכה הוא מי שקיבל שורה.
+    """
+    moment = now()
+    claimed = await session.execute(
+        delete(MCPOAuthToken)
+        .where(
+            MCPOAuthToken.token_hash == token_hash(token),
+            MCPOAuthToken.kind == TOKEN_REFRESH,
+            or_(MCPOAuthToken.expires_at.is_(None), MCPOAuthToken.expires_at > moment),
+        )
+        .returning(MCPOAuthToken)
+    )
+    row = claimed.scalar_one_or_none()
+    if row is None:
+        await session.rollback()
+        return None
+
+    # אותה טרנזקציה: טוקן גישה ששרד רוטציה הוא בדיוק מה שהיא מונעת.
+    await session.execute(delete(MCPOAuthToken).where(MCPOAuthToken.grant_id == row.grant_id))
+    await session.commit()
     return row
 
 

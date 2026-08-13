@@ -11,6 +11,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import base64
 import hashlib
 import secrets
@@ -124,18 +125,22 @@ async def test_client_registers_itself(client):
     assert REDIRECT in registration["redirect_uris"]
 
 
-async def test_client_secret_is_not_stored_in_the_clear(client):
-    """דליפת קריאה מה-DB לא אמורה לאפשר להתחזות ללקוח."""
-    registration = await _register(client)
-    secret = registration.get("client_secret")
-    if secret is None:
-        pytest.skip("הלקוח נרשם בלי סוד")
+async def test_the_registration_round_trips_intact(client):
+    """מה שנשמר הוא בדיוק מה ש-get_client מחזיר.
 
+    ה-ClientAuthenticator של ה-SDK משווה מול client.client_secret כפי
+    שהוא חוזר מכאן, ולכן המסמך חייב לשרוד את הסיבוב במלואו. אחסון
+    מוצפן או hashed היה מחייב להחליף את שכבת אימות הלקוחות כולה —
+    ראו MCPOAuthClient.registration להסבר למה זה מקובל דווקא לסוד של
+    לקוח, ולמה סודות המשתמש כן נשמרים hashed.
+    """
+    registration = await _register(client)
     async with SessionLocal() as session:
         row = await store.load_client(session, registration["client_id"])
     assert row is not None
-    assert row.client_secret_hash != secret
-    assert row.client_secret_hash == store.token_hash(secret)
+    assert row.registration["client_id"] == registration["client_id"]
+    if registration.get("client_secret"):
+        assert row.registration["client_secret"] == registration["client_secret"]
 
 
 # ── הזרימה המלאה ──────────────────────────────────────────────────────
@@ -383,3 +388,163 @@ async def test_the_static_token_still_works(client, clean_projects):
     )
     assert call.status_code == 200, call.text
     assert _tool_output(call)["ok"] is True
+
+
+# ── אטומיות תחת מקביליות ──────────────────────────────────────────────
+#
+# הבדיקות למעלה מריצות את הצריכה סדרתית, ולכן הן עוברות גם כשהמימוש
+# הוא load-then-delete — כלומר הן אינן מוכיחות חד-פעמיות. הבדיקות כאן
+# מריצות את אותה החלפה במקביל, וזה ההבדל בין הצהרה למימוש.
+
+
+async def _grant(http: AsyncClient) -> tuple[dict, str, str]:
+    """מביא זוג (רישום, קוד, verifier) מוכן להחלפה."""
+    registration = await _register(http)
+    verifier, challenge = _pkce()
+    authorize = await http.get(
+        "/mcp/authorize",
+        params={
+            "client_id": registration["client_id"],
+            "redirect_uri": REDIRECT,
+            "response_type": "code",
+            "code_challenge": challenge,
+            "code_challenge_method": "S256",
+        },
+    )
+    txn = parse_qs(urlparse(authorize.headers["location"]).query)["txn"][0]
+    await _login(http)
+    approved = await http.post(
+        "/mcp-consent", data={"txn": txn, "decision": "allow"}, headers=WRITE
+    )
+    code = parse_qs(urlparse(approved.headers["location"]).query)["code"][0]
+    return registration, code, verifier
+
+
+async def test_concurrent_code_exchange_yields_exactly_one_grant(client):
+    """אישור אחד של המשתמש חייב לייצר הענקה אחת, גם תחת מרוץ.
+
+    עם load-then-delete שתי הבקשות היו קוראות את הקוד לפני שהמחיקה
+    הראשונה נסגרה, ושתיהן היו מנפיקות טוקנים.
+    """
+    registration, code, verifier = await _grant(client)
+    payload = {
+        "grant_type": "authorization_code",
+        "code": code,
+        "redirect_uri": REDIRECT,
+        "client_id": registration["client_id"],
+        "client_secret": registration.get("client_secret", ""),
+        "code_verifier": verifier,
+    }
+
+    results = await asyncio.gather(
+        *(client.post("/mcp/token", data=payload) for _ in range(4)),
+        return_exceptions=True,
+    )
+    ok = [r for r in results if not isinstance(r, Exception) and r.status_code == 200]
+    assert len(ok) == 1, [
+        r.status_code if not isinstance(r, Exception) else repr(r) for r in results
+    ]
+
+
+async def test_concurrent_refresh_rotates_exactly_once(client):
+    """רוטציה שאפשר לרוץ אותה פעמיים במקביל אינה רוטציה."""
+    registration, code, verifier = await _grant(client)
+    tokens = (
+        await client.post(
+            "/mcp/token",
+            data={
+                "grant_type": "authorization_code",
+                "code": code,
+                "redirect_uri": REDIRECT,
+                "client_id": registration["client_id"],
+                "client_secret": registration.get("client_secret", ""),
+                "code_verifier": verifier,
+            },
+        )
+    ).json()
+
+    payload = {
+        "grant_type": "refresh_token",
+        "refresh_token": tokens["refresh_token"],
+        "client_id": registration["client_id"],
+        "client_secret": registration.get("client_secret", ""),
+    }
+    results = await asyncio.gather(
+        *(client.post("/mcp/token", data=payload) for _ in range(4)),
+        return_exceptions=True,
+    )
+    ok = [r for r in results if not isinstance(r, Exception) and r.status_code == 200]
+    assert len(ok) == 1, [
+        r.status_code if not isinstance(r, Exception) else repr(r) for r in results
+    ]
+
+
+async def test_rotation_kills_the_old_access_token(client):
+    """טוקן גישה ששרד רוטציה הוא בדיוק מה שהיא נועדה למנוע."""
+    registration, code, verifier = await _grant(client)
+    first = (
+        await client.post(
+            "/mcp/token",
+            data={
+                "grant_type": "authorization_code",
+                "code": code,
+                "redirect_uri": REDIRECT,
+                "client_id": registration["client_id"],
+                "client_secret": registration.get("client_secret", ""),
+                "code_verifier": verifier,
+            },
+        )
+    ).json()
+
+    rotated = await client.post(
+        "/mcp/token",
+        data={
+            "grant_type": "refresh_token",
+            "refresh_token": first["refresh_token"],
+            "client_id": registration["client_id"],
+            "client_secret": registration.get("client_secret", ""),
+        },
+    )
+    assert rotated.status_code == 200, rotated.text
+
+    stale = await client.post(
+        "/mcp/",
+        json=_rpc(7, "tools/call", {"name": "mdocs_map", "arguments": {}}),
+        headers=dict(GOOD, Authorization=f"Bearer {first['access_token']}"),
+    )
+    assert stale.status_code == 401, "טוקן הגישה הישן היה אמור למות עם הרוטציה"
+
+
+async def test_revoking_kills_both_sides_of_the_grant(client):
+    """ביטול שמשאיר את הצד השני בחיים אינו ביטול."""
+    registration, code, verifier = await _grant(client)
+    tokens = (
+        await client.post(
+            "/mcp/token",
+            data={
+                "grant_type": "authorization_code",
+                "code": code,
+                "redirect_uri": REDIRECT,
+                "client_id": registration["client_id"],
+                "client_secret": registration.get("client_secret", ""),
+                "code_verifier": verifier,
+            },
+        )
+    ).json()
+
+    revoked = await client.post(
+        "/mcp/revoke",
+        data={
+            "token": tokens["refresh_token"],
+            "client_id": registration["client_id"],
+            "client_secret": registration.get("client_secret", ""),
+        },
+    )
+    assert revoked.status_code == 200, revoked.text
+
+    call = await client.post(
+        "/mcp/",
+        json=_rpc(8, "tools/call", {"name": "mdocs_map", "arguments": {}}),
+        headers=dict(GOOD, Authorization=f"Bearer {tokens['access_token']}"),
+    )
+    assert call.status_code == 401, "ביטול הרענון היה אמור להרוג גם את הגישה"

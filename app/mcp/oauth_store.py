@@ -129,7 +129,7 @@ async def load_code(session: AsyncSession, code: str) -> MCPOAuthCode | None:
 async def consume_code(session: AsyncSession, code: str) -> MCPOAuthCode | None:
     """מוחק את הקוד ומחזיר אותו — בהצהרה אחת, ורק למי שהספיק ראשון.
 
-    ‏DELETE ... RETURNING ולא load-then-delete: שתי הצהרות נפרדות הן
+    הצהרת DELETE ... RETURNING, ולא load-then-delete: שתי הצהרות הן
     TOCTOU. שתי בקשות /token מקבילות עם אותו קוד היו שתיהן קוראות אותו
     לפני שהמחיקה הראשונה נסגרה, ושתיהן היו מנפיקות טוקנים — כלומר
     אישור אחד של המשתמש היה מייצר שתי הענקות תקפות.

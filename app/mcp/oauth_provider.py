@@ -1,6 +1,6 @@
 """מימוש ה-OAuth Authorization Server עבור שרת ה-MCP.
 
-ה-SDK מספק את נתיבי הפרוטוקול עצמם — ‏``/.well-known/*``, ``/authorize``,
+ה-SDK מספק את נתיבי הפרוטוקול עצמם: את ``/.well-known/*``, ``/authorize``,
 ``/token``, ``/register``, ``/revoke`` — ואת אימות ה-PKCE. המחלקה כאן
 מספקת רק את האחסון ואת החלטת הזהות.
 

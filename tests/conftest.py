@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import os
 
 # חייב לקרות לפני הייבוא של app: ההגדרות נטענות פעם אחת בזמן ייבוא,
@@ -13,6 +14,15 @@ import os
 # היה מפיל את בדיקות האימות. הבדיקות חייבות להיות דטרמיניסטיות.
 MCP_TOKEN = "m" * 40
 os.environ["MCP_TOKEN"] = MCP_TOKEN
+
+# זרימת ה-OAuth נדלקת רק כשיש כתובת חיצונית ידועה, כי ה-issuer נכתב
+# לתוך מסמכי המטא-דאטה. בלי הערך הזה חצי משטח האימות לא היה נבדק כלל.
+#
+# הערך נבחר כך שיהיה זהה ל-Origin שהבדיקות שלחו קודם: origin_allowlist
+# נגזר ממנו כשאין ALLOWED_ORIGINS מפורש, ולכן שינוי כאן היה משנה בשקט
+# את ה-Origin של כל בקשה משנת מצב בכל הבדיקות.
+MCP_ISSUER = "http://localhost:8000"
+os.environ["RENDER_EXTERNAL_URL"] = MCP_ISSUER
 
 import pytest  # noqa: E402
 from httpx import ASGITransport, AsyncClient  # noqa: E402
@@ -107,3 +117,43 @@ async def make_document(owner, project="docs", slug="installation", title="הת�
     )
     assert response.status_code == 201, response.text
     return response.json()
+
+
+@pytest.fixture(scope="session")
+async def mcp_lifespan():
+    """מרים את השרת פעם אחת לכל הריצה.
+
+    לא פעם לכל בדיקה: ל-StreamableHTTPSessionManager יש מגבלה מפורשת
+    ש-run() נקרא פעם אחת למופע, והכניסה השנייה ל-lifespan נופלת על
+    "can only be called once per instance". זו גם התנהגות הפרודקשן —
+    התהליך עולה פעם אחת.
+
+    ה-lifespan רץ בתוך משימה ייעודית ולא ישירות ב-fixture, כי anyio
+    קושר cancel scope למשימה שפתחה אותו — ו-pytest מריץ setup ו-teardown
+    של fixture ברמת סשן משתי משימות שונות. בלי זה ה-teardown נופל על
+    "Attempted to exit cancel scope in a different task".
+    """
+    started = asyncio.Event()
+    stopping = asyncio.Event()
+
+    async def _run_lifespan() -> None:
+        async with app.router.lifespan_context(app):
+            started.set()
+            await stopping.wait()
+
+    task = asyncio.create_task(_run_lifespan())
+
+    # לא await started.wait() לבדו: אם ה-lifespan נופל לפני set — למשל
+    # ה-DB לא זמין — האירוע לעולם לא נדלק והריצה נתלית בלי הודעה עד
+    # ה-timeout של ה-CI. ההמתנה על שניהם הופכת את זה לשגיאה מיידית
+    # שמראה את הסיבה האמיתית.
+    waiter = asyncio.create_task(started.wait())
+    done, _ = await asyncio.wait({waiter, task}, return_when=asyncio.FIRST_COMPLETED)
+    if waiter not in done:
+        waiter.cancel()
+        await task  # מרים את החריגה המקורית
+        raise RuntimeError("ה-lifespan הסתיים בלי לאותת על עלייה")
+
+    yield
+    stopping.set()
+    await task

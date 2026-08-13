@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import logging
 import secrets
+import uuid
 from dataclasses import dataclass
 
 from sqlalchemy import select
@@ -84,14 +85,31 @@ def token_matches(candidate: str) -> bool:
     return secrets.compare_digest(candidate.encode("utf-8"), expected.encode("utf-8"))
 
 
-async def resolve_identity(session: AsyncSession, headers) -> Identity:
+async def resolve_identity(session: AsyncSession, headers, verified=None) -> Identity:
     """מאמת את הבקשה ומחזיר את הזהות, או זורק AuthError.
 
-    המשתמש נשלף מה-DB ולא נבנה מהטוקן: המערכת חד-משתמשית, ומי שיש
-    לו את הטוקן פועל בשם המשתמש היחיד. שליפה אמיתית מוודאת שהוא
-    קיים, במקום להניח.
+    שני מסלולים, ונקודת יציאה אחת:
+
+    1. ``verified`` — טוקן ש-SDK כבר אימת (OAuth). כשה-OAuth דלוק,
+       ה-middleware של ה-SDK חוסם כל בקשה לא מאומתת עוד לפני שהגענו
+       לכאן, ומעביר את הטוקן ב-context. הטוקן נושא ``subject`` עם
+       מזהה המשתמש שאישר, ואת ה-scopes שהוא אישר בפועל.
+    2. הטוקן הסטטי מ-``MCP_TOKEN``, למי שמתחבר ישירות בלי דפדפן.
+
+    בשני המקרים המשתמש נשלף מה-DB ולא נבנה מהטוקן — שליפה אמיתית
+    מוודאת שהוא קיים, במקום להניח.
     """
     settings = get_settings()
+
+    if verified is not None:
+        return Identity(
+            user=await _user_for(session, getattr(verified, "subject", None)),
+            # ה-scopes מגיעים מההענקה עצמה ולא מהקונפיג: משתמש שאישר
+            # קריאה בלבד לא אמור לקבל כתיבה רק כי המשתנה בסביבה מרשה
+            # אותה. צמצום ההרשאה חייב להיות בידי מי שאישר.
+            scopes=frozenset(getattr(verified, "scopes", None) or ()),
+        )
+
     if not settings.mcp_enabled:
         # לא אמור לקרות — בלי טוקן הנתיב אינו נרשם בכלל — אבל אם
         # מישהו יקרא לשכבה הזו ישירות, ברירת המחדל היא דחייה.
@@ -101,15 +119,31 @@ async def resolve_identity(session: AsyncSession, headers) -> Identity:
     if token is None or not token_matches(token):
         raise AuthError("טוקן חסר או שגוי")
 
+    return Identity(user=await _user_for(session, None), scopes=settings.mcp_scopes)
+
+
+async def _user_for(session: AsyncSession, subject: str | None) -> User:
+    """המשתמש שבשמו הבקשה פועלת.
+
+    ``subject`` מגיע מטוקן OAuth ומזהה את מי שאישר את החיבור. בלעדיו —
+    כלומר בטוקן הסטטי — נלקח המשתמש היחיד, כי המערכת חד-משתמשית ומי
+    שמחזיק את הטוקן פועל בשמו.
+    """
+    if subject:
+        try:
+            user = await session.get(User, uuid.UUID(subject))
+        except ValueError:
+            user = None
+        if user is None:
+            raise AuthError("המשתמש שהטוקן מצביע עליו אינו קיים")
+        return user
+
     user = (
-        await session.execute(
-            select(User).order_by(User.created_at, User.id).limit(1)
-        )
+        await session.execute(select(User).order_by(User.created_at, User.id).limit(1))
     ).scalar_one_or_none()
     if user is None:
         raise AuthError("לא הוגדר משתמש במערכת")
-
-    return Identity(user=user, scopes=settings.mcp_scopes)
+    return user
 
 
 def require_write(identity: Identity) -> None:

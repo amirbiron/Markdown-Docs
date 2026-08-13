@@ -75,6 +75,13 @@ class Settings(BaseSettings):
     # נרשם מחייב אותו להירשם מחדש, ואי אפשר לכפות את זה מהשרת.
     mcp_token_scopes: str = "read,write"
 
+    # זרימת OAuth ללקוחות שאינם יודעים לשלוח טוקן סטטי — claude.ai הוא
+    # כזה: המסך שלו מבקש OAuth Client ID, ואין בו שדה לטוקן.
+    #
+    # דורש RENDER_EXTERNAL_URL, כי ה-issuer חייב להיות כתובת מוחלטת
+    # שנכתבת לתוך מסמכי המטא-דאטה. ראו mcp_oauth_enabled.
+    mcp_oauth: bool = True
+
     # ── גיבויים ──────────────────────────────────────────────────────
     # היעד הוא הדיסק הקבוע ב-Render. ברירת המחדל מקומית, כדי שפיתוח
     # ובדיקות לא ידרשו הרשאות כתיבה מחוץ לפרויקט.
@@ -149,6 +156,21 @@ class Settings(BaseSettings):
     def mcp_enabled(self) -> bool:
         """השרת נרשם רק כשיש טוקן. ראו mcp_token."""
         return bool((self.mcp_token or "").strip())
+
+    @property
+    def mcp_oauth_enabled(self) -> bool:
+        """OAuth נדלק רק כששרת ה-MCP פעיל ויש כתובת חיצונית ידועה.
+
+        התלות ב-render_external_url אינה טכנית בלבד: ה-issuer נכתב לתוך
+        המטא-דאטה שהלקוח מוריד ולתוך ההפניה חזרה אליו. כתובת שנגזרת
+        מכותרת Host של הבקשה הייתה מאפשרת למי ששולט בכותרת להסיט את
+        הזרימה, ולכן עדיף לא להדליק מאשר לנחש.
+        """
+        return (
+            self.mcp_oauth
+            and self.mcp_enabled
+            and bool((self.render_external_url or "").strip())
+        )
 
     @property
     def mcp_scopes(self) -> frozenset[str]:

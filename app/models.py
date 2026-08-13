@@ -12,6 +12,7 @@ import uuid
 from datetime import datetime
 
 from sqlalchemy import (
+    Boolean,
     Computed,
     DateTime,
     Enum,
@@ -24,7 +25,7 @@ from sqlalchemy import (
     UniqueConstraint,
     func,
 )
-from sqlalchemy.dialects.postgresql import TSVECTOR, UUID
+from sqlalchemy.dialects.postgresql import JSONB, TSVECTOR, UUID
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
 NAMING_CONVENTION = {
@@ -211,6 +212,103 @@ class DocumentVersion(Base):
     # שליפת ההיסטוריה היא "הגרסאות של המסמך הזה, מהחדשה לישנה". ה-id
     # בסוף מבטיח סדר יציב כששתי גרסאות נשמרו באותה מילישנייה.
     __table_args__ = (Index("ix_document_versions_document_id_created_at_id", "document_id", "created_at", "id"),)
+
+
+class MCPOAuthClient(Base):
+    """לקוח MCP שנרשם דרך Dynamic Client Registration (RFC 7591).
+
+    claude.ai אינו מקבל client_id ידני — הוא מצפה להירשם בעצמו ולקבל
+    מזהה משלו. לכן הטבלה הזו, ולא ערך בקונפיג.
+
+    client_id אינו UUID אלא מחרוזת שה-SDK מייצר, ולכן הוא המפתח הראשי
+    כמו שהוא: חיפוש לפיו קורה בכל בקשת /token, ומפתח נוסף היה מוסיף
+    אינדקס בלי להוסיף דבר.
+    """
+
+    __tablename__ = "mcp_oauth_clients"
+
+    client_id: Mapped[str] = mapped_column(String(255), primary_key=True)
+
+    # הסוד נשמר hashed, כמו סיסמה. דליפת קריאה מה-DB לא אמורה לאפשר
+    # התחזות ללקוח.
+    client_secret_hash: Mapped[str | None] = mapped_column(String(255), nullable=True)
+
+    # מסמך הרישום המלא כפי שה-SDK מצפה לקבל אותו חזרה. נשמר כ-JSON ולא
+    # מפורק לעמודות: המבנה מוגדר ב-RFC וב-SDK, וכל שדה שנפרק לעמודה היה
+    # צריך להתעדכן בכל שינוי במפרט.
+    registration: Mapped[dict] = mapped_column(JSONB, nullable=False)
+
+    created_at: Mapped[datetime] = mapped_column(_TS, nullable=False, server_default=func.now())
+    expires_at: Mapped[datetime | None] = mapped_column(_TS, nullable=True)
+
+
+class MCPOAuthCode(Base):
+    """authorization code — חד-פעמי וקצר מועד.
+
+    נשמר hashed מאותה סיבה שהטוקנים נשמרים hashed. הקוד חי דקות ספורות,
+    אבל חלון של דקה מספיק כדי להשלים החלפה לטוקן.
+    """
+
+    __tablename__ = "mcp_oauth_codes"
+
+    code_hash: Mapped[str] = mapped_column(String(64), primary_key=True)
+    client_id: Mapped[str] = mapped_column(
+        String(255), ForeignKey("mcp_oauth_clients.client_id", ondelete="CASCADE"), nullable=False
+    )
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False
+    )
+    redirect_uri: Mapped[str] = mapped_column(Text, nullable=False)
+
+    # ה-SDK מבחין בין redirect_uri שנשלח במפורש לבין כזה שנגזר מהרישום,
+    # ובודק את ההתאמה בהחלפה. השדה חייב לשרוד את הסיבוב.
+    redirect_uri_provided_explicitly: Mapped[bool] = mapped_column(Boolean, nullable=False)
+
+    code_challenge: Mapped[str] = mapped_column(String(255), nullable=False)
+    scopes: Mapped[list] = mapped_column(JSONB, nullable=False)
+    resource: Mapped[str | None] = mapped_column(Text, nullable=True)
+    expires_at: Mapped[datetime] = mapped_column(_TS, nullable=False)
+
+    __table_args__ = (Index("ix_mcp_oauth_codes_expires_at", "expires_at"),)
+
+
+class MCPOAuthToken(Base):
+    """access token או refresh token.
+
+    שניהם באותה טבלה עם עמודת kind, כי המחזור שלהם זהה: שניהם נוצרים
+    בהחלפה אחת, מתבטלים יחד, ונשלפים לפי hash. טבלאות נפרדות היו מכפילות
+    את קוד הניקוי ואת קוד הביטול בלי הבדל מהותי.
+
+    ה-token עצמו לעולם אינו נשמר — רק ה-hash שלו. ‏access_token נשלף בכל
+    בקשה, ולכן ה-hash הוא sha256 ולא bcrypt: bcrypt מכוון להיות איטי, וזה
+    בדיוק מה שאסור בנתיב החם. הערך אקראי ובעל אנטרופיה מלאה, ולכן אין
+    כאן מה להאט — התקפת מילון אינה רלוונטית למחרוזת אקראית.
+    """
+
+    __tablename__ = "mcp_oauth_tokens"
+
+    token_hash: Mapped[str] = mapped_column(String(64), primary_key=True)
+    kind: Mapped[str] = mapped_column(String(16), nullable=False)
+    client_id: Mapped[str] = mapped_column(
+        String(255), ForeignKey("mcp_oauth_clients.client_id", ondelete="CASCADE"), nullable=False
+    )
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False
+    )
+    scopes: Mapped[list] = mapped_column(JSONB, nullable=False)
+
+    # מקשר access ל-refresh שהונפק איתו, כדי שביטול אחד יבטל את השני.
+    # טוקן גישה שנשאר בחיים אחרי שה-refresh בוטל הוא בדיוק מה שביטול
+    # אמור למנוע.
+    grant_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
+
+    expires_at: Mapped[datetime | None] = mapped_column(_TS, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(_TS, nullable=False, server_default=func.now())
+
+    __table_args__ = (
+        Index("ix_mcp_oauth_tokens_grant_id", "grant_id"),
+        Index("ix_mcp_oauth_tokens_expires_at", "expires_at"),
+    )
 
 
 class ProjectLink(Base):

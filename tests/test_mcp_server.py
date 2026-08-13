@@ -7,7 +7,6 @@
 
 from __future__ import annotations
 
-import asyncio
 import json
 import re
 
@@ -64,46 +63,6 @@ def _tool_output(response) -> dict:
     if "structuredContent" in result:
         return result["structuredContent"]
     return json.loads(result["content"][0]["text"])
-
-
-@pytest.fixture(scope="session")
-async def mcp_lifespan():
-    """מרים את השרת פעם אחת לכל הריצה.
-
-    לא פעם לכל בדיקה: ל-StreamableHTTPSessionManager יש מגבלה מפורשת
-    ש-run() נקרא פעם אחת למופע, והכניסה השנייה ל-lifespan נופלת על
-    "can only be called once per instance". זו גם התנהגות הפרודקשן —
-    התהליך עולה פעם אחת.
-
-    ה-lifespan רץ בתוך משימה ייעודית ולא ישירות ב-fixture, כי anyio
-    קושר cancel scope למשימה שפתחה אותו — ו-pytest מריץ setup ו-teardown
-    של fixture ברמת סשן משתי משימות שונות. בלי זה ה-teardown נופל על
-    "Attempted to exit cancel scope in a different task".
-    """
-    started = asyncio.Event()
-    stopping = asyncio.Event()
-
-    async def _run_lifespan() -> None:
-        async with app.router.lifespan_context(app):
-            started.set()
-            await stopping.wait()
-
-    task = asyncio.create_task(_run_lifespan())
-
-    # לא await started.wait() לבדו: אם ה-lifespan נופל לפני set — למשל
-    # ה-DB לא זמין — האירוע לעולם לא נדלק והריצה נתלית בלי הודעה עד
-    # ה-timeout של ה-CI. ההמתנה על שניהם הופכת את זה לשגיאה מיידית
-    # שמראה את הסיבה האמיתית.
-    waiter = asyncio.create_task(started.wait())
-    done, _ = await asyncio.wait({waiter, task}, return_when=asyncio.FIRST_COMPLETED)
-    if waiter not in done:
-        waiter.cancel()
-        await task  # מרים את החריגה המקורית
-        raise RuntimeError("ה-lifespan הסתיים בלי לאותת על עלייה")
-
-    yield
-    stopping.set()
-    await task
 
 
 @pytest.fixture
@@ -203,10 +162,31 @@ async def test_valid_token_reaches_the_tool(mcp, owner):
     ids=["טוקן שגוי", "סכמה שגויה", "בלי כותרת"],
 )
 async def test_bad_credentials_are_rejected(mcp, headers):
+    """הדחייה היא 401 ברמת התחבורה, ולא שגיאה בתוך תשובה מוצלחת.
+
+    זה לא פרט טכני. כשהתשובה הייתה 200 עם ``{"ok": false}`` בגוף,
+    הלקוח ראה בקשה שהצליחה ולא ידע שנדרש אימות בכלל — וזו בדיוק
+    הסיבה ש-claude.ai הציג "מחובר" על חיבור שכל קריאה בו נכשלה.
+    """
     response = await mcp.post(
         "/mcp/", json=_rpc(4, "tools/call", {"name": "mdocs_map", "arguments": {}}), headers=headers
     )
-    assert _tool_output(response)["error"] == "unauthorized"
+    assert response.status_code == 401, response.text
+    assert response.json()["error"] == "invalid_token"
+
+
+async def test_the_challenge_points_at_the_metadata(mcp):
+    """הכותרת שמפעילה את זרימת ה-OAuth בצד הלקוח.
+
+    בלי resource_metadata בכותרת, לקוח שאין לו טוקן אינו יודע לאן
+    ללכת כדי להשיג אחד, ופשוט נכשל.
+    """
+    response = await mcp.post(
+        "/mcp/", json=_rpc(9, "tools/list"), headers={k: v for k, v in GOOD.items() if k != "Authorization"}
+    )
+    challenge = response.headers["www-authenticate"]
+    assert challenge.startswith("Bearer ")
+    assert '.well-known/oauth-protected-resource/mcp' in challenge
 
 
 async def test_session_cookie_is_not_an_identity(mcp, owner):
@@ -224,7 +204,7 @@ async def test_session_cookie_is_not_an_identity(mcp, owner):
     response = await mcp.post(
         "/mcp/", json=_rpc(5, "tools/call", {"name": "mdocs_map", "arguments": {}}), headers=headers
     )
-    assert _tool_output(response)["error"] == "unauthorized"
+    assert response.status_code == 401, response.text
 
 
 # ── תוכן ──────────────────────────────────────────────────────────────

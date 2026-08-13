@@ -13,9 +13,16 @@ from mcp.server.mcpserver import MCPServer
 # מ-mcpserver.context ולא מ-server.context: יש שתי מחלקות בשם Context
 # ב-SDK, וזו שהכלים מקבלים היא זו. ייבוא של השנייה נראה תקין לגמרי עד
 # שהרישום מנסה לבנות סכמת JSON לפרומטר ונופל.
+from mcp.server.auth.middleware.auth_context import get_access_token
+from mcp.server.auth.settings import (
+    AuthSettings,
+    ClientRegistrationOptions,
+    RevocationOptions,
+)
 from mcp.server.mcpserver.context import Context
 from mcp.server.transport_security import TransportSecuritySettings
 from mcp.types import ToolAnnotations
+from pydantic import AnyHttpUrl
 
 from app.config import get_settings
 from app.db import SessionLocal
@@ -28,10 +35,15 @@ from app.mcp.auth import (
     resolve_identity,
 )
 from app.mcp.formatting import err
+from app.mcp.oauth_provider import VALID_SCOPES, MarkdownDocsOAuthProvider
 
 logger = logging.getLogger("markdown_docs.mcp")
 
 SERVER_NAME = "markdown-docs"
+
+# נקודת ההרכבה באפליקציה הראשית. מוגדרת כאן ולא ב-main.py כי ה-issuer
+# של ה-OAuth נגזר ממנה, ושני המקומות חייבים להסכים.
+MOUNT_PATH = "/mcp"
 
 # קריאה בלבד: לא משנה מצב, בטוח לחזור עליה, ואינה יוצאת החוצה.
 READ_ONLY = ToolAnnotations(
@@ -55,7 +67,51 @@ APPEND = ToolAnnotations(
     readOnlyHint=False, destructiveHint=False, idempotentHint=False, openWorldHint=False
 )
 
-mcp = MCPServer(SERVER_NAME)
+def _auth_kwargs() -> dict:
+    """הגדרות ה-OAuth, אם אפשר לבנות אותן.
+
+    ה-issuer חייב להיות כתובת מוחלטת וידועה מראש — היא נכתבת לתוך
+    מסמכי המטא-דאטה שהלקוח מוריד, ולתוך ה-redirect. בפיתוח, או בכל
+    סביבה בלי RENDER_EXTERNAL_URL, אין ממה לגזור אותה, ולכן ה-OAuth
+    פשוט לא נדלק ורק הטוקן הסטטי עובד. זה fail-safe ולא כשל: כתובת
+    שנגזרת מכותרת Host של הבקשה הייתה מאפשרת למי ששולט בכותרת להפנות
+    את הזרימה למקום אחר.
+    """
+    settings = get_settings()
+    if not settings.mcp_oauth_enabled:
+        return {}
+
+    base = (settings.render_external_url or "").strip().rstrip("/")
+    resource = f"{base}{MOUNT_PATH}"
+
+    return {
+        "auth_server_provider": MarkdownDocsOAuthProvider(),
+        "auth": AuthSettings(
+            # ה-issuer מצביע על נקודת ההרכבה ולא על השורש, כי שם באמת
+            # יושבים /authorize ו-/token: ה-SDK רושם אותם בתוך
+            # תת-האפליקציה, ו-build_metadata גוזר אותם מה-issuer. שני
+            # אלה חייבים להסכים, אחרת המטא-דאטה מפנה לנתיב שאינו קיים.
+            issuer_url=AnyHttpUrl(resource),
+            resource_server_url=AnyHttpUrl(resource),
+            client_registration_options=ClientRegistrationOptions(
+                # claude.ai אינו מקבל client_id ידני — הוא נרשם בעצמו.
+                # בלי זה אין שום דרך לחבר אותו.
+                enabled=True,
+                valid_scopes=VALID_SCOPES,
+                # ברירת המחדל היא מקור האמת היחיד ל-scope: authorize
+                # בלי scope מפורש — וכך claude.ai שולח — נופל לרישום
+                # של הלקוח, שנקבע כאן.
+                default_scopes=sorted(settings.mcp_scopes) or VALID_SCOPES,
+            ),
+            revocation_options=RevocationOptions(enabled=True),
+            # ריק בכוונה: הבדיקה הפרטנית היא ב-_run, לפי הכלי. required_scopes
+            # היה חוסם ברמת התחבורה בלי להבחין בין קריאה לכתיבה.
+            required_scopes=[],
+        ),
+    }
+
+
+mcp = MCPServer(SERVER_NAME, **_auth_kwargs())
 
 
 async def _run(ctx: Context, handler, *args, needs_write: bool = False, **kwargs) -> dict:
@@ -67,7 +123,7 @@ async def _run(ctx: Context, handler, *args, needs_write: bool = False, **kwargs
     """
     async with SessionLocal() as session:
         try:
-            identity = await resolve_identity(session, ctx.headers)
+            identity = await resolve_identity(session, ctx.headers, verified=get_access_token())
         except AuthError as error:
             return err("unauthorized", message=str(error))
 

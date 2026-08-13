@@ -178,9 +178,22 @@ body, aside, header, section, main { transition: background-color 0.2s ease, bor
     <h2 style="margin:0 0 8px;font-family:var(--display);font-size:20px;font-weight:700;color:var(--ink)">{{ confirmQuestion }}</h2>
     <!-- השם מוצג במפורש. אישור שאינו אומר על מה מדובר מאמן ללחוץ
          "כן" בלי לקרוא, וזה בדיוק מה שהוא בא למנוע. -->
-    <p dir="auto" style="margin:0 0 20px;font-size:15px;line-height:1.7;color:var(--soft);word-break:break-word">{{ confirmTitle }}</p>
+    <p dir="auto" style="margin:0 0 14px;font-size:15px;line-height:1.7;color:var(--soft);word-break:break-word">{{ confirmTitle }}</p>
+    <!-- מה נמחק ביחד. מופיע רק כשיש מה לומר: מחיקת מסמך בודד אינה
+         גוררת דבר, ושורה שאומרת זאת רק מלמדת לדלג על האזור. -->
+    <sc-if value="{{ confirmHasNote }}" hint-placeholder-val="{{ false }}">
+    <p dir="auto" style="margin:0 0 16px;padding:10px 12px;border-radius:var(--r-sm);background:var(--tint);font-size:13.5px;line-height:1.65;color:var(--red)">{{ confirmNote }}</p>
+    </sc-if>
+    <!-- הקלדת השם. לא "האם אתה בטוח" שנייה — מה שהיא מוסיפה הוא
+         שהמשתמש קורא את השם לפני שהוא מוחק, כלומר מוחק את מה שהתכוון
+         ולא את הכרטיס שמעליו. -->
+    <sc-if value="{{ confirmNeedsText }}" hint-placeholder-val="{{ false }}">
+    <label dir="auto" style="display:block;margin:0 0 16px;font-size:13.5px;line-height:1.7;color:var(--muted)">{{ confirmPrompt }}
+      <input data-confirm-name="1" dir="auto" autoFocus="{{ true }}" value="{{ confirmText }}" onChange="{{ onConfirmText }}" onKeyDown="{{ onConfirmKey }}" style="{{ chrome.field }};margin-top:7px;width:100%" />
+    </label>
+    </sc-if>
     <div style="display:flex;gap:9px">
-      <button onClick="{{ runConfirm }}" disabled="{{ confirmBusy }}" style="flex:1;padding:9px 16px;border:1px solid var(--red);border-radius:var(--r-sm);background:var(--red);color:var(--accent-on);font-family:inherit;font-size:14px;font-weight:600;cursor:pointer">{{ confirmLabel }}</button>
+      <button onClick="{{ runConfirm }}" disabled="{{ confirmDisabled }}" style="flex:1;padding:9px 16px;border:1px solid {{ confirmBtnBg }};border-radius:var(--r-sm);background:{{ confirmBtnBg }};color:var(--accent-on);font-family:inherit;font-size:14px;font-weight:600;cursor:{{ confirmBtnCursor }}">{{ confirmLabel }}</button>
       <button onClick="{{ cancelConfirm }}" style="flex:1;padding:9px 16px;border:1px solid var(--rule);border-radius:var(--r-sm);background:none;color:var(--muted);font-family:inherit;font-size:14px;cursor:pointer">ביטול</button>
     </div>
   </div>
@@ -364,14 +377,22 @@ body, aside, header, section, main { transition: background-color 0.2s ease, bor
            תיאור"). כך רשימה של עשרה פרויקטים נכנסת למסך אחד. -->
       <div style="display:flex;flex-direction:column;gap:8px">
         <sc-for list="{{ projects }}" as="p" hint-placeholder-count="3">
-          <a href="#top" onClick="{{ p.open }}" style="display:block;padding:11px 16px;border:1px solid var(--line);border-radius:var(--r-md);background:var(--panel);text-decoration:none" style-hover="border-color:var(--accent)">
-            <span style="display:flex;flex-wrap:wrap;align-items:baseline;gap:6px 12px">
-              <span style="font-family:var(--display);font-size:17px;font-weight:700;color:var(--ink)">{{ p.name }}</span>
-              <span style="flex:1;min-width:0;font-family:var(--mono);font-size:11px;color:var(--faint)">{{ p.meta }}</span>
-              <span style="flex:none;font-family:var(--mono);font-size:10.5px;letter-spacing:0.1em;text-transform:uppercase;padding:2px 8px;border-radius:var(--r-pill);background:{{ p.badgeBg }};color:{{ p.badgeFg }}">{{ p.badge }}</span>
-            </span>
-            <span style="display:block;font-size:13.5px;line-height:1.6;color:var(--soft)">{{ p.description }}</span>
-          </a>
+          <!-- הכרטיס הוא div עוטף ולא <a> יחיד: כפתור בתוך קישור אינו
+               HTML חוקי, ואז יעד הלחיצה דו-משמעי וניווט המקלדת נוחת
+               במקום מוזר. אותו מבנה כמו שורת המסמך בסרגל. -->
+          <div style="display:flex;align-items:stretch;gap:2px;border:1px solid var(--line);border-radius:var(--r-md);background:var(--panel)" style-hover="border-color:var(--accent)">
+            <a href="#top" onClick="{{ p.open }}" style="flex:1;min-width:0;display:block;padding:11px 16px;text-decoration:none">
+              <span style="display:flex;flex-wrap:wrap;align-items:baseline;gap:6px 12px">
+                <span style="font-family:var(--display);font-size:17px;font-weight:700;color:var(--ink)">{{ p.name }}</span>
+                <span style="flex:1;min-width:0;font-family:var(--mono);font-size:11px;color:var(--faint)">{{ p.meta }}</span>
+                <span style="flex:none;font-family:var(--mono);font-size:10.5px;letter-spacing:0.1em;text-transform:uppercase;padding:2px 8px;border-radius:var(--r-pill);background:{{ p.badgeBg }};color:{{ p.badgeFg }}">{{ p.badge }}</span>
+              </span>
+              <span style="display:block;font-size:13.5px;line-height:1.6;color:var(--soft)">{{ p.description }}</span>
+            </a>
+            <sc-if value="{{ canEdit }}" hint-placeholder-val="{{ false }}">
+            <button onClick="{{ p.remove }}" title="מחיקת הפרויקט" aria-label="{{ p.removeLabel }}" style="flex:none;padding:0 14px;border:none;background:none;color:var(--faint);font-size:15px;line-height:1;cursor:pointer" style-hover="color:var(--red)">×</button>
+            </sc-if>
+          </div>
         </sc-for>
       </div>
 
@@ -1408,6 +1429,17 @@ const DEEP_HEADINGS = {
        fg: "var(--soft)", edFg: "var(--soft)" }
 };
 
+/* שאלת האישור לפי סוג מה שנמחק.
+
+   טבלה ולא שרשרת של תנאים משולשים: כל סוג חדש שנוסף ל-confirm מקבל
+   כאן שורה, במקום להיתקע כברירת המחדל של תנאי שנכתב לפניו — כפי
+   שקרה כשמחיקת פרויקט נוספה ו-"למחוק את המסמך?" היה ה-else. */
+const CONFIRM_QUESTIONS = {
+  doc: "למחוק את המסמך?",
+  link: "למחוק את הקישור?",
+  project: "למחוק את הפרויקט?"
+};
+
 /* שורת הגדרה ברשימת הגדרות: נקודתיים, רווח, ואז תוכן.
 
    הרווח הוא מה שמפריד בין ": הגדרה" לבין ":::" של ההתראות, וה-lookahead
@@ -1750,9 +1782,16 @@ class Component extends DCLogic {
 
     loginOpen: false, loginEmail: "", loginPassword: "", loggingIn: false,
 
-    /* confirm — מה שממתין לאישור מחיקה: { kind, id, title }. נתונים
-       בלבד ולא פונקציה, ראו runConfirm. */
-    confirm: null, confirmBusy: false,
+    /* confirm — מה שממתין לאישור מחיקה: { kind, id, title }, ואופציונלית
+       note (מה נמחק ביחד) ו-needsText (דורש הקלדת השם). נתונים בלבד ולא
+       פונקציה, ראו runConfirm.
+
+       confirmText — מה שהוקלד בשדה האישור. האינווריאנטה היא
+       `confirm === null ⟹ confirmText === ""`: כל מקום שסוגר את המודאל
+       מנקה גם אותו, ולכן פתיחה מתחילה תמיד מריק. בלי זה טקסט שנשאר
+       מפרויקט קודם היה יכול לשחרר את כפתור המחיקה של פרויקט אחר בעל
+       אותו שם, בלי שהמשתמש הקליד דבר. */
+    confirm: null, confirmBusy: false, confirmText: "",
     newProjectName: "", newProjectDesc: "", newLinkTitle: "", newLinkUrl: "",
     /* editLinkId — מזהה הקישור שהטופס למטה עורך כרגע, או null בהוספה.
        שדות הטופס משותפים לשני המצבים, וזה מה שמבדיל ביניהם. */
@@ -1956,6 +1995,20 @@ class Component extends DCLogic {
     }
   }
 
+  /* האם המחיקה מאושרת ברגע זה.
+
+     אישור שדורש הקלדת שם אינו מאושר עד שמה שהוקלד זהה למה שמוצג.
+     הבדיקה יושבת כאן ולא רק ב-disabled של הכפתור, כי כפתור מושבת
+     אינו מנגנון אכיפה: Enter בשדה, לחיצה בזמן שהמצב השתנה, או קריאה
+     ישירה ל-runConfirm עוקפים אותו. התנאי והפעולה חייבים להיות באותו
+     מקום (כלל 2). */
+  confirmReady() {
+    const target = this.state.confirm;
+    if (!target) return false;
+    if (!target.needsText) return true;
+    return this.state.confirmText.trim() === target.title;
+  }
+
   /* ביצוע המחיקה שאושרה.
 
      המחיקה עצמה יושבת כאן ולא בתוך ה-props, כדי שמה שנשמר ב-state
@@ -1964,14 +2017,18 @@ class Component extends DCLogic {
      הלחיצה, ולא את מה שמוצג עכשיו. */
   async runConfirm() {
     const target = this.state.confirm;
+    if (!target || !this.confirmReady()) return;
+
+    /* פרויקט נמחק גם ממסך הרשימה, שבו אין פרויקט פתוח. מסמך וקישור
+       נמחקים תמיד מתוך פרויקט, ובלעדיו אין נתיב לבנות. */
     const project = this.state.project;
-    if (!target || !project) return;
+    if (target.kind !== "project" && !project) return;
     this.setState({ confirmBusy: true });
 
-    const base = "/projects/" + encodeURIComponent(project.slug);
-    const path = target.kind === "link"
-      ? base + "/links/" + encodeURIComponent(target.id)
-      : base + "/docs/" + encodeURIComponent(target.id);
+    const path = target.kind === "project"
+      ? "/projects/" + encodeURIComponent(target.id)
+      : "/projects/" + encodeURIComponent(project.slug) +
+        (target.kind === "link" ? "/links/" : "/docs/") + encodeURIComponent(target.id);
     await this.guard(() => this.api(path, { method: "DELETE" }));
 
     /* המסמך שנמחק הוא זה שפתוח — המסך חייב להתרוקן, והכתובת איתו,
@@ -1980,7 +2037,20 @@ class Component extends DCLogic {
       this.setState({ doc: null, docSlug: null });
       this.replaceHash(this.docHash(project.slug, null));
     }
-    this.setState({ confirm: null, confirmBusy: false });
+    this.setState({ confirm: null, confirmText: "", confirmBusy: false });
+
+    if (target.kind === "project") {
+      /* אותו שיקול, רמה אחת מעלה: אם הפרויקט שנמחק הוא הפתוח, המסך
+         והכתובת חוזרים לרשימה. replaceHash ולא pushHash — הכתובת
+         שהוחלפה מצביעה על משהו שאינו קיים, ואין טעם לשמור אותה
+         בהיסטוריה שכפתור "אחורה" יחזיר אליה. */
+      if (project && project.slug === target.id) {
+        this.setState({ screen: "projects", project: null, doc: null, docSlug: null, active: 0 });
+        this.replaceHash("#/");
+      }
+      await this.reloadProjects();
+      return;
+    }
     await this.refreshProject();
   }
 
@@ -2399,6 +2469,12 @@ class Component extends DCLogic {
   /* עברית מבחינה בין יחיד לרבים: "1 מסמכים" קריא כשגיאה. */
   docCountLabel(n) {
     return n === 1 ? "מסמך אחד" : n + " מסמכים";
+  }
+
+  /* אותו כלל לקישורים. "1 קישורים" הוא בדיוק סוג הרעש שמסגיר טקסט
+     שנבנה בהדבקה ולא נכתב. */
+  linkCountLabel(n) {
+    return n === 1 ? "קישור אחד" : n + " קישורים";
   }
 
   /* שינוי שם המסמך.
@@ -3003,7 +3079,19 @@ class Component extends DCLogic {
         badgeBg: p.visibility === "public" ? "var(--green-soft)" : "var(--tint)",
         badgeFg: p.visibility === "public" ? "var(--green)" : "var(--faint)",
         meta: this.docCountLabel(p.documents.length) + " · " + p.slug,
-        open: (e) => { if (e) e.preventDefault(); this.openProject(p.slug); }
+        open: (e) => { if (e) e.preventDefault(); this.openProject(p.slug); },
+        removeLabel: "מחיקת הפרויקט " + p.name,
+        /* מחיקת פרויקט גוררת את המסמכים, הגרסאות והקישורים שלו, ואין
+           ממנה חזרה. לכן שני דברים שאין באישור של מסמך בודד: שורה
+           שאומרת מה עוד נמחק, והקלדת השם כדי לשחרר את הכפתור. */
+        remove: () => this.setState({
+          confirm: {
+            kind: "project", id: p.slug, title: p.name, needsText: true,
+            note: "כל התוכן שלו יימחק איתו — " +
+              this.docCountLabel(p.documents.length) +
+              " ו" + this.linkCountLabel(p.links.length) + ". אין דרך לשחזר."
+          }
+        })
       })),
       noProjects: s.ready && !s.projects.length,
       projectsLead: canEdit
@@ -3077,10 +3165,24 @@ class Component extends DCLogic {
       /* --- אישור מחיקה --- */
       confirmOpen: !!s.confirm,
       confirmTitle: s.confirm ? s.confirm.title : "",
-      confirmQuestion: s.confirm && s.confirm.kind === "link" ? "למחוק את הקישור?" : "למחוק את המסמך?",
+      confirmQuestion: s.confirm ? CONFIRM_QUESTIONS[s.confirm.kind] : "",
+      /* שורת ההסבר מופיעה רק כשיש מה לומר בה. "" אינו טקסט קצר יותר
+         אלא פסקה ריקה עם margin, ולכן היא נעלמת ולא מתרוקנת. */
+      confirmHasNote: !!(s.confirm && s.confirm.note),
+      confirmNote: s.confirm ? (s.confirm.note || "") : "",
+      confirmNeedsText: !!(s.confirm && s.confirm.needsText),
+      confirmPrompt: s.confirm ? "להמשך, הקלידו את השם: " + s.confirm.title : "",
+      confirmText: s.confirmText,
+      onConfirmText: (e) => this.setState({ confirmText: e.target.value }),
+      /* Enter מוחק רק כשהשם תואם. runConfirm בודק את זה בעצמו, ולכן
+         אין כאן תנאי שני שיכול להיפרד ממנו. */
+      onConfirmKey: (e) => { if (e.key === "Enter") this.runConfirm(); },
       confirmBusy: s.confirmBusy,
+      confirmDisabled: s.confirmBusy || !this.confirmReady(),
+      confirmBtnBg: this.confirmReady() ? "var(--red)" : "var(--rule)",
+      confirmBtnCursor: this.confirmReady() ? "pointer" : "not-allowed",
       confirmLabel: s.confirmBusy ? "מוחק…" : "מחיקה",
-      cancelConfirm: () => this.setState({ confirm: null }),
+      cancelConfirm: () => this.setState({ confirm: null, confirmText: "" }),
       runConfirm: () => this.runConfirm(),
       newLinkTitle: s.newLinkTitle,
       newLinkUrl: s.newLinkUrl,

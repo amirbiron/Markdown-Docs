@@ -17,7 +17,9 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import os
+import re
 
 # חייב לקרות לפני הייבוא של app: ההגדרות נטענות פעם אחת בזמן ייבוא,
 # ושרת ה-MCP נבנה ומורכב רק אם יש טוקן. בלי זה נתיב /mcp לא היה קיים
@@ -133,6 +135,12 @@ async def make_document(owner, project="docs", slug="installation", title="הת�
     return response.json()
 
 
+# תקרה להמתנה על עליית ה-lifespan. בלעדיה, lifespan שנתקע — למשל חיבור
+# DB שאינו חוזר — היה תולה את כל הריצה עד ה-timeout של ה-CI, וזו בדיוק
+# התוצאה שההמתנה הכפולה למטה נועדה למנוע.
+LIFESPAN_TIMEOUT = 30
+
+
 @pytest.fixture(scope="session")
 async def mcp_lifespan():
     """מרים את השרת פעם אחת לכל הריצה.
@@ -162,12 +170,49 @@ async def mcp_lifespan():
     # ה-timeout של ה-CI. ההמתנה על שניהם הופכת את זה לשגיאה מיידית
     # שמראה את הסיבה האמיתית.
     waiter = asyncio.create_task(started.wait())
-    done, _ = await asyncio.wait({waiter, task}, return_when=asyncio.FIRST_COMPLETED)
+    done, _ = await asyncio.wait(
+        {waiter, task}, timeout=LIFESPAN_TIMEOUT, return_when=asyncio.FIRST_COMPLETED
+    )
     if waiter not in done:
         waiter.cancel()
-        await task  # מרים את החריגה המקורית
-        raise RuntimeError("ה-lifespan הסתיים בלי לאותת על עלייה")
+        if task.done():
+            await task  # מרים את החריגה המקורית
+            raise RuntimeError("ה-lifespan הסתיים בלי לאותת על עלייה")
+        task.cancel()
+        raise RuntimeError(
+            f"ה-lifespan לא עלה תוך {LIFESPAN_TIMEOUT} שניות — ככל הנראה תקוע"
+        )
 
     yield
     stopping.set()
     await task
+
+
+# ── עזרי JSON-RPC מול נתיב ה-MCP ──────────────────────────────────────
+#
+# כאן ולא באחד ממודולי הבדיקות: יותר ממודול אחד משתמש בהם, וייבוא בין
+# מודולי בדיקות יוצר תלות בשמות פרטיים ובסדר האיסוף.
+
+GOOD = {
+    "Authorization": f"Bearer {MCP_TOKEN}",
+    "Content-Type": "application/json",
+    "Accept": "application/json, text/event-stream",
+}
+
+
+def _rpc(request_id: int, method: str, params: dict | None = None) -> dict:
+    return {"jsonrpc": "2.0", "id": request_id, "method": method, "params": params or {}}
+
+
+def _payload(response) -> dict:
+    """התשובה מגיעה כ-SSE; מוציאים ממנה את ה-JSON."""
+    match = re.search(r"^data: (.+)$", response.text, re.M)
+    assert match, f"לא נמצא גוף JSON בתשובה: {response.text[:200]}"
+    return json.loads(match.group(1))
+
+
+def _tool_output(response) -> dict:
+    result = _payload(response)["result"]
+    if "structuredContent" in result:
+        return result["structuredContent"]
+    return json.loads(result["content"][0]["text"])

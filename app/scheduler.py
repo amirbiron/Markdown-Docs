@@ -298,8 +298,12 @@ async def purge_mcp_oauth() -> int:
     כי כל רענון טוקן מוסיף שורות שלעולם לא יישלפו שוב.
 
     בנפרד מהגיבוי כדי שכישלון של אחד לא יבטל את השני.
+
+    התנאי הוא mcp_enabled ולא mcp_oauth_enabled: האחרון תלוי גם
+    ב-RENDER_EXTERNAL_URL, וכיבוי הזרימה — או הסרת הכתובת — אינם סיבה
+    להשאיר רשומות שפג תוקפן בטבלה לנצח. מחיקת רשומות פגות בטוחה תמיד.
     """
-    if not get_settings().mcp_oauth_enabled:
+    if not get_settings().mcp_enabled:
         return 0
     from app.db import SessionLocal
     from app.mcp import oauth_store

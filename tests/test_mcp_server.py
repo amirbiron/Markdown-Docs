@@ -7,28 +7,20 @@
 
 from __future__ import annotations
 
-import json
-import re
-
 import pytest
 from httpx import ASGITransport, AsyncClient
 
 from app.main import app
-from tests.conftest import (  # noqa: F401
+# קבועים ופונקציות עזר בלבד — לא fixtures. ראו conftest.
+from tests.conftest import (
+    GOOD,
     MCP_TOKEN,
-    WRITE,
-    clean_projects,
+    _payload,
+    _rpc,
+    _tool_output,
     make_document,
     make_project,
-    owner,
-    seeded_admin,
 )
-
-GOOD = {
-    "Authorization": f"Bearer {MCP_TOKEN}",
-    "Content-Type": "application/json",
-    "Accept": "application/json, text/event-stream",
-}
 
 READ_TOOLS = {
     "mdocs_map",
@@ -45,24 +37,6 @@ WRITE_TOOLS = {
 }
 
 EXPECTED_TOOLS = READ_TOOLS | WRITE_TOOLS
-
-
-def _rpc(request_id: int, method: str, params: dict | None = None) -> dict:
-    return {"jsonrpc": "2.0", "id": request_id, "method": method, "params": params or {}}
-
-
-def _payload(response) -> dict:
-    """התשובה מגיעה כ-SSE; מוציאים ממנה את ה-JSON."""
-    match = re.search(r"^data: (.+)$", response.text, re.M)
-    assert match, f"לא נמצא גוף JSON בתשובה: {response.text[:200]}"
-    return json.loads(match.group(1))
-
-
-def _tool_output(response) -> dict:
-    result = _payload(response)["result"]
-    if "structuredContent" in result:
-        return result["structuredContent"]
-    return json.loads(result["content"][0]["text"])
 
 
 @pytest.fixture
@@ -184,6 +158,7 @@ async def test_the_challenge_points_at_the_metadata(mcp):
     response = await mcp.post(
         "/mcp/", json=_rpc(9, "tools/list"), headers={k: v for k, v in GOOD.items() if k != "Authorization"}
     )
+    assert response.status_code == 401, response.text
     challenge = response.headers["www-authenticate"]
     assert challenge.startswith("Bearer ")
     assert '.well-known/oauth-protected-resource/mcp' in challenge

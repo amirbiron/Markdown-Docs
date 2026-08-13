@@ -136,15 +136,17 @@ async def consume_code(session: AsyncSession, code: str) -> MCPOAuthCode | None:
 
     כאן Postgres נועל את השורה, והמפסיד מקבל rowcount=0 ו-None.
     התפוגה נבדקת באותה הצהרה, כדי שגם היא לא תהיה בדיקה נפרדת.
+
+    **אינה סוגרת את הטרנזקציה.** הקורא מנפיק טוקנים מיד אחריה, ושתי
+    הפעולות חייבות להיסגר יחד: commit כאן היה הופך כשל רגעי בהנפקה
+    לקוד שרוף, והמשתמש היה נשלח למסך האישור שוב בלי סיבה נראית לעין.
     """
     result = await session.execute(
         delete(MCPOAuthCode)
         .where(MCPOAuthCode.code_hash == token_hash(code), MCPOAuthCode.expires_at > now())
         .returning(MCPOAuthCode)
     )
-    row = result.scalar_one_or_none()
-    await session.commit()
-    return row
+    return result.scalar_one_or_none()
 
 
 # ── טוקנים ────────────────────────────────────────────────────────────
@@ -161,6 +163,9 @@ async def issue_pair(
 
     grant_id משותף מקשר ביניהם, כדי שביטול של אחד יבטל גם את השני.
     טוקן גישה ששרד ביטול של ה-refresh הוא בדיוק מה שביטול אמור למנוע.
+
+    **אינה סוגרת את הטרנזקציה** — היא תמיד נקראת אחרי צריכה, והשתיים
+    הן פעולה אחת. ראו consume_code.
     """
     access, refresh = new_secret(), new_secret()
     grant_id = uuid.uuid4()
@@ -188,7 +193,7 @@ async def issue_pair(
             ),
         ]
     )
-    await session.commit()
+    await session.flush()
     return access, refresh, int(ACCESS_TTL.total_seconds())
 
 
@@ -211,6 +216,8 @@ async def consume_refresh(session: AsyncSession, token: str) -> MCPOAuthToken | 
 
     המחיקה מוחקת את שתי השורות של ההענקה (גם טוקן הגישה), ומחזירה את
     שורת הרענון בלבד. הזוכה הוא מי שקיבל שורה.
+
+    **אינה סוגרת את הטרנזקציה.** ראו consume_code.
     """
     moment = now()
     claimed = await session.execute(
@@ -229,7 +236,6 @@ async def consume_refresh(session: AsyncSession, token: str) -> MCPOAuthToken | 
 
     # אותה טרנזקציה: טוקן גישה ששרד רוטציה הוא בדיוק מה שהיא מונעת.
     await session.execute(delete(MCPOAuthToken).where(MCPOAuthToken.grant_id == row.grant_id))
-    await session.commit()
     return row
 
 
@@ -278,6 +284,8 @@ async def list_grants(session: AsyncSession, user_id: uuid.UUID) -> list[MCPOAut
             MCPOAuthToken.kind == TOKEN_REFRESH,
             or_(MCPOAuthToken.expires_at.is_(None), MCPOAuthToken.expires_at > moment),
         )
-        .order_by(MCPOAuthToken.created_at.desc())
+        # token_hash כ-tiebreaker: שתי הענקות באותה מילישנייה היו
+        # מתחלפות בין קריאה לקריאה, והרשימה הייתה קופצת בלי סיבה.
+        .order_by(MCPOAuthToken.created_at.desc(), MCPOAuthToken.token_hash)
     )
     return list(rows.scalars().all())

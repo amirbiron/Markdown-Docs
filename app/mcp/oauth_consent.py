@@ -25,7 +25,9 @@ from fastapi import APIRouter, Depends, Form, Request, status
 from fastapi.responses import HTMLResponse, RedirectResponse
 from mcp.server.auth.provider import construct_redirect_uri
 
+from app.db import SessionLocal
 from app.deps import optional_user
+from app.mcp import oauth_store
 from app.mcp.auth import SCOPE_WRITE
 from app.mcp.oauth_provider import CONSENT_PATH, mint_code, open_txn
 from app.models import User
@@ -91,6 +93,31 @@ def _page(title: str, body: str, *, status_code: int = 200) -> HTMLResponse:
     )
 
 
+# אורך מרבי לשם הלקוח בתצוגה. השם מגיע מהרישום, כלומר מהלקוח עצמו,
+# ולכן הוא קלט לא מהימן: שם ארוך היה דוחף את כפתורי האישור מחוץ למסך
+# ומשאיר משתמש שמאשר בלי לראות מה. חיתוך פשוט יותר בטוח מגלילה.
+CLIENT_NAME_MAX = 60
+UNNAMED_CLIENT = "לקוח חיצוני"
+
+
+async def _client_label(txn: dict) -> str:
+    """השם שיוצג במסך האישור.
+
+    בלי זה המשתמש מאשר גישה למסמכים שלו בלי לדעת מי מבקש אותה — וזו
+    השאלה הראשונה שמסך אישור אמור לענות עליה.
+
+    השם מוצג כטקסט בלבד, אחרי escape ואחרי חיתוך. לעולם לא כקישור:
+    הוא נשלט על ידי מי שנרשם, ורישום פתוח לכל דורש.
+    """
+    async with SessionLocal() as session:
+        row = await oauth_store.load_client(session, txn["client_id"])
+
+    name = ((row.registration if row else {}).get("client_name") or "").strip()
+    if not name:
+        return UNNAMED_CLIENT
+    return name if len(name) <= CLIENT_NAME_MAX else name[:CLIENT_NAME_MAX] + "…"
+
+
 def _expired() -> HTMLResponse:
     return _page(
         "הבקשה פגה",
@@ -139,7 +166,8 @@ async def consent_form(
     return _page(
         "אישור חיבור",
         f"<h1>לאשר חיבור ל-Markdown-Docs?</h1>"
-        f"<p>לקוח חיצוני מבקש גישה לחשבון <code>{html.escape(user.email)}</code>.</p>"
+        f"<p><strong>{html.escape(await _client_label(payload))}</strong> מבקש גישה "
+        f"לחשבון <code>{html.escape(user.email)}</code>.</p>"
         f"<p>הוא יוכל:</p><ul>{items}</ul>"
         f"{warning}"
         f'<form method="post" action="{html.escape(CONSENT_PATH)}">'

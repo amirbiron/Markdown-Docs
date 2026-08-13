@@ -167,8 +167,12 @@ class MarkdownDocsOAuthProvider(
         הצריכה קודמת להנפקה ובודקת שהיא הצליחה: ``consume_code`` מוחק
         ומחזיר בהצהרה אחת, כך ששתי החלפות מקבילות של אותו קוד מסתיימות
         בכך שרק אחת מנפיקה. בדיקה נפרדת לפני המחיקה הייתה TOCTOU.
+
+        שתיהן בטרנזקציה אחת: אם ההנפקה נכשלת — תקלת DB, ניתוק —
+        ה-rollback מחזיר גם את מחיקת הקוד, והלקוח יכול לנסות שוב. בלי
+        זה כשל רגעי היה שורף אישור של המשתמש והוא היה נשלח למסך שוב.
         """
-        async with SessionLocal() as session:
+        async with SessionLocal() as session, session.begin():
             row = await store.consume_code(session, authorization_code.code)
             if row is None or row.client_id != client.client_id:
                 raise ValueError("authorization code לא תקף")
@@ -222,7 +226,9 @@ class MarkdownDocsOAuthProvider(
         if extra:
             raise ValueError(f"רענון אינו יכול להרחיב scope: {sorted(extra)}")
 
-        async with SessionLocal() as session:
+        # טרנזקציה אחת, מאותה סיבה כמו בהחלפת הקוד: כשל בהנפקה לא אמור
+        # לבטל את ההענקה הקיימת ולהשאיר את הלקוח בלי כלום.
+        async with SessionLocal() as session, session.begin():
             # צריכה אטומית, ולא load-then-revoke: רוטציה שאפשר לרוץ
             # אותה פעמיים במקביל אינה רוטציה.
             row = await store.consume_refresh(session, refresh_token.token)

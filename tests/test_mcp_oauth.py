@@ -26,8 +26,17 @@ from app.mcp import oauth_store as store
 # קבועים ופונקציות עזר בלבד. את ה-fixtures — seeded_admin,
 # clean_projects, mcp_lifespan — אין לייבא: pytest מוצא אותם ב-conftest
 # לבד, וייבוא רושם אותם מחדש במודול עם cache נפרד. ראו conftest.
-from tests.conftest import EMAIL, MCP_ISSUER, PASSWORD, WRITE, make_document, make_project
-from tests.test_mcp_server import GOOD, _rpc, _tool_output
+from tests.conftest import (
+    EMAIL,
+    GOOD,
+    MCP_ISSUER,
+    PASSWORD,
+    WRITE,
+    _rpc,
+    _tool_output,
+    make_document,
+    make_project,
+)
 
 REDIRECT = "https://claude.ai/api/mcp/auth_callback"
 
@@ -68,6 +77,24 @@ async def _register(http: AsyncClient) -> dict:
     )
     assert response.status_code == 201, response.text
     return response.json()
+
+
+async def _exchange(http: AsyncClient, registration: dict, code: str, verifier: str):
+    """מחליף קוד בזוג טוקנים ומחזיר את התשובה כמו שהיא.
+
+    מוחזרת התשובה ולא רק הגוף, כי חלק מהבדיקות בודקות את קוד המצב.
+    """
+    return await http.post(
+        "/mcp/token",
+        data={
+            "grant_type": "authorization_code",
+            "code": code,
+            "redirect_uri": REDIRECT,
+            "client_id": registration["client_id"],
+            "client_secret": registration.get("client_secret", ""),
+            "code_verifier": verifier,
+        },
+    )
 
 
 # ── גילוי ─────────────────────────────────────────────────────────────
@@ -185,17 +212,7 @@ async def test_full_authorization_flow(client, clean_projects):
     code = params["code"][0]
 
     # החלפת הקוד בטוקן, עם ה-verifier שמוכיח שזה אותו לקוח.
-    token_response = await client.post(
-        "/mcp/token",
-        data={
-            "grant_type": "authorization_code",
-            "code": code,
-            "redirect_uri": REDIRECT,
-            "client_id": registration["client_id"],
-            "client_secret": registration.get("client_secret", ""),
-            "code_verifier": verifier,
-        },
-    )
+    token_response = await _exchange(client, registration, code, verifier)
     assert token_response.status_code == 200, token_response.text
     tokens = token_response.json()
     assert tokens["token_type"] == "Bearer"
@@ -339,19 +356,7 @@ async def test_tokens_are_not_stored_in_the_clear(client):
         "/mcp-consent", data={"txn": txn, "decision": "allow"}, headers=WRITE
     )
     code = parse_qs(urlparse(approved.headers["location"]).query)["code"][0]
-    tokens = (
-        await client.post(
-            "/mcp/token",
-            data={
-                "grant_type": "authorization_code",
-                "code": code,
-                "redirect_uri": REDIRECT,
-                "client_id": registration["client_id"],
-                "client_secret": registration.get("client_secret", ""),
-                "code_verifier": verifier,
-            },
-        )
-    ).json()
+    tokens = (await _exchange(client, registration, code, verifier)).json()
 
     async with SessionLocal() as session:
         row = await store.load_token(session, tokens["access_token"], store.TOKEN_ACCESS)
@@ -440,19 +445,7 @@ async def test_concurrent_code_exchange_yields_exactly_one_grant(client):
 async def test_concurrent_refresh_rotates_exactly_once(client):
     """רוטציה שאפשר לרוץ אותה פעמיים במקביל אינה רוטציה."""
     registration, code, verifier = await _grant(client)
-    tokens = (
-        await client.post(
-            "/mcp/token",
-            data={
-                "grant_type": "authorization_code",
-                "code": code,
-                "redirect_uri": REDIRECT,
-                "client_id": registration["client_id"],
-                "client_secret": registration.get("client_secret", ""),
-                "code_verifier": verifier,
-            },
-        )
-    ).json()
+    tokens = (await _exchange(client, registration, code, verifier)).json()
 
     payload = {
         "grant_type": "refresh_token",
@@ -473,19 +466,7 @@ async def test_concurrent_refresh_rotates_exactly_once(client):
 async def test_rotation_kills_the_old_access_token(client):
     """טוקן גישה ששרד רוטציה הוא בדיוק מה שהיא נועדה למנוע."""
     registration, code, verifier = await _grant(client)
-    first = (
-        await client.post(
-            "/mcp/token",
-            data={
-                "grant_type": "authorization_code",
-                "code": code,
-                "redirect_uri": REDIRECT,
-                "client_id": registration["client_id"],
-                "client_secret": registration.get("client_secret", ""),
-                "code_verifier": verifier,
-            },
-        )
-    ).json()
+    first = (await _exchange(client, registration, code, verifier)).json()
 
     rotated = await client.post(
         "/mcp/token",
@@ -509,19 +490,7 @@ async def test_rotation_kills_the_old_access_token(client):
 async def test_revoking_kills_both_sides_of_the_grant(client):
     """ביטול שמשאיר את הצד השני בחיים אינו ביטול."""
     registration, code, verifier = await _grant(client)
-    tokens = (
-        await client.post(
-            "/mcp/token",
-            data={
-                "grant_type": "authorization_code",
-                "code": code,
-                "redirect_uri": REDIRECT,
-                "client_id": registration["client_id"],
-                "client_secret": registration.get("client_secret", ""),
-                "code_verifier": verifier,
-            },
-        )
-    ).json()
+    tokens = (await _exchange(client, registration, code, verifier)).json()
 
     revoked = await client.post(
         "/mcp/revoke",
@@ -539,3 +508,68 @@ async def test_revoking_kills_both_sides_of_the_grant(client):
         headers=dict(GOOD, Authorization=f"Bearer {tokens['access_token']}"),
     )
     assert call.status_code == 401, "ביטול הרענון היה אמור להרוג גם את הגישה"
+
+
+async def test_the_consent_screen_names_the_requesting_client(client):
+    """המשתמש חייב לדעת מי מבקש גישה, לא רק שמישהו מבקש.
+
+    זו השאלה הראשונה שמסך אישור אמור לענות עליה. השם מגיע מהרישום,
+    כלומר מהלקוח עצמו, ולכן הוא מוצג כטקסט אחרי escape וחיתוך — לעולם
+    לא כקישור.
+    """
+    response = await client.post(
+        "/mcp/register",
+        json={
+            "client_name": "Claude מבית Anthropic",
+            "redirect_uris": [REDIRECT],
+            "grant_types": ["authorization_code"],
+            "response_types": ["code"],
+            "token_endpoint_auth_method": "client_secret_post",
+        },
+    )
+    registration = response.json()
+    _, challenge = _pkce()
+    authorize = await client.get(
+        "/mcp/authorize",
+        params={
+            "client_id": registration["client_id"],
+            "redirect_uri": REDIRECT,
+            "response_type": "code",
+            "code_challenge": challenge,
+            "code_challenge_method": "S256",
+        },
+    )
+    await _login(client)
+    form = await client.get(authorize.headers["location"])
+    assert form.status_code == 200
+    assert "Claude מבית Anthropic" in form.text
+
+
+async def test_a_hostile_client_name_cannot_inject_markup(client):
+    """שם הלקוח הוא קלט לא מהימן — רישום פתוח לכל דורש."""
+    response = await client.post(
+        "/mcp/register",
+        json={
+            "client_name": "<script>alert(1)</script>",
+            "redirect_uris": [REDIRECT],
+            "grant_types": ["authorization_code"],
+            "response_types": ["code"],
+            "token_endpoint_auth_method": "client_secret_post",
+        },
+    )
+    registration = response.json()
+    _, challenge = _pkce()
+    authorize = await client.get(
+        "/mcp/authorize",
+        params={
+            "client_id": registration["client_id"],
+            "redirect_uri": REDIRECT,
+            "response_type": "code",
+            "code_challenge": challenge,
+            "code_challenge_method": "S256",
+        },
+    )
+    await _login(client)
+    form = await client.get(authorize.headers["location"])
+    assert "<script>alert(1)</script>" not in form.text
+    assert "&lt;script&gt;" in form.text

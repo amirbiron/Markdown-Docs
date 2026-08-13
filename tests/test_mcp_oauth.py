@@ -23,20 +23,11 @@ from httpx import ASGITransport, AsyncClient
 from app.db import SessionLocal
 from app.main import app
 from app.mcp import oauth_store as store
-from tests.conftest import (  # noqa: F401
-    EMAIL,
-    MCP_ISSUER,
-    MCP_TOKEN,
-    ORIGIN,
-    PASSWORD,
-    WRITE,
-    clean_projects,
-    make_document,
-    make_project,
-    owner,
-    seeded_admin,
-)
-from tests.test_mcp_server import GOOD, _rpc, _tool_output  # noqa: F401
+# קבועים ופונקציות עזר בלבד. את ה-fixtures — seeded_admin,
+# clean_projects, mcp_lifespan — אין לייבא: pytest מוצא אותם ב-conftest
+# לבד, וייבוא רושם אותם מחדש במודול עם cache נפרד. ראו conftest.
+from tests.conftest import EMAIL, MCP_ISSUER, PASSWORD, WRITE, make_document, make_project
+from tests.test_mcp_server import GOOD, _rpc, _tool_output
 
 REDIRECT = "https://claude.ai/api/mcp/auth_callback"
 

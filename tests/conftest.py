@@ -1,4 +1,18 @@
-"""ערכים ו-fixtures משותפים לכל הבדיקות."""
+"""ערכים ו-fixtures משותפים לכל הבדיקות.
+
+**אל תייבאו מכאן fixtures.** pytest מוצא כל fixture שמוגדר ב-conftest
+בעצמו, וייבוא מפורש רושם אותו **מחדש** במודול המייבא — עם cache נפרד
+משלו. עבור fixture עם ``scope="session"`` זה אומר שהוא ירוץ פעם לכל
+מודול שמייבא אותו, וה-scope פשוט לא מתקיים.
+
+זה כבר נשך: ``mcp_lifespan`` מרים את מנהל הסשנים של ה-MCP, ול-
+``StreamableHTTPSessionManager`` יש מגבלה מפורשת ש-``run()`` נקרא פעם
+אחת למופע. הריצה השנייה נפלה על "can only be called once per instance",
+והכשל נראה כאילו הוא בקוד השרת.
+
+קבועים (``EMAIL``, ``WRITE``) ופונקציות עזר (``make_project``) כן
+מיובאים — הם אינם fixtures ואין להם cache.
+"""
 
 from __future__ import annotations
 

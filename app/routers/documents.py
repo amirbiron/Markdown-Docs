@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 
 from fastapi import APIRouter, Depends, HTTPException, Response, status
-from sqlalchemy import delete, func, select
+from sqlalchemy import func, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -16,6 +16,9 @@ from app.db import get_session
 from app.deps import optional_user, require_user
 from app.models import Document, DocumentVersion, Project, User
 from app.routers.projects import NOT_FOUND, load_project
+from app.services import documents as document_service
+from app.services import projects as project_service
+from app.services.errors import NotFound
 from app.schemas import (
     DocumentCreate,
     DocumentPrivate,
@@ -34,48 +37,28 @@ DOC_NOT_FOUND = "המסמך לא נמצא"
 
 
 async def _load_document(session: AsyncSession, project: Project, slug: str, *, lock: bool = False) -> Document:
-    query = select(Document).where(
-        Document.project_id == project.id,
-        Document.slug == slugs.normalize(slug).lower(),
-    )
-    if lock:
-        # נועל את השורה עד סוף הטרנזקציה. בלי זה, קריאת המצב הקודם
-        # והכתיבה החדשה הן שתי פעולות נפרדות ששתי בקשות יכולות לשזור
-        # ביניהן — ואז גרסה נשמרת פעמיים או בכלל לא (כלל 2).
-        query = query.with_for_update()
-
-    document = (await session.execute(query)).scalar_one_or_none()
-    if document is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, DOC_NOT_FOUND)
-    return document
+    """עטיפת HTTP סביב document_service.load_document."""
+    try:
+        return await document_service.load_document(session, project, slug, lock=lock)
+    except NotFound:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, DOC_NOT_FOUND) from None
 
 
 async def _owned_project(session: AsyncSession, slug: str, user: User) -> Project:
-    project = await load_project(session, slug, user)
-    if project.owner_id != user.id:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, NOT_FOUND)
-    return project
+    """עטיפת HTTP סביב project_service.owned_project.
+
+    הבדיקה עצמה ישבה כאן וב-routers/links.py בשני עותקים זהים. עכשיו
+    יש עותק אחד בשכבת ה-service, ושרת ה-MCP משתמש באותו אחד.
+    """
+    try:
+        return await project_service.owned_project(session, slug, user)
+    except NotFound:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, NOT_FOUND) from None
 
 
 async def _trim_versions(session: AsyncSession, document_id) -> None:
-    """שומר רק את N הגרסאות האחרונות.
-
-    בלי זה, שמירה אוטומטית כל כמה שניות מייצרת היסטוריה שגדלה בלי גבול
-    לאורך יום עריכה אחד. אותו היגיון כמו ניקוי הגיבויים מהדיסק.
-    """
-    keep = settings.document_versions_kept
-    survivors = (
-        select(DocumentVersion.id)
-        .where(DocumentVersion.document_id == document_id)
-        .order_by(DocumentVersion.created_at.desc(), DocumentVersion.id.desc())
-        .limit(keep)
-        .scalar_subquery()
-    )
-    await session.execute(
-        delete(DocumentVersion).where(
-            DocumentVersion.document_id == document_id,
-            DocumentVersion.id.not_in(survivors),
-        )
+    await document_service.trim_versions(
+        session, document_id, keep=settings.document_versions_kept
     )
 
 

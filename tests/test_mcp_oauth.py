@@ -116,6 +116,10 @@ async def test_discovery_documents_live_at_the_host_root(client):
     # ה-endpoints מוצהרים מהשורש, כי שם claude.ai מחפש אותם בפועל —
     # ראו test_metadata_points_at_the_host_root. הם קיימים גם תחת /mcp,
     # ולכן שתי ההצהרות נכונות.
+    #
+    # ה-issuer נבדק במפורש: הוא השדה שממנו כל השאר נגזרים, ושינוי בו
+    # מזיז את כולם בבת אחת.
+    assert meta["issuer"].rstrip("/") == MCP_ISSUER
     assert meta["authorization_endpoint"] == f"{MCP_ISSUER}/authorize"
     assert meta["token_endpoint"] == f"{MCP_ISSUER}/token"
     assert meta["registration_endpoint"] == f"{MCP_ISSUER}/register"
@@ -586,12 +590,31 @@ async def test_metadata_points_at_the_host_root(client):
     """ה-issuer הוא השורש, ולכן כל נתיבי הזרימה מוצהרים משם."""
     meta = (await client.get("/.well-known/oauth-authorization-server")).json()
 
+    assert meta["issuer"].rstrip("/") == MCP_ISSUER
     assert meta["authorization_endpoint"] == f"{MCP_ISSUER}/authorize"
     assert meta["token_endpoint"] == f"{MCP_ISSUER}/token"
     assert meta["registration_endpoint"] == f"{MCP_ISSUER}/register"
+    assert meta["revocation_endpoint"] == f"{MCP_ISSUER}/revoke"
+
     # המשאב עצמו נשאר תחת /mcp — הוא אינו שרת ההרשאות.
-    prm = (await client.get("/.well-known/oauth-protected-resource/mcp")).json()
-    assert prm["resource"] == f"{MCP_ISSUER}/mcp"
+    prm = await client.get("/.well-known/oauth-protected-resource/mcp")
+    assert prm.status_code == 200
+    assert prm.json()["resource"] == f"{MCP_ISSUER}/mcp"
+
+
+@pytest.mark.parametrize("path", ["/authorize", "/token", "/register", "/revoke"])
+async def test_every_declared_endpoint_exists_at_the_root(client, path):
+    """כל נתיב שהמטא-דאטה מצהירה עליו חייב להתקיים.
+
+    הכשל בפרודקשן היה בדיוק פער כזה: המטא-דאטה הצהירה על נתיב אחד
+    והלקוח פנה לאחר. בדיקה פר-נתיב תופסת נתיב שנשמט מהרשימה
+    ב-_mount_oauth_routes, גם אם הזרימה המלאה במקרה לא עוברת דרכו.
+
+    405 ו-401 נחשבים קיימים — הבדיקה היא על הניתוב, לא על התוכן.
+    404 הוא הכשל היחיד שמעניין כאן.
+    """
+    response = await client.post(path, data={})
+    assert response.status_code != 404, f"{path} אינו קיים בשורש"
 
 
 async def test_registration_works_at_the_root(client):

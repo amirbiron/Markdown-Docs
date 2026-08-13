@@ -86,6 +86,35 @@ async def test_tools_declare_their_true_nature_over_the_wire(mcp):
         assert annotations.get("readOnlyHint") is expected, tool["name"]
 
 
+async def test_the_bare_path_challenges_instead_of_redirecting(mcp):
+    """הנתיב ללא הלוכסן הנגרר חייב לענות בעצמו, לא בהפניה.
+
+    זו הכתובת שמדביקים ב-connector, וכך גם כתוב בתיעוד. הפניה 307
+    אינה נושאת WWW-Authenticate — היא לא תשובת אימות — ולכן לקוח
+    שקורא את האתגר מהתשובה הראשונה לא מגלה שנדרש אימות בכלל, ומדווח
+    "אין כלים" בלי להסביר למה. זה מה שקרה בפועל מול claude.ai.
+    """
+    anonymous = {k: v for k, v in GOOD.items() if k != "Authorization"}
+    response = await mcp.post("/mcp", json=_rpc(10, "tools/list"), headers=anonymous)
+
+    assert response.status_code == 401, response.text
+    assert "www-authenticate" in response.headers, "האתגר נעלם בהפניה"
+    assert "/.well-known/oauth-protected-resource/mcp" in response.headers["www-authenticate"]
+
+
+async def test_the_bare_path_serves_tools_with_a_valid_token(mcp):
+    """והצד השני: אותו נתיב חייב לעבוד עם טוקן תקף.
+
+    מיחזור ה-endpoint הפנימי לבדו החזיר את ה-401 הנכון אבל דחה גם
+    טוקן תקף, כי שכבת האימות של תת-האפליקציה לא רצה עליו. הבדיקה הזו
+    היא מה שתופס את זה.
+    """
+    response = await mcp.post("/mcp", json=_rpc(11, "tools/list"), headers=GOOD)
+
+    assert response.status_code == 200, response.text
+    assert {t["name"] for t in _payload(response)["result"]["tools"]} == EXPECTED_TOOLS
+
+
 async def test_mount_path_without_trailing_slash_still_reaches_the_server(mcp):
     """/mcp בלי לוכסן — כך לקוחות מגדירים את הכתובת בפועל.
 

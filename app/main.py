@@ -172,6 +172,56 @@ def _mount_well_known(parent: FastAPI, mcp_app) -> None:
         logger.info("נתיב גילוי OAuth נרשם בשורש: %s", path)
 
 
+class _BareMCPPath:
+    """מעביר בקשה ל-``/mcp`` אל תת-האפליקציה, כאילו הגיעה ל-``/mcp/``.
+
+    ההרכבה מייצרת התאמה ל-``/mcp/`` בלבד, ו-Starlette עונה על ``/mcp``
+    בהפניה 307. הפניה אינה נושאת ``WWW-Authenticate`` — היא לא תשובת
+    אימות — ולכן לקוח ששלח בקשה לכתובת הלא-מלוכסנת מקבל 307 ריק, ואם
+    הוא קורא את האתגר מהתשובה הראשונה הוא לא מגלה שנדרש אימות בכלל.
+
+    זה אינו תרחיש קצה: הכתובת שמדביקים ב-connector היא בדיוק
+    ``https://<host>/mcp``, וכך גם כתוב בתיעוד. לקוח שאינו עוקב
+    אוטומטית אחרי ההפניה מדווח "אין כלים" בלי להסביר למה.
+
+    **הבקשה מועברת לאפליקציה כולה, לא ל-endpoint שבתוכה.** מיחזור של
+    ה-endpoint לבדו נראה עובד — הוא אפילו מחזיר את ה-401 הנכון — אבל
+    שכבת האימות של תת-האפליקציה לא רצה עליו, ולכן טוקן תקף נדחה גם
+    הוא. המעבר דרך ``mcp_app`` שומר על ה-middleware ועל אותו מנהל
+    סשנים, שמותר להריץ אותו פעם אחת בלבד.
+
+    מחלקה ולא פונקציה, כי Starlette מזהה פונקציה כ-``endpoint`` שמקבל
+    ``Request`` ועוטף אותה; אובייקט callable מטופל כ-ASGI app.
+    """
+
+    def __init__(self, mcp_app, mount_path: str) -> None:
+        self.mcp_app = mcp_app
+        # מהקורא ולא מהקבוע הגלובלי: הנתיב שנרשם ב-route והנתיב שנכתב
+        # ל-root_path חייבים להיות אותו ערך, ושני מקורות היו מאפשרים
+        # להם להתפצל בלי שאף בדיקה תיגע בזה.
+        self.mount_path = mount_path
+
+    async def __call__(self, scope, receive, send) -> None:
+        # בדיוק מה ש-Mount היה עושה: הנתיב הפנימי הוא השורש של
+        # תת-האפליקציה, וה-root_path מציין מאיפה היא הורכבה.
+        inner = dict(scope)
+        inner["path"] = "/"
+        inner["raw_path"] = b"/"
+        inner["root_path"] = scope.get("root_path", "") + self.mount_path
+        await self.mcp_app(inner, receive, send)
+
+
+def _mount_bare_path(parent: FastAPI, mcp_app, mount_path: str) -> None:
+    """רושם את נקודת ה-MCP גם בלי הלוכסן הנגרר. ראו _BareMCPPath."""
+    parent.router.add_route(
+        mount_path,
+        _BareMCPPath(mcp_app, mount_path),
+        methods=["GET", "POST", "DELETE"],
+        include_in_schema=False,
+    )
+    logger.info("נקודת MCP נרשמה גם בלי לוכסן: %s", mount_path)
+
+
 @asynccontextmanager
 async def combined_lifespan(app: FastAPI):
     """משרשר את ה-lifespan של האפליקציה עם זה של ה-MCP.
@@ -310,6 +360,7 @@ app.mount("/assets", StaticFiles(directory=ASSETS_DIR), name="assets")
 # במפורש. ראו app/mcp/auth.py.
 if _mcp_app is not None:
     _mount_well_known(app, _mcp_app)
+    _mount_bare_path(app, _mcp_app, mcp_server.MOUNT_PATH)
     app.include_router(oauth_consent.router)
     app.mount(mcp_server.MOUNT_PATH, _mcp_app)
     logger.info("שרת ה-MCP מחובר על %s", mcp_server.MOUNT_PATH)

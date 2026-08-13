@@ -113,12 +113,16 @@ async def test_discovery_documents_live_at_the_host_root(client):
     asm = await client.get("/.well-known/oauth-authorization-server")
     assert asm.status_code == 200
     meta = asm.json()
-    # ה-endpoints חייבים להצביע לאן שהם באמת נמצאים — הם יושבים בתוך
-    # תת-האפליקציה, ולכן תחת /mcp. issuer שמצביע לשורש היה שולח את
-    # הלקוח ל-/authorize שאינו קיים.
-    assert meta["authorization_endpoint"] == f"{MCP_ISSUER}/mcp/authorize"
-    assert meta["token_endpoint"] == f"{MCP_ISSUER}/mcp/token"
-    assert meta["registration_endpoint"] == f"{MCP_ISSUER}/mcp/register"
+    # ה-endpoints מוצהרים מהשורש, כי שם claude.ai מחפש אותם בפועל —
+    # ראו test_metadata_points_at_the_host_root. הם קיימים גם תחת /mcp,
+    # ולכן שתי ההצהרות נכונות.
+    #
+    # ה-issuer נבדק במפורש: הוא השדה שממנו כל השאר נגזרים, ושינוי בו
+    # מזיז את כולם בבת אחת.
+    assert meta["issuer"].rstrip("/") == MCP_ISSUER
+    assert meta["authorization_endpoint"] == f"{MCP_ISSUER}/authorize"
+    assert meta["token_endpoint"] == f"{MCP_ISSUER}/token"
+    assert meta["registration_endpoint"] == f"{MCP_ISSUER}/register"
     assert set(meta["scopes_supported"]) == {"read", "write"}
     assert "S256" in meta["code_challenge_methods_supported"]
 
@@ -573,3 +577,125 @@ async def test_a_hostile_client_name_cannot_inject_markup(client):
     form = await client.get(authorize.headers["location"])
     assert "<script>alert(1)</script>" not in form.text
     assert "&lt;script&gt;" in form.text
+
+
+# ── נתיבי OAuth בשורש הדומיין ─────────────────────────────────────────
+#
+# claude.ai מתעלם מ-registration_endpoint שבמטא-דאטה ושולח את הרישום
+# ל-<host>/register. בלוגים של הפרודקשן זה נראה כ-404 חוזר, והחיבור
+# נכשל עם "Couldn't register with the sign-in service".
+
+
+async def test_metadata_points_at_the_host_root(client):
+    """ה-issuer הוא השורש, ולכן כל נתיבי הזרימה מוצהרים משם."""
+    meta = (await client.get("/.well-known/oauth-authorization-server")).json()
+
+    assert meta["issuer"].rstrip("/") == MCP_ISSUER
+    assert meta["authorization_endpoint"] == f"{MCP_ISSUER}/authorize"
+    assert meta["token_endpoint"] == f"{MCP_ISSUER}/token"
+    assert meta["registration_endpoint"] == f"{MCP_ISSUER}/register"
+    assert meta["revocation_endpoint"] == f"{MCP_ISSUER}/revoke"
+
+    # המשאב עצמו נשאר תחת /mcp — הוא אינו שרת ההרשאות.
+    prm = await client.get("/.well-known/oauth-protected-resource/mcp")
+    assert prm.status_code == 200
+    assert prm.json()["resource"] == f"{MCP_ISSUER}/mcp"
+
+
+@pytest.mark.parametrize("path", ["/authorize", "/token", "/register", "/revoke"])
+async def test_every_declared_endpoint_exists_at_the_root(client, path):
+    """כל נתיב שהמטא-דאטה מצהירה עליו חייב להתקיים.
+
+    הכשל בפרודקשן היה בדיוק פער כזה: המטא-דאטה הצהירה על נתיב אחד
+    והלקוח פנה לאחר. בדיקה פר-נתיב תופסת נתיב שנשמט מהרשימה
+    ב-_mount_oauth_routes, גם אם הזרימה המלאה במקרה לא עוברת דרכו.
+
+    405 ו-401 נחשבים קיימים — הבדיקה היא על הניתוב, לא על התוכן.
+    404 הוא הכשל היחיד שמעניין כאן.
+    """
+    response = await client.post(path, data={})
+    assert response.status_code != 404, f"{path} אינו קיים בשורש"
+
+
+async def test_registration_works_at_the_root(client):
+    """זו הבקשה שנכשלה ב-404 בפרודקשן."""
+    response = await client.post(
+        "/register",
+        json={
+            "client_name": "בדיקה",
+            "redirect_uris": [REDIRECT],
+            "grant_types": ["authorization_code", "refresh_token"],
+            "response_types": ["code"],
+            "token_endpoint_auth_method": "client_secret_post",
+        },
+    )
+    assert response.status_code == 201, response.text
+    assert response.json()["client_id"]
+
+
+async def test_the_whole_flow_runs_through_the_root_paths(client, clean_projects):
+    """אותה זרימה מלאה, אבל דרך הנתיבים שבשורש בלבד.
+
+    זו הזרימה ש-claude.ai מריץ בפועל. הבדיקה הקיימת עוברת דרך /mcp/*
+    ולכן היא לא הייתה תופסת את הכשל.
+    """
+    registration = (
+        await client.post(
+            "/register",
+            json={
+                "client_name": "בדיקה",
+                "redirect_uris": [REDIRECT],
+                "grant_types": ["authorization_code", "refresh_token"],
+                "response_types": ["code"],
+                "token_endpoint_auth_method": "client_secret_post",
+            },
+        )
+    ).json()
+    verifier, challenge = _pkce()
+
+    authorize = await client.get(
+        "/authorize",
+        params={
+            "client_id": registration["client_id"],
+            "redirect_uri": REDIRECT,
+            "response_type": "code",
+            "code_challenge": challenge,
+            "code_challenge_method": "S256",
+        },
+    )
+    assert authorize.status_code in (302, 303, 307), authorize.text
+
+    txn = parse_qs(urlparse(authorize.headers["location"]).query)["txn"][0]
+    await _login(client)
+    approved = await client.post(
+        "/mcp-consent", data={"txn": txn, "decision": "allow"}, headers=WRITE
+    )
+    code = parse_qs(urlparse(approved.headers["location"]).query)["code"][0]
+
+    tokens = await client.post(
+        "/token",
+        data={
+            "grant_type": "authorization_code",
+            "code": code,
+            "redirect_uri": REDIRECT,
+            "client_id": registration["client_id"],
+            "client_secret": registration.get("client_secret", ""),
+            "code_verifier": verifier,
+        },
+    )
+    assert tokens.status_code == 200, tokens.text
+    access = tokens.json()["access_token"]
+
+    await make_project(client, slug="docs", name="תיעוד")
+    await make_document(client, project="docs", title="התקנה")
+
+    # והקריאה עצמה, על הנתיב בלי הלוכסן — בדיוק כמו ב-connector.
+    call = await client.post(
+        "/mcp",
+        json=_rpc(20, "tools/call", {"name": "mdocs_map", "arguments": {}}),
+        headers=dict(GOOD, Authorization=f"Bearer {access}"),
+    )
+    assert call.status_code == 200, call.text
+    output = _tool_output(call)
+    assert output["ok"] is True, output
+    assert output["document_count"] == 1

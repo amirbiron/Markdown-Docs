@@ -144,24 +144,38 @@ async def lifespan(app: FastAPI):
 _mcp_app = mcp_server.build_asgi_app() if mcp_server.is_enabled() else None
 
 
-def _mount_well_known(parent: FastAPI, mcp_app) -> None:
-    """מעתיק את נתיבי ה-.well-known של ה-OAuth לשורש הדומיין.
+# נתיבי ה-OAuth שחייבים להיות זמינים גם בשורש הדומיין, ולא רק תחת
+# נקודת ההרכבה. ה-SDK רושם את כולם בתוך תת-האפליקציה.
+_OAUTH_ROOT_PATHS = ("/.well-known/", "/authorize", "/token", "/register", "/revoke")
 
-    ה-SDK רושם אותם בתוך תת-האפליקציה, ולכן אחרי ההרכבה על /mcp הם
-    מגיעים כ-/mcp/.well-known/... — והלקוח מחפש אותם בשורש. RFC 8414
-    ו-RFC 9728 קובעים שם קבוע ביחס לשורש המארח, ולא ביחס לנתיב
-    השירות, ולכן אין לזה מעקף בצד הלקוח.
 
-    ה-endpoint עצמו ממוחזר כמו שהוא ולא נבנה מחדש: התוכן צריך להיות
-    זהה, ושכפול היה מתפצל מה-SDK בשקט בשדרוג גרסה.
+def _mount_oauth_routes(parent: FastAPI, mcp_app) -> None:
+    """מעתיק את נתיבי ה-OAuth לשורש הדומיין.
 
-    שאר הנתיבים — /authorize, /token, /register, /revoke — נשארים תחת
-    /mcp, וזה תקין: המטא-דאטה מצהירה עליהם ככתובות מלאות, וה-issuer
-    מוגדר כ-<host>/mcp כדי שההצהרה תתאים למציאות.
+    שתי סיבות נפרדות, ושתיהן נצפו בפועל:
+
+    **מסמכי הגילוי** — RFC 8414 ו-RFC 9728 קובעים להם מיקום ביחס לשורש
+    המארח, ולא ביחס לנתיב השירות. לקוח מחפש אותם שם ואין לזה מעקף
+    בצד שלו.
+
+    **נתיבי הזרימה** — הנתיבים authorize, token, register ו-revoke. אלה
+    היו אמורים להסתפק בהצהרה שבמטא-דאטה, שהיא כתובת מלאה. בפועל
+    claude.ai מתעלם ממנה ושולח את הרישום ל-<host>/register, כלומר
+    מניח ששרת ההרשאות יושב בשורש. בלוגים זה נראה כ-404 חוזר על
+    /register בזמן שהמטא-דאטה הצהירה על /mcp/register — והחיבור נכשל
+    עם "Couldn't register with the sign-in service".
+
+    ה-endpoint ממוחזר כמו שהוא ולא נבנה מחדש: התוכן חייב להיות זהה,
+    ושכפול היה מתפצל מה-SDK בשקט בשדרוג גרסה. הנתיבים תחת /mcp
+    ממשיכים לעבוד במקביל, ולכן לקוח שכן מכבד את המטא-דאטה אינו נפגע.
+
+    שני הראשונים אינם תלויים בשכבת האימות של תת-האפליקציה —
+    הם אלה שמייצרים את האימות — ולכן מיחזור ה-endpoint לבדו מספיק
+    כאן, בניגוד לנקודת ה-MCP עצמה. ראו _BareMCPPath.
     """
     for route in mcp_app.routes:
         path = getattr(route, "path", "")
-        if not path.startswith("/.well-known/"):
+        if not path.startswith(_OAUTH_ROOT_PATHS):
             continue
         parent.router.add_route(
             path,
@@ -169,7 +183,7 @@ def _mount_well_known(parent: FastAPI, mcp_app) -> None:
             methods=list(getattr(route, "methods", None) or ["GET"]),
             include_in_schema=False,
         )
-        logger.info("נתיב גילוי OAuth נרשם בשורש: %s", path)
+        logger.info("נתיב OAuth נרשם בשורש: %s", path)
 
 
 class _BareMCPPath:
@@ -359,7 +373,7 @@ app.mount("/assets", StaticFiles(directory=ASSETS_DIR), name="assets")
 # אינו חל עליו — ההגנה שם היא טוקן Bearer בלבד, וזהות מ-cookie נדחית
 # במפורש. ראו app/mcp/auth.py.
 if _mcp_app is not None:
-    _mount_well_known(app, _mcp_app)
+    _mount_oauth_routes(app, _mcp_app)
     _mount_bare_path(app, _mcp_app, mcp_server.MOUNT_PATH)
     app.include_router(oauth_consent.router)
     app.mount(mcp_server.MOUNT_PATH, _mcp_app)

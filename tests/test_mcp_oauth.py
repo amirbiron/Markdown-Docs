@@ -14,6 +14,7 @@ from __future__ import annotations
 import asyncio
 import base64
 import hashlib
+import re
 import secrets
 from urllib.parse import parse_qs, urlparse
 
@@ -699,3 +700,112 @@ async def test_the_whole_flow_runs_through_the_root_paths(client, clean_projects
     output = _tool_output(call)
     assert output["ok"] is True, output
     assert output["document_count"] == 1
+
+
+# ── ה-CSP של מסך האישור ───────────────────────────────────────────────
+#
+# הבאג שהחלק הזה נולד ממנו: ה-CSP הגלובלי מכריז ``form-action 'none'``,
+# כי האפליקציה היא SPA בלי טפסי HTML. מסך האישור הוא הטופס היחיד
+# במערכת, ולכן הדפדפן חסם את הלחיצה על "אישור" — בשקט, בלי שגיאה
+# גלויה ובלי בקשת רשת. מבחוץ זה נראה ככפתור מת.
+#
+# אף בדיקה קיימת לא תפסה את זה, כי httpx אינו אוכף CSP: הן שלחו POST
+# ישירות לנתיב במקום להגיש את הטופס שבדף. הבדיקות כאן קוראות את ה-HTML
+# עצמו ומוודאות שההצהרה מתירה את מה שהדף באמת עושה.
+
+
+def _csp_directive(header: str, name: str) -> list[str]:
+    """מחלץ הנחיה אחת מכותרת CSP. מחזיר רשימה ריקה אם היא לא הוצהרה."""
+    for chunk in header.split(";"):
+        parts = chunk.split()
+        if parts and parts[0].lower() == name:
+            return parts[1:]
+    return []
+
+
+async def _consent_page(client) -> tuple[str, str]:
+    """מגיע למסך האישור המחובר ומחזיר (HTML, כותרת ה-CSP)."""
+    registration = (
+        await client.post(
+            "/register",
+            json={
+                "client_name": "בדיקת CSP",
+                "redirect_uris": [REDIRECT],
+                "grant_types": ["authorization_code", "refresh_token"],
+                "response_types": ["code"],
+                "token_endpoint_auth_method": "client_secret_post",
+            },
+        )
+    ).json()
+    _, challenge = _pkce()
+    authorize = await client.get(
+        "/authorize",
+        params={
+            "client_id": registration["client_id"],
+            "redirect_uri": REDIRECT,
+            "response_type": "code",
+            "code_challenge": challenge,
+            "code_challenge_method": "S256",
+        },
+    )
+    await _login(client)
+    page = await client.get(authorize.headers["location"])
+    assert page.status_code == 200, page.text
+    return page.text, page.headers.get("content-security-policy", "")
+
+
+async def test_the_consent_page_allows_its_own_form_to_be_submitted(client):
+    """הבדיקה השורשית: ההצהרה נגזרת מה-HTML, לא מרשימה קבועה.
+
+    כל ``action`` שמופיע בדף חייב להיות מותר ב-``form-action``. אם ייווסף
+    בעתיד טופס נוסף, או ישתנה היעד של הקיים, הבדיקה תיפול מעצמה — במקום
+    שהכפתור ימות בשקט אצל המשתמש.
+    """
+    html, csp = await _consent_page(client)
+    actions = re.findall(r"<form[^>]*\baction=\"([^\"]*)\"", html)
+    assert actions, "מסך האישור אמור להכיל טופס"
+
+    allowed = _csp_directive(csp, "form-action")
+    assert allowed, "דף עם טופס חייב להצהיר form-action משלו"
+    assert "'none'" not in allowed, "form-action 'none' חוסם את הטופס שבדף עצמו"
+
+    for action in actions:
+        # יעד יחסי נשלח לאותו מקור, ולכן 'self' הוא מה שמתיר אותו.
+        assert action.startswith("/"), f"יעד לא צפוי בטופס: {action}"
+        assert "'self'" in allowed, f"{action} נשלח ל-origin שלנו ו-'self' חסר"
+
+
+async def test_the_consent_csp_allows_the_redirect_target(client):
+    """ההפניה אחרי האישור יוצאת ל-origin של הלקוח.
+
+    חלק מהדפדפנים אוכפים ``form-action`` גם על ההפניה שנובעת משליחת
+    הטופס, ולכן ``'self'`` לבדו אינו מספיק: בלי מקור ההפניה, האישור היה
+    מצליח בשרת והמשתמש היה נתקע על מסך ריק.
+    """
+    _, csp = await _consent_page(client)
+    allowed = _csp_directive(csp, "form-action")
+    assert urlparse(REDIRECT).scheme + "://" + urlparse(REDIRECT).netloc in allowed
+
+
+async def test_the_consent_csp_stays_stricter_than_the_global_one(client):
+    """ההיתר לטופס אינו נפתח לשום כיוון אחר.
+
+    הדף עצמאי — בלי JS, בלי תמונות, בלי מקורות חיצוניים — ולכן ההצהרה
+    שלו צריכה להיות מחמירה מזו של האפליקציה, ולא רק שונה ממנה.
+    """
+    _, csp = await _consent_page(client)
+    assert _csp_directive(csp, "default-src") == ["'none'"]
+    assert _csp_directive(csp, "frame-ancestors") == ["'none'"]
+    assert _csp_directive(csp, "base-uri") == ["'none'"]
+    assert not _csp_directive(csp, "script-src"), "אין סקריפטים בדף, ולכן אין מה להתיר"
+
+
+async def test_pages_without_a_form_keep_the_global_policy(client):
+    """דף הודעה אינו שולח כלום, ולכן אינו מקבל היתר.
+
+    ההרפיה ניתנת לדף שיש בו טופס בלבד. דף שגיאה שמקבל אותה "ליתר ביטחון"
+    מרחיב את המשטח בלי סיבה.
+    """
+    expired = await client.get("/mcp-consent", params={"txn": "not-a-real-txn"})
+    assert expired.status_code == 400
+    assert "form-action 'none'" in expired.headers.get("content-security-policy", "")

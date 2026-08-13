@@ -31,10 +31,18 @@ from tests.conftest import (  # noqa: F401
 
 @pytest.fixture
 async def identity(seeded_admin):
+    """הזהות שהכלים מקבלים.
+
+    ה-User יוצא מהסשן מנותק, וזה בסדר כאן רק משום ששכבת השירות ניגשת
+    ל-user.id בלבד והוא נטען לפני הסגירה. הגישה המפורשת ל-id אינה
+    קישוט: היא מוודאת שהשדה באמת טעון, כך שאם מישהו יוסיף commit
+    ל-fixture בעתיד הכשל יופיע כאן ולא בבדיקה אקראית כלשהי.
+    """
     async with SessionLocal() as session:
         user = (
             await session.execute(select(User).where(User.email == EMAIL))
         ).scalar_one()
+        assert user.id is not None
     return Identity(user=user, scopes=frozenset({"read", "write"}))
 
 

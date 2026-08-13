@@ -14,6 +14,7 @@
 from __future__ import annotations
 
 import difflib
+import math
 from typing import Any
 
 from app.config import get_settings
@@ -33,11 +34,15 @@ def clamp(value: Any, low: int, high: int, default: int) -> int:
     מודל ששלח limit=1000 התכוון ל"הרבה". דחייה מכריחה אותו לנחש שוב
     ולשרוף סיבוב; חיתוך נותן לו תשובה שימושית מיד.
 
-    OverflowError ברשימה: int(float("inf")) אינו ValueError אלא
-    OverflowError, ו-JSON יכול להגיע עם Infinity. פונקציה שכל תפקידה
-    הוא לא ליפול על קלט חריג לא אמורה ליפול על הקלט החריג ביותר.
-    NaN נתפס ב-ValueError.
+    NaN ו-Infinity נבדקים במפורש לפני ההמרה: json.loads מקבל את
+    הליטרלים האלה כברירת מחדל, כך ש-limit: Infinity מגיע לכאן כ-float
+    אינסופי. int(float("inf")) זורק OverflowError — ולא ValueError —
+    ופונקציה שכל תפקידה הוא לא ליפול על קלט חריג לא אמורה ליפול על
+    הקלט החריג ביותר. OverflowError נשאר ברשימה כרשת ביטחון לטיפוסים
+    שאינם float אבל מתרגמים למספר עצום.
     """
+    if isinstance(value, float) and (math.isnan(value) or math.isinf(value)):
+        return default
     try:
         number = int(value)
     except (TypeError, ValueError, OverflowError):

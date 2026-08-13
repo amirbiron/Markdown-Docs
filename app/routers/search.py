@@ -69,6 +69,8 @@ async def search(
             Document.title,
             snippet,
             rank.label("rank"),
+            Document.id,
+            Document.updated_at,
         ).join(Project, Document.project_id == Project.id),
         viewer,
     ).where(Document.search_vector.op("@@")(tsquery))
@@ -79,19 +81,25 @@ async def search(
 
     rows = (await session.execute(query)).all()
     if rows:
-        return [
-            SearchHit(
-                project_slug=row[0],
-                project_name=row[1],
-                doc_slug=row[2],
-                title=row[3],
-                snippet=row[4],
-                match="text",
-            )
-            for row in rows
-        ]
+        return [_hit(row, match="text", viewer=viewer) for row in rows]
 
     return await _fuzzy(session, term, limit, viewer)
+
+
+def _hit(row, *, match: str, viewer: User | None) -> SearchHit:
+    """בונה תוצאה אחת. שני המסלולים בוחרים את אותן עמודות באותו סדר."""
+    return SearchHit(
+        project_slug=row[0],
+        project_name=row[1],
+        doc_slug=row[2],
+        title=row[3],
+        snippet=row[4],
+        rank=float(row[5]),
+        # המזהה נחשף רק לבעלים. ראו ההערה ב-SearchHit.doc_id.
+        doc_id=row[6] if viewer is not None else None,
+        updated_at=row[7],
+        match=match,
+    )
 
 
 async def _fuzzy(session: AsyncSession, term: str, limit: int, viewer: User | None):
@@ -111,6 +119,8 @@ async def _fuzzy(session: AsyncSession, term: str, limit: int, viewer: User | No
                 Document.title,
                 func.left(Document.content, 200),
                 similarity.label("sim"),
+                Document.id,
+                Document.updated_at,
             ).join(Project, Document.project_id == Project.id),
             viewer,
         )
@@ -127,14 +137,4 @@ async def _fuzzy(session: AsyncSession, term: str, limit: int, viewer: User | No
 
     rows = (await session.execute(query)).all()
     logger.info("חיפוש '%s' נפל לדמיון והחזיר %d תוצאות", term, len(rows))
-    return [
-        SearchHit(
-            project_slug=row[0],
-            project_name=row[1],
-            doc_slug=row[2],
-            title=row[3],
-            snippet=row[4],
-            match="fuzzy",
-        )
-        for row in rows
-    ]
+    return [_hit(row, match="fuzzy", viewer=viewer) for row in rows]

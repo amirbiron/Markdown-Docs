@@ -23,7 +23,7 @@ from httpx import ASGITransport, AsyncClient
 
 from app.db import SessionLocal
 from app.main import app
-from app.mcp import oauth_store as store
+from app.mcp import oauth_consent, oauth_store as store
 # קבועים ופונקציות עזר בלבד. את ה-fixtures — seeded_admin,
 # clean_projects, mcp_lifespan — אין לייבא: pytest מוצא אותם ב-conftest
 # לבד, וייבוא רושם אותם מחדש במודול עם cache נפרד. ראו conftest.
@@ -723,14 +723,20 @@ def _csp_directive(header: str, name: str) -> list[str]:
     return []
 
 
-async def _consent_page(client) -> tuple[str, str]:
+def _origin(url: str) -> str:
+    """scheme://host[:port] — מה ש-form-action מצפה לו."""
+    parsed = urlparse(url)
+    return f"{parsed.scheme}://{parsed.netloc}"
+
+
+async def _consent_page(client, redirect: str = REDIRECT) -> tuple[str, str]:
     """מגיע למסך האישור המחובר ומחזיר (HTML, כותרת ה-CSP)."""
     registration = (
         await client.post(
             "/register",
             json={
                 "client_name": "בדיקת CSP",
-                "redirect_uris": [REDIRECT],
+                "redirect_uris": [redirect],
                 "grant_types": ["authorization_code", "refresh_token"],
                 "response_types": ["code"],
                 "token_endpoint_auth_method": "client_secret_post",
@@ -742,7 +748,7 @@ async def _consent_page(client) -> tuple[str, str]:
         "/authorize",
         params={
             "client_id": registration["client_id"],
-            "redirect_uri": REDIRECT,
+            "redirect_uri": redirect,
             "response_type": "code",
             "code_challenge": challenge,
             "code_challenge_method": "S256",
@@ -774,6 +780,10 @@ async def test_the_consent_page_allows_its_own_form_to_be_submitted(client):
         assert action.startswith("/"), f"יעד לא צפוי בטופס: {action}"
         assert "'self'" in allowed, f"{action} נשלח ל-origin שלנו ו-'self' חסר"
 
+    # וגם הכיוון ההפוך: ההיתר מוצהר במלואו ואין בו מקור עודף. בלי זה
+    # הבדיקה הייתה עוברת גם על form-action *, שהוא הרפיה גמורה.
+    assert set(allowed) == {"'self'", _origin(REDIRECT)}, f"מקורות עודפים ב-form-action: {allowed}"
+
 
 async def test_the_consent_csp_allows_the_redirect_target(client):
     """ההפניה אחרי האישור יוצאת ל-origin של הלקוח.
@@ -783,8 +793,42 @@ async def test_the_consent_csp_allows_the_redirect_target(client):
     מצליח בשרת והמשתמש היה נתקע על מסך ריק.
     """
     _, csp = await _consent_page(client)
+    assert _origin(REDIRECT) in _csp_directive(csp, "form-action")
+
+
+# שתי הבדיקות הבאות חולקות שורש אחד: **דפדפן שנתקל ב-source-expression
+# לא חוקי עלול לפסול את ההנחיה כולה.** ואז form-action נעלם, הטופס נחסם,
+# והמשתמש חוזר בדיוק לכפתור המת שהקוד הזה בא לתקן.
+#
+# הרישום פתוח לכל דורש, ולכן שתי הכתובות שנבדקות כאן הן קלט אפשרי ולא
+# תרחיש תיאורטי: ה-SDK מאמת שה-redirect_uri תואם למה שנרשם — לא שהוא
+# ניתן לביטוי ב-CSP.
+
+
+async def test_a_scheme_that_cannot_be_expressed_is_left_out(client):
+    """``myapp://`` אינו ניתן לביטוי, ולכן הוא מושמט ולא נדחף פגום.
+
+    הדף נשאר עם ``'self'`` בלבד — מספיק לטופס עצמו, שנשלח לנתיב שלנו.
+    """
+    _, csp = await _consent_page(client, redirect="myapp://callback")
+    assert _csp_directive(csp, "form-action") == ["'self'"]
+
+
+async def test_credentials_are_stripped_from_the_origin(client):
+    """פרטי הזדהות בכתובת נחתכים, וההפניה עצמה נשארת מותרת.
+
+    ``https://user:pass@host`` אינו source-expression חוקי, אבל המקור
+    שמאחוריו כן — והוא גם לאן שהדפדפן באמת ינווט, שכן הוא מתעלם
+    מפרטי ההזדהות בניווט. לכן חיתוך מדויק יותר מהשמטה: הוא משאיר את
+    ההיתר תואם ליעד בפועל, במקום להסתמך על ``'self'`` שאינו מכסה אותו.
+    """
+    _, csp = await _consent_page(client, redirect="https://user:pass@example.com/cb")
     allowed = _csp_directive(csp, "form-action")
-    assert urlparse(REDIRECT).scheme + "://" + urlparse(REDIRECT).netloc in allowed
+
+    assert allowed == ["'self'", "https://example.com"]
+    assert not any("pass" in source or "@" in source for source in allowed), (
+        f"פרטי הזדהות דלפו להנחיה: {allowed}"
+    )
 
 
 async def test_the_consent_csp_stays_stricter_than_the_global_one(client):
@@ -797,6 +841,9 @@ async def test_the_consent_csp_stays_stricter_than_the_global_one(client):
     assert _csp_directive(csp, "default-src") == ["'none'"]
     assert _csp_directive(csp, "frame-ancestors") == ["'none'"]
     assert _csp_directive(csp, "base-uri") == ["'none'"]
+    # העיצוב inline, ולכן ההיתר נדרש — אבל רק הוא. מקור חיצוני שיתווסף
+    # לדף בעתיד ייפול כאן, ולא יעבור בשקט.
+    assert _csp_directive(csp, "style-src") == ["'unsafe-inline'"]
     assert not _csp_directive(csp, "script-src"), "אין סקריפטים בדף, ולכן אין מה להתיר"
 
 
@@ -809,3 +856,41 @@ async def test_pages_without_a_form_keep_the_global_policy(client):
     expired = await client.get("/mcp-consent", params={"txn": "not-a-real-txn"})
     assert expired.status_code == 400
     assert "form-action 'none'" in expired.headers.get("content-security-policy", "")
+
+
+@pytest.mark.parametrize(
+    ("redirect_uri", "expected"),
+    [
+        ("https://claude.ai/api/mcp/auth_callback", "https://claude.ai"),
+        ("http://127.0.0.1:8765/cb", "http://127.0.0.1:8765"),
+        ("https://user:pass@example.com/cb", "https://example.com"),
+        ("http://[::1]:9000/cb", ""),
+        ("https://xn--4dbrk0ce.example/cb", "https://xn--4dbrk0ce.example"),
+        ("https://ישראל.example/cb", ""),
+        ("myapp://callback", ""),
+        ("https:///cb", ""),
+        ("http://host:notaport/cb", ""),
+        ("", ""),
+    ],
+    ids=[
+        "רגיל",
+        "עם-פורט",
+        "פרטי-הזדהות",
+        "IPv6",
+        "IDN-מקודד",
+        "IDN-גולמי",
+        "scheme-זר",
+        "בלי-host",
+        "פורט-פגום",
+        "ריק",
+    ],
+)
+def test_the_origin_is_built_only_from_parts_csp_can_express(redirect_uri, expected):
+    """בדיקת יחידה על הפונקציה עצמה, כדי לכסות את הענפים בלי לרוץ זרימה.
+
+    ``host-char`` בדקדוק של CSP הוא ALPHA / DIGIT / "-" בלבד, ולכן
+    **IPv6 אינו ניתן לביטוי כלל** — לא בסוגריים ולא בלעדיהן. אותו כלל
+    פוסל דומיין לא-ASCII שלא קודד ל-punycode, ומזה נובע גם שאי אפשר
+    להזריק ``;`` או רווח לכותרת דרך הערך הזה.
+    """
+    assert oauth_consent._redirect_origin(redirect_uri) == expected

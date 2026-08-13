@@ -19,6 +19,7 @@
 from __future__ import annotations
 
 import html
+import re
 import uuid
 from urllib.parse import urlsplit
 
@@ -41,6 +42,11 @@ SCOPE_LABELS = {
 }
 
 
+# ה-host-part של CSP, מילה במילה מהדקדוק. הנקודה הסופית מותרת (שורש
+# ה-DNS), ותוויות ריקות אינן. אין כאן wildcards כי איננו מייצרים כאלה.
+_CSP_HOST = re.compile(r"[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)*\.?")
+
+
 def _redirect_origin(redirect_uri: str) -> str:
     """המקור (scheme://host:port) שאליו ההפניה תלך, לצורך ה-CSP.
 
@@ -48,14 +54,44 @@ def _redirect_origin(redirect_uri: str) -> str:
     הכתובות הרשומות של הלקוח לפני שקרא ל-``authorize``. כלומר זו אינה
     מחרוזת שרירותית מהרשת, אלא ערך שעבר ולידציה.
 
-    scheme שאינו http/https (למשל ``myapp://``) מוחזר כמחרוזת ריקה —
-    ``form-action`` אינו יודע לבטא אותו, וניסיון לדחוף אותו לתוך
-    ההנחיה היה פוסל את כל ההנחיה ומחזיר אותנו לנקודת ההתחלה.
+    כתובת שאינה מתבטאת כ-``host-source`` תקין מוחזרת כמחרוזת ריקה,
+    והדף נשאר עם ``'self'`` בלבד. זה מכוון: **ערך פגום בהנחיה גרוע
+    מערך חסר**, כי דפדפן שפוסל את ההנחיה מחזיר אותנו בדיוק לבאג שהקוד
+    הזה בא לתקן — כפתור שלא עושה כלום.
+
+    לכן הבדיקה כאן היא מול הדקדוק של CSP ולא רשימת מקרים אסורים:
+
+        host-part = "*" / [ "*." ] 1*host-char *( "." 1*host-char) [ "." ]
+        host-char = ALPHA / DIGIT / "-"
+
+    כלומר אותיות ASCII, ספרות, מקפים ונקודות — וזהו. allowlist ולא
+    blocklist, כי רשימת מה שאסור לעולם אינה שלמה. שלושה מקרים ממשיים
+    נופלים ממנה מעצמם, בלי שנצטרך לחשוב עליהם אחד-אחד:
+
+    * ``https://user:pass@host`` — ``@`` ו-``:`` אינם ``host-char``.
+      הרישום פתוח לכל דורש, ולכן זו אפשרות ממשית: ה-SDK מאמת שהכתובת
+      תואמת לזו שנרשמה, לא שהיא ניתנת לביטוי ב-CSP.
+    * ``http://[::1]:9000`` — הדקדוק **אינו מגדיר IP-literal בכלל**,
+      ודפדפנים פוסלים כתובת IPv6 בסוגריים. אין דרך לבטא אותה, ולכן
+      אין מה לנסות.
+    * דומיין לא-ASCII, רווח או ``;`` — האחרון גם מפצל את הכותרת עצמה.
+
+    ``scheme`` שאינו http/https (``myapp://``) נופל עוד קודם: הדקדוק
+    מכיר רק ב-scheme של URL, ואין ל-``form-action`` דרך לבטא אחר.
     """
     parsed = urlsplit(redirect_uri)
-    if parsed.scheme in ("http", "https") and parsed.netloc:
-        return f"{parsed.scheme}://{parsed.netloc}"
-    return ""
+    if parsed.scheme not in ("http", "https"):
+        return ""
+
+    try:
+        host, port = parsed.hostname, parsed.port
+    except ValueError:
+        # פורט שאינו מספר — urlsplit דוחה אותו רק כשניגשים ל-port.
+        return ""
+
+    if not host or not _CSP_HOST.fullmatch(host):
+        return ""
+    return f"{parsed.scheme}://{host}" + (f":{port}" if port else "")
 
 
 def _consent_csp(form_action: str) -> str:

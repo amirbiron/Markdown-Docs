@@ -19,7 +19,9 @@
 from __future__ import annotations
 
 import html
+import re
 import uuid
+from urllib.parse import urlsplit
 
 from fastapi import APIRouter, Depends, Form, Request, status
 from fastapi.responses import HTMLResponse, RedirectResponse
@@ -40,15 +42,102 @@ SCOPE_LABELS = {
 }
 
 
-def _page(title: str, body: str, *, status_code: int = 200) -> HTMLResponse:
+# ה-host-part של CSP, מילה במילה מהדקדוק. הנקודה הסופית מותרת (שורש
+# ה-DNS), ותוויות ריקות אינן. אין כאן wildcards כי איננו מייצרים כאלה.
+_CSP_HOST = re.compile(r"[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)*\.?")
+
+
+def _redirect_origin(redirect_uri: str) -> str:
+    """המקור (scheme://host:port) שאליו ההפניה תלך, לצורך ה-CSP.
+
+    ה-``redirect_uri`` הגיע מהעסקה החתומה, וה-SDK כבר אימת אותו מול
+    הכתובות הרשומות של הלקוח לפני שקרא ל-``authorize``. כלומר זו אינה
+    מחרוזת שרירותית מהרשת, אלא ערך שעבר ולידציה.
+
+    כתובת שאינה מתבטאת כ-``host-source`` תקין מוחזרת כמחרוזת ריקה,
+    והדף נשאר עם ``'self'`` בלבד. זה מכוון: **ערך פגום בהנחיה גרוע
+    מערך חסר**, כי דפדפן שפוסל את ההנחיה מחזיר אותנו בדיוק לבאג שהקוד
+    הזה בא לתקן — כפתור שלא עושה כלום.
+
+    לכן הבדיקה כאן היא מול הדקדוק של CSP ולא רשימת מקרים אסורים:
+
+        host-part = "*" / [ "*." ] 1*host-char *( "." 1*host-char) [ "." ]
+        host-char = ALPHA / DIGIT / "-"
+
+    כלומר אותיות ASCII, ספרות, מקפים ונקודות — וזהו. allowlist ולא
+    blocklist, כי רשימת מה שאסור לעולם אינה שלמה. שלושה מקרים ממשיים
+    נופלים ממנה מעצמם, בלי שנצטרך לחשוב עליהם אחד-אחד:
+
+    * ``https://user:pass@host`` — ``@`` ו-``:`` אינם ``host-char``.
+      הרישום פתוח לכל דורש, ולכן זו אפשרות ממשית: ה-SDK מאמת שהכתובת
+      תואמת לזו שנרשמה, לא שהיא ניתנת לביטוי ב-CSP.
+    * ``http://[::1]:9000`` — הדקדוק **אינו מגדיר IP-literal בכלל**,
+      ודפדפנים פוסלים כתובת IPv6 בסוגריים. אין דרך לבטא אותה, ולכן
+      אין מה לנסות.
+    * דומיין לא-ASCII, רווח או ``;`` — האחרון גם מפצל את הכותרת עצמה.
+
+    ``scheme`` שאינו http/https (``myapp://``) נופל עוד קודם: הדקדוק
+    מכיר רק ב-scheme של URL, ואין ל-``form-action`` דרך לבטא אחר.
+    """
+    parsed = urlsplit(redirect_uri)
+    if parsed.scheme not in ("http", "https"):
+        return ""
+
+    try:
+        host, port = parsed.hostname, parsed.port
+    except ValueError:
+        # פורט שאינו מספר — urlsplit דוחה אותו רק כשניגשים ל-port.
+        return ""
+
+    if not host or not _CSP_HOST.fullmatch(host):
+        return ""
+    return f"{parsed.scheme}://{host}" + (f":{port}" if port else "")
+
+
+def _consent_csp(form_action: str) -> str:
+    """ה-CSP של דף האישור, שמוגדר בנפרד מזה של האפליקציה.
+
+    **זה מה שהפיל את הזרימה.** ה-CSP הגלובלי כולל ``form-action 'none'``,
+    כי האפליקציה היא SPA שאינה שולחת טפסי HTML כלל. דף האישור הוא הטופס
+    היחיד במערכת, ולכן הכלל הגורף חסם אותו: הדפדפן בלע את הלחיצה על
+    "אישור" בשקט, בלי שגיאה גלויה ובלי בקשת רשת.
+
+    מידלוור הכותרות משתמש ב-``setdefault``, ולכן תגובה שמביאה CSP משלה
+    שומרת עליו. ההנחיה כאן **מחמירה** מהגלובלית בכל היתר שאר הכיוונים
+    (``default-src 'none'``, בלי script בכלל), ומרפה רק במה שהדף חייב.
+
+    ``form-action`` מקבל גם את ``'self'`` (הטופס נשלח לנתיב הזה עצמו)
+    וגם את מקור ההפניה, כי חלק מהדפדפנים אוכפים את ההנחיה גם על ההפניה
+    שנובעת מהשליחה. שני הערכים ידועים מראש ומאומתים, ולכן זה היתר צר
+    ולא הרפיה גורפת.
+    """
+    return "; ".join(
+        [
+            "default-src 'none'",
+            "style-src 'unsafe-inline'",
+            f"form-action {form_action}",
+            "base-uri 'none'",
+            "frame-ancestors 'none'",
+        ]
+    )
+
+
+def _page(
+    title: str, body: str, *, status_code: int = 200, form_action: str | None = None
+) -> HTMLResponse:
     """עמוד עצמאי, בלי תלות ב-CSS של האפליקציה.
 
     הדף הזה נפתח בחלון קופץ שנשלט על ידי הלקוח, ולעיתים קרובות נסגר
     מיד אחרי האישור. טעינת גיליון סגנון חיצוני הייתה מוסיפה סיבוב רשת
     שלפעמים לא מספיק להסתיים, והמשתמש היה רואה טקסט לא מעוצב.
+
+    ``form_action`` מועבר רק בדף שיש בו טופס. דפי ההודעות נשארים תחת
+    ה-CSP הגלובלי המחמיר, כי אין להם מה לשלוח.
     """
+    headers = {"Content-Security-Policy": _consent_csp(form_action)} if form_action else None
     return HTMLResponse(
         status_code=status_code,
+        headers=headers,
         content=f"""<!doctype html>
 <html lang="he" dir="rtl">
 <head>
@@ -176,6 +265,9 @@ async def consent_form(
         f'<button class="primary" type="submit" name="decision" value="allow">אישור</button>'
         f'<button class="secondary" type="submit" name="decision" value="deny">ביטול</button>'
         f"</div></form>",
+        form_action=" ".join(
+            filter(None, ["'self'", _redirect_origin(payload.get("redirect_uri", ""))])
+        ),
     )
 
 

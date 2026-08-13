@@ -72,6 +72,9 @@ CSP = "; ".join(
         "img-src 'self' data:",
         "connect-src 'self'",
         "base-uri 'self'",
+        # חריג יחיד: מסך אישור ה-OAuth של ה-MCP הוא טופס HTML, והכלל הזה
+        # חסם אותו בשקט. הוא מגיש CSP משלו, והמידלוור למטה משתמש
+        # ב-setdefault ולכן אינו דורס אותו. ראו app/mcp/oauth_consent.py.
         "form-action 'none'",
         "frame-ancestors 'none'",
         "object-src 'none'",

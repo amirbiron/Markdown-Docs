@@ -125,6 +125,32 @@ const ok = (l, v, x) => { R.push(v); console.log(`  ${v ? '✓' : '✗'}  ${l}${
       Object.keys(localStorage).filter((k) => k.indexOf('md-docs-draft-v1:') === 0));
     ok('הגשה מוצלחת מוחקת את הגיבוי', afterSubmit.length === 0, JSON.stringify(afterSubmit));
 
+    // ── מסך יצירה ריק אינו מוחק טיוטה קיימת ──────────────────────────
+    // הגרסה הראשונה מחקה כאן תמיד: "מסמך חדש" ואז יציאה, בלי להקליד
+    // תו, מחקו טיוטה שנשמרה קודם — בלי אישור ובלי סימן. זה בדיוק
+    // הכישלון שהמנגנון בא למנוע, ולכן הוא נבדק ולא רק תוקן.
+    await p.getByRole('button', { name: /כתיבת מסמך חדש|new document|מסמך חדש/i }).first().click();
+    await p.waitForTimeout(1200);
+    await p.fill('textarea', '# עבודה יקרה\n\nלא ללכת לאיבוד.\n');
+    await p.waitForTimeout(2200);
+    await p.reload({ waitUntil: 'load' });
+    await p.waitForSelector('#dc-root');
+    await p.waitForTimeout(3200);
+    await p.getByRole('button', { name: /כתיבת מסמך חדש|new document|מסמך חדש/i }).first().click();
+    await p.waitForTimeout(1200);
+    await p.getByRole('button', { name: 'פרויקטים', exact: true }).click();
+    await p.waitForTimeout(1600);
+    const survived = await p.evaluate(() =>
+      Object.keys(localStorage).filter((k) => k.indexOf('md-docs-draft-v1:') === 0));
+    ok('מסך יצירה ריק אינו מוחק טיוטה קיימת', survived.length === 1, JSON.stringify(survived));
+
+    // ניקוי לקראת ההמשך: הפעם מוחקים במפורש מהבאנר.
+    await p.goto(BASE + '/#/' + encodeURIComponent(setup.slug), { waitUntil: 'load' });
+    await p.waitForSelector('#dc-root');
+    await p.waitForTimeout(3200);
+    await p.getByRole('button', { name: 'מחיקה', exact: true }).first().click();
+    await p.waitForTimeout(1000);
+
     // ── מסמך קיים: שמירה שנכשלה משאירה גיבוי ─────────────────────────
     await p.locator('a[href="#top"]').filter({ hasText: 'קיים' }).first().click();
     await p.waitForTimeout(1800);

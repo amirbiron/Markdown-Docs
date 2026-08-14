@@ -1389,7 +1389,10 @@ function readDraft(key) {
 
   let data = null;
   try { data = JSON.parse(raw); } catch (e) { dropDraft(key); return null; }
-  if (!data || data.v !== 1 || typeof data.at !== "number" || typeof data.content !== "string") {
+  /* Number.isFinite ולא typeof: NaN ו-Infinity שניהם "number", ושניהם
+     הופכים את השוואת התפוגה ל-false — כלומר טיוטה פגומה שנחשבת תקפה
+     לנצח ואינה נמחקת לעולם (כלל 4). */
+  if (!data || data.v !== 1 || !Number.isFinite(data.at) || typeof data.content !== "string") {
     dropDraft(key);
     return null;
   }
@@ -1418,7 +1421,7 @@ function pruneDrafts() {
 function sinceLabel(at) {
   const mins = Math.floor((Date.now() - at) / 60000);
   if (mins < 1) return "לפני רגע";
-  if (mins < 60) return "לפני " + mins + " דקות";
+  if (mins < 60) return mins === 1 ? "לפני דקה" : "לפני " + mins + " דקות";
   const hours = Math.floor(mins / 60);
   if (hours < 24) return hours === 1 ? "לפני שעה" : "לפני " + hours + " שעות";
   const days = Math.floor(hours / 24);
@@ -2069,6 +2072,7 @@ class Component extends DCLogic {
     clearTimeout(this.codeTimer);
     clearTimeout(this.previewTimer);
     clearTimeout(this.saveTimer);
+    clearTimeout(this.draftTimer);
     clearTimeout(this.timer);
     if (this.mqNarrow) this.mqNarrow.removeEventListener("change", this.onMq);
     if (this.mqMobile) this.mqMobile.removeEventListener("change", this.onMq);
@@ -2570,9 +2574,12 @@ class Component extends DCLogic {
   mayDiscardDraft() {
     if (!this.state.creating) return true;
     const dirty = this.state.editBuf.trim() || this.state.draftTitle.trim();
-    if (dirty && !window.confirm("הטיוטה שנכתבה כאן תימחק. להמשיך?")) return false;
-    /* המשתמש בחר לזרוק — והגיבוי המקומי הוא חלק ממה שנזרק. אחרת
-       הבאנר היה מציע לשחזר בדיוק את מה שהרגע אישר למחוק. */
+    /* מסך יצירה ריק אינו מוחק דבר. הגרסה הקודמת מחקה כאן תמיד, ולכן
+       לחיצה על "מסמך חדש" ויציאה — בלי להקליד תו — מחקה טיוטה שנשמרה
+       קודם לכן, בלי אישור ובלי סימן. מה שנמחק הוא מה שהמשתמש אישר
+       לזרוק, ולא מה שבמקרה יושב תחת אותו מפתח. */
+    if (!dirty) return true;
+    if (!window.confirm("הטיוטה שנכתבה כאן תימחק. להמשיך?")) return false;
     this.dropDraftNow();
     return true;
   }
@@ -2683,7 +2690,7 @@ class Component extends DCLogic {
          בלעדיו התוכן היה יושב כ-dirty עד שהמשתמש יקליד תו — כלומר
          שחזור שאינו מגיע לשרת, וזה בדיוק המצב שממנו באנו. */
       this.setState({
-        editing: true, saveState: "dirty",
+        creating: false, editing: true, saveState: "dirty",
         editBuf: data.content, editView: data.content, draftNotice: null
       }, () => { this.flushSave(); });
     }
@@ -3513,7 +3520,11 @@ class Component extends DCLogic {
       /* --- גיבוי מקומי --- */
       /* canEdit ולא רק "יש הצעה": אורח אינו יכול לשמור, ולכן הצעה
          לשחזר אצלו היא מבוי סתום. */
-      draftVisible: onProject && canEdit && !!s.draftNotice,
+      /* לא מעל מסך היצירה. שני המסכים חולקים את editBuf, ולכן שחזור
+         משם היה דורס את מה שהוקלד בטיוטה הפתוחה בלי לשאול — וגם משאיר
+         את שני המסכים דלוקים על אותו buffer. מי שרוצה לשחזר יוצא
+         ממסך היצירה, וההצעה חוזרת. */
+      draftVisible: onProject && canEdit && !s.creating && !!s.draftNotice,
       draftLabel: s.draftNotice
         ? (s.draftNotice.kind === "create"
             ? "יש טיוטה שלא נשמרה, " + sinceLabel(s.draftNotice.at)

@@ -411,6 +411,21 @@ body, aside, header, section, main { transition: background-color 0.2s ease, bor
         <div style="margin:0 0 22px;padding:22px;border:2px dashed var(--accent);border-radius:var(--r-md);background:var(--accent-soft);text-align:center;font-size:15.5px;color:var(--accent-text)">שחררו כאן כדי להוסיף לפרויקט</div>
       </sc-if>
 
+      <!-- הצעה לשחזר גיבוי מקומי. באנר ולא שחזור אוטומטי: טיוטה
+           נטושה שקופצת ודורסת את מה שנכתב עכשיו היא נזק. -->
+      <sc-if value="{{ draftVisible }}" hint-placeholder-val="{{ false }}">
+      <div data-draft-notice="1" style="display:flex;flex-wrap:wrap;align-items:center;gap:10px 14px;margin:0 0 22px;padding:14px 18px;border:1px solid var(--amber);border-radius:var(--r-md);background:var(--tint)">
+        <span dir="auto" style="flex:1;min-width:200px;font-size:14.5px;line-height:1.6;color:var(--text)">{{ draftLabel }}</span>
+        <!-- האזהרה מופיעה רק כשהשרת באמת השתנה מאז. שורה שמזהירה תמיד
+             נקראת כרעש קבוע ומפסיקים לראות אותה. -->
+        <sc-if value="{{ draftStale }}" hint-placeholder-val="{{ false }}">
+        <span dir="auto" style="flex:1;min-width:200px;font-size:13px;line-height:1.6;color:var(--red)">{{ draftStaleNote }}</span>
+        </sc-if>
+        <button onClick="{{ restoreDraft }}" style="flex:none;padding:7px 15px;border:1px solid var(--accent);border-radius:var(--r-sm);background:var(--accent);color:var(--accent-on);font-family:inherit;font-size:13.5px;font-weight:600;cursor:pointer">שחזור</button>
+        <button onClick="{{ discardDraft }}" style="flex:none;padding:7px 15px;border:1px solid var(--rule);border-radius:var(--r-sm);background:none;color:var(--muted);font-family:inherit;font-size:13.5px;cursor:pointer">מחיקה</button>
+      </div>
+      </sc-if>
+
       <!-- מסך היצירה יושב ברמת הפרויקט ולא בתוך בלוק המסמך: הוא נפתח
            מכפתור בסרגל, ובפרויקט ריק אין מסמך פתוח שיארח אותו. -->
       <sc-if value="{{ creating }}" hint-placeholder-val="{{ false }}">
@@ -1319,6 +1334,100 @@ const HEBREW_RATIO = 0.3;
 const PREVIEW_MS = 150;
 const SAVE_MS = 2500;
 
+/* ═══════════════════════════════════════════════════════════════════
+   טיוטות מקומיות
+
+   שני חורים שונים נסגרים כאן, ומאותו מנגנון.
+
+   הראשון: מסמך חדש אינו קיים בשרת עד ללחיצה על "הוספה לפרויקט",
+   ולכן flushSave יוצא ממנו מיד. כל מה שנכתב חי ב-editBuf בלבד —
+   רענון, סגירת טאב או קריסה מוחקים אותו. mayDiscardDraft שואל לפני
+   ניווט פנימי, אבל הוא לא נכנס לתמונה ברענון.
+
+   השני: מסמך קיים כן נשמר לשרת, אבל שמירה שנכשלה ברשת משאירה תוכן
+   שלא הגיע לשום מקום. הניסיון החוזר עוזר רק אם הרשת חוזרת לפני
+   שהטאב נסגר.
+
+   הגיבוי המקומי אינו מקור אמת אלא רשת ביטחון: הוא נמחק ברגע שהתוכן
+   הגיע לשרת, ופג אחרי שבוע. טיוטה בת חודש היא רעש ולא הצלה.
+   ═══════════════════════════════════════════════════════════════════ */
+const DRAFT_PREFIX = "md-docs-draft-v1:";
+const DRAFT_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+/* בין הפריוויו לשמירה. localStorage הוא סינכרוני וחוסם, ולכן כתיבה
+   של מסמך ארוך בקצב הפריוויו הייתה מקרטעת — ומצד שני אין סיבה לחכות
+   כמו לבקשת רשת. */
+const DRAFT_MS = 1000;
+
+/* מסמך פתוח → גיבוי עריכה. בלעדיו → טיוטת היצירה של הפרויקט. */
+function draftKey(projectSlug, docSlug) {
+  return DRAFT_PREFIX + projectSlug + (docSlug ? "/" + docSlug : "");
+}
+
+function dropDraft(key) {
+  try { localStorage.removeItem(key); } catch (e) { /* אין מה לעשות */ }
+}
+
+/* כל גישה ל-localStorage עטופה. הוא זורק חריגה סינכרונית כשהמכסה
+   מלאה, וגם כשהדפדפן חוסם אחסון לגמרי (גלישה פרטית בהגדרות מסוימות).
+   בלי העטיפה, הקלדה אחת מפילה את העורך. */
+function writeDraft(key, payload) {
+  try {
+    localStorage.setItem(key, JSON.stringify(payload));
+    return true;
+  } catch (e) {
+    return false;
+  }
+}
+
+/* קריאה שמוחקת מה שאינו תקף — פג תוקף, פגום, או בגרסה אחרת.
+   התפוגה נאכפת כאן ולא אצל הקורא, ולכן היא כלל אחד ולא כמה עותקים
+   שיכולים להיפרד. */
+function readDraft(key) {
+  let raw = null;
+  try { raw = localStorage.getItem(key); } catch (e) { return null; }
+  if (!raw) return null;
+
+  let data = null;
+  try { data = JSON.parse(raw); } catch (e) { dropDraft(key); return null; }
+  /* Number.isFinite ולא typeof: NaN ו-Infinity שניהם "number", ושניהם
+     הופכים את השוואת התפוגה ל-false — כלומר טיוטה פגומה שנחשבת תקפה
+     לנצח ואינה נמחקת לעולם (כלל 4). */
+  if (!data || data.v !== 1 || !Number.isFinite(data.at) || typeof data.content !== "string") {
+    dropDraft(key);
+    return null;
+  }
+  if (Date.now() - data.at > DRAFT_TTL_MS) { dropDraft(key); return null; }
+  return data;
+}
+
+/* ניקוי פגי התוקף. הסריקה אוספת מפתחות תחילה ורק אז קוראת אותם:
+   readDraft מוחק, ומחיקה באמצע לולאה על localStorage.key(i) מזיזה
+   את האינדקסים ומדלגת על מפתחות. */
+function pruneDrafts() {
+  const keys = [];
+  try {
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i);
+      if (k && k.indexOf(DRAFT_PREFIX) === 0) keys.push(k);
+    }
+  } catch (e) {
+    return;
+  }
+  keys.forEach((k) => readDraft(k));
+}
+
+/* "לפני 3 שעות". חותמת זמן מלאה מדויקת יותר ואומרת פחות: מה שקובע
+   אם לשחזר טיוטה הוא כמה זמן עבר, לא באיזו שעה היא נכתבה. */
+function sinceLabel(at) {
+  const mins = Math.floor((Date.now() - at) / 60000);
+  if (mins < 1) return "לפני רגע";
+  if (mins < 60) return mins === 1 ? "לפני דקה" : "לפני " + mins + " דקות";
+  const hours = Math.floor(mins / 60);
+  if (hours < 24) return hours === 1 ? "לפני שעה" : "לפני " + hours + " שעות";
+  const days = Math.floor(hours / 24);
+  return days === 1 ? "אתמול" : "לפני " + days + " ימים";
+}
+
 /* שמות שמשמעותם "זה לא קוד". המחרוזת הריקה היא גדר בלי שפה כלל.
    כל שם אחר — javascript, python, sql — חוסם RTL בלי לבדוק תוכן. */
 const PLAIN_LANGS = new Set(["", "plaintext", "text", "nohighlight", "none", "txt"]);
@@ -1798,6 +1907,14 @@ class Component extends DCLogic {
     editLinkId: null,
     migrating: false, migrateNote: "", copiedDoc: false,
     creating: false, draftTitle: "",
+
+    /* draftNotice — ההצעה לשחזר גיבוי מקומי: { key, kind, at, stale }.
+       באנר ולא שחזור אוטומטי: טיוטה נטושה מלפני שבוע שקופצת ודורסת
+       את מה שנכתב עכשיו היא נזק, לא הצלה.
+
+       draftBlocked — המכסה של הדפדפן מלאה והגיבוי המקומי כבוי. נשמר
+       כדי לא לנסות setItem בכל הקלדה אחרי שכבר ידוע שהוא נכשל. */
+    draftNotice: null, draftBlocked: false,
     /* renameTitle — שדה השם במסך העריכה. נזרע מ-doc.title בפתיחת
        העורך, ומוחזק בנפרד ממנו כדי שהקלדה לא תשנה את המסמך עד שמאשרים. */
     renameTitle: "", renaming: false,
@@ -1830,8 +1947,13 @@ class Component extends DCLogic {
        שמירה ממתינה, היא יוצאת עכשיו. visibilitychange הוא האירוע שדפדפני
        מובייל באמת מפעילים — beforeunload לא נורה שם כשעוברים אפליקציה. */
     this.onLeave = (e) => {
-      if (e && e.type === "pagehide") { this.flushSave(); return; }
-      if (document.visibilityState === "hidden") this.flushSave();
+      const leaving = (e && e.type === "pagehide") || document.visibilityState === "hidden";
+      if (!leaving) return;
+      /* הגיבוי המקומי קודם, ובכוונה: הוא סינכרוני ולכן הוא באמת
+         מסתיים לפני שהדף נעלם. flushSave היא בקשת רשת שהדפדפן עשוי
+         לקטוע באמצע — היא הניסיון, והגיבוי הוא מה שנשאר אם הוא נכשל. */
+      this.saveDraftNow();
+      this.flushSave();
     };
     document.addEventListener("visibilitychange", this.onLeave);
     window.addEventListener("pagehide", this.onLeave);
@@ -1950,6 +2072,7 @@ class Component extends DCLogic {
     clearTimeout(this.codeTimer);
     clearTimeout(this.previewTimer);
     clearTimeout(this.saveTimer);
+    clearTimeout(this.draftTimer);
     clearTimeout(this.timer);
     if (this.mqNarrow) this.mqNarrow.removeEventListener("change", this.onMq);
     if (this.mqMobile) this.mqMobile.removeEventListener("change", this.onMq);
@@ -2145,6 +2268,9 @@ class Component extends DCLogic {
     const who = await this.guard(() => this.api("/auth/me"));
     if (who && who.authenticated) me = who;
     const projects = (await this.guard(() => this.api("/projects"))) || [];
+    /* פעם אחת בטעינה, ולא בכל כתיבה: הסריקה עוברת על כל localStorage,
+       והתפוגה אינה דחופה עד כדי כך. */
+    pruneDrafts();
     this.setState({ me: me, projects: projects, ready: true });
     /* אחרי טעינת הרשימה ולא לפניה: הראוטר פותח פרויקט, וזה דורש
        שהמצב הבסיסי כבר יהיה שם. */
@@ -2170,8 +2296,17 @@ class Component extends DCLogic {
     const first = docSlug || (project.documents[0] && project.documents[0].slug);
     /* openDoc כותב את הכתובת בעצמו. כאן כותבים רק כשאין מסמך לפתוח,
        אחרת נדחפות שתי רשומות היסטוריה על ניווט אחד. */
-    if (first) await this.openDoc(first);
+    let shown = false;
+    if (first) shown = await this.openDoc(first);
     else this.pushHash(this.docHash(slug, null));
+
+    /* טיוטת היצירה נבדקת רק אם המסמך שנפתח לא הביא הצעה משלו: גיבוי
+       של המסמך שמול העיניים דחוף יותר מטיוטה ששמורה בצד.
+
+       הערך המוחזר מ-openDoc ולא this.state.draftNotice — setState אינו
+       סינכרוני, וה-state שנכתב בתוך openDoc עדיין לא נראה כאן. בדיקה
+       מול ה-state הייתה מוחקת בשקט את ההצעה שהרגע נוצרה. */
+    if (!shown) this.checkDraft(draftKey(slug, null), "create", null);
   }
 
   async openDoc(docSlug) {
@@ -2192,8 +2327,10 @@ class Component extends DCLogic {
       /* העורך נשאר פתוח במעבר בין מסמכים, אבל התוכן שלו מוחלף. */
       editBuf: content, editView: content, saveState: ""
     });
+    const found = this.checkDraft(draftKey(project.slug, docSlug), "edit", content);
     this.pushHash(this.docHash(project.slug, docSlug));
     window.scrollTo({ top: 0 });
+    return found;
   }
 
   async refreshProject() {
@@ -2348,6 +2485,7 @@ class Component extends DCLogic {
     }
     await this.refreshProject();
     if (created) await this.openDoc(created.slug);
+    return created;
   }
 
   /* שם הקובץ הופך לכותרת, והשורה הראשונה שמתחילה ב-# גוברת עליו. */
@@ -2436,7 +2574,133 @@ class Component extends DCLogic {
   mayDiscardDraft() {
     if (!this.state.creating) return true;
     const dirty = this.state.editBuf.trim() || this.state.draftTitle.trim();
-    return !dirty || window.confirm("הטיוטה שנכתבה כאן תימחק. להמשיך?");
+    /* מסך יצירה ריק אינו מוחק דבר. הגרסה הקודמת מחקה כאן תמיד, ולכן
+       לחיצה על "מסמך חדש" ויציאה — בלי להקליד תו — מחקה טיוטה שנשמרה
+       קודם לכן, בלי אישור ובלי סימן. מה שנמחק הוא מה שהמשתמש אישר
+       לזרוק, ולא מה שבמקרה יושב תחת אותו מפתח. */
+    if (!dirty) return true;
+    if (!window.confirm("הטיוטה שנכתבה כאן תימחק. להמשיך?")) return false;
+    this.dropDraftNow();
+    return true;
+  }
+
+  /* ---------- טיוטות מקומיות ---------- */
+
+  /* המפתח של מה שנערך כרגע, או null כשאין מה לגבות.
+
+     נגזר מהמצב ולא נשמר: מפתח ששמור ב-state היה צריך להתעדכן בכל
+     מעבר מסמך ומעבר פרויקט, וכל מסלול חדש היה צריך לזכור זאת. */
+  draftKeyNow() {
+    const s = this.state;
+    if (!s.project) return null;
+    if (s.creating) return draftKey(s.project.slug, null);
+    if (s.editing && s.docSlug) return draftKey(s.project.slug, s.docSlug);
+    return null;
+  }
+
+  dropDraftNow() {
+    const key = this.draftKeyNow();
+    if (key) dropDraft(key);
+  }
+
+  /* כתיבת הגיבוי. נקראת מטיימר, ובכניסה לרקע. */
+  saveDraftNow() {
+    clearTimeout(this.draftTimer);
+    this.draftTimer = null;
+
+    const key = this.draftKeyNow();
+    if (!key || this.state.draftBlocked) return;
+    const s = this.state;
+
+    /* אין מה לגבות: תיבה ריקה במצב יצירה, או תוכן שכבר זהה למה
+       שבשרת. גיבוי שזהה לשרת אינו חסר תועלת בלבד — הוא היה מייצר
+       באנר שמציע לשחזר את מה שכבר פתוח על המסך. */
+    const empty = s.creating
+      ? (!s.editBuf.trim() && !s.draftTitle.trim())
+      : (!s.doc || s.editBuf === s.doc.content);
+    if (empty) { dropDraft(key); return; }
+
+    const payload = {
+      v: 1,
+      at: Date.now(),
+      title: s.creating ? s.draftTitle : "",
+      content: s.editBuf,
+      /* base — מה שהיה בשרת לפי מה שידוע לנו כשהגיבוי נכתב. בשחזור
+         הוא מושווה למה שהשרת מחזיר אז, וכך מתגלה שמישהו אחר כתב
+         למסמך בינתיים. מאז שיש MCP זה לא תרחיש תיאורטי: סוכן יכול
+         לכתוב למסמך שפתוח כרגע בעורך. */
+      base: s.creating ? null : s.doc.content
+    };
+
+    if (writeDraft(key, payload)) return;
+    /* המכסה מלאה. ניקוי פגי התוקף הוא הניסיון היחיד שיש, ואם גם הוא
+       לא הספיק — הגיבוי נכבה עד לטעינה הבאה. setItem שנכשל בכל
+       הקלדה עולה ולא קונה דבר. */
+    pruneDrafts();
+    if (writeDraft(key, payload)) return;
+    this.setState({ draftBlocked: true });
+  }
+
+  /* האם יש גיבוי ששווה להציע. נקראת בכניסה לפרויקט ובפתיחת מסמך. */
+  checkDraft(key, kind, serverContent) {
+    const data = readDraft(key);
+    if (!data) { this.setState({ draftNotice: null }); return false; }
+
+    /* גיבוי שזהה למה שהשרת מחזיר אינו שחזור אלא רעש — הוא כבר על
+       המסך. */
+    if (kind === "edit" && data.content === serverContent) {
+      dropDraft(key);
+      this.setState({ draftNotice: null });
+      return false;
+    }
+
+    this.setState({
+      draftNotice: {
+        key: key,
+        kind: kind,
+        at: data.at,
+        /* השרת השתנה מאז שהגיבוי נכתב. השחזור עדיין אפשרי, אבל הוא
+           דורס שינוי שהגיע ממקום אחר, ולכן הוא נאמר במפורש. */
+        stale: kind === "edit" && data.base !== serverContent
+      }
+    });
+    return true;
+  }
+
+  restoreDraft() {
+    const notice = this.state.draftNotice;
+    if (!notice) return;
+    /* קריאה מחדש ולא שימוש במה שנשמר ב-notice: בין ההצגה ללחיצה
+       הטיוטה יכלה לפוג. */
+    const data = readDraft(notice.key);
+    if (!data) { this.setState({ draftNotice: null }); return; }
+
+    if (notice.kind === "create") {
+      this.setState({
+        creating: true, editing: false, saveState: "",
+        editBuf: data.content, editView: data.content,
+        draftTitle: data.title || "", draftNotice: null
+      });
+    } else {
+      /* dirty ולא "": התוכן ששוחזר טרם הגיע לשרת, וזה בדיוק מה
+         שהמצב הזה אומר.
+
+         ה-flushSave יושב ב-callback של setState ולא אחריו: הוא קורא
+         את editBuf ואת saveState מה-state, ו-setState אינו סינכרוני.
+         בלעדיו התוכן היה יושב כ-dirty עד שהמשתמש יקליד תו — כלומר
+         שחזור שאינו מגיע לשרת, וזה בדיוק המצב שממנו באנו. */
+      this.setState({
+        creating: false, editing: true, saveState: "dirty",
+        editBuf: data.content, editView: data.content, draftNotice: null
+      }, () => { this.flushSave(); });
+    }
+    window.scrollTo({ top: 0 });
+  }
+
+  discardDraft() {
+    const notice = this.state.draftNotice;
+    if (notice) dropDraft(notice.key);
+    this.setState({ draftNotice: null });
   }
 
   /* ניווט החוצה ממסך היצירה. מחזיר false כשהמשתמש ביטל, וכל קורא
@@ -2457,6 +2721,10 @@ class Component extends DCLogic {
     this.previewTimer = null;
     clearTimeout(this.saveTimer);
     this.saveTimer = null;
+    /* גם טיימר הגיבוי. אחרת הוא פורק אחרי האיפוס וכותב תיבה ריקה
+       על גבי הטיוטה שהמשתמש עוד עשוי לרצות. */
+    clearTimeout(this.draftTimer);
+    this.draftTimer = null;
     this.setState(Object.assign({ editBuf: "", editView: "", draftTitle: "" }, extra || {}));
   }
 
@@ -2466,7 +2734,15 @@ class Component extends DCLogic {
     const content = this.state.editBuf;
     if (!content.trim()) return;
     const title = this.state.draftTitle.trim();
-    await this.createDocuments([{ title: title || this.titleFromMarkdown(content), content: content }]);
+    /* המפתח נלקח לפני הקריאה: createDocuments פותח את המסמך שנוצר,
+       ואז draftKeyNow כבר מצביע על מסמך אחר. */
+    const key = this.draftKeyNow();
+    const created = await this.createDocuments([
+      { title: title || this.titleFromMarkdown(content), content: content }
+    ]);
+    /* המחיקה מותנית בהצלחה. יצירה שנכשלה ברשת ומחקה את הגיבוי היא
+       בדיוק המקרה שהגיבוי קיים בשבילו. */
+    if (created && key) dropDraft(key);
     this.resetEditor({ creating: false });
   }
 
@@ -2557,6 +2833,12 @@ class Component extends DCLogic {
 
     clearTimeout(this.saveTimer);
     this.saveTimer = setTimeout(() => { this.flushSave(); }, SAVE_MS);
+
+    /* טיימר שלישי, ולא שימוש חוזר באחד הקיימים. הגיבוי המקומי אינו
+       רשת ולכן אין סיבה שיחכה כמו השמירה, והוא חוסם ולכן אסור לו
+       לרוץ בקצב הפריוויו. */
+    clearTimeout(this.draftTimer);
+    this.draftTimer = setTimeout(() => { this.saveDraftNow(); }, DRAFT_MS);
   }
 
   /* סנכרון גלילה לפי אחוזים. מדויק כל עוד הצדדים דומים בגובה; בלוק
@@ -2573,8 +2855,15 @@ class Component extends DCLogic {
      הטקסט כדי לקרוא ולהזיז את הבחירה, וזה מה שסרגל הכפתורים עומד עליו. */
   editorPane(parsed) {
     const s = this.state;
-    const label = { dirty: "לא נשמר", saving: "שומר…", saved: "נשמר", failed: "השמירה נכשלה" }[s.saveState] || "";
-    const labelColor = s.saveState === "failed" ? "var(--red)" : s.saveState === "saved" ? "var(--green)" : "var(--muted)";
+    /* הגיבוי המקומי שנכבה גובר על מצב השמירה בחיווי: מי שכותב צריך
+       לדעת שרשת הביטחון איננה, וזה נכון גם כשהשמירה לשרת עצמה תקינה.
+       חיווי שקרי כאן גרוע מאין חיווי. */
+    const label = s.draftBlocked
+      ? "הגיבוי המקומי כבוי — אין מקום בדפדפן"
+      : ({ dirty: "לא נשמר", saving: "שומר…", saved: "נשמר", failed: "השמירה נכשלה" }[s.saveState] || "");
+    const labelColor = (s.draftBlocked || s.saveState === "failed")
+      ? "var(--red)"
+      : s.saveState === "saved" ? "var(--green)" : "var(--muted)";
 
     const buttons = [];
     SNIPPETS.forEach((group) => {
@@ -2702,7 +2991,13 @@ class Component extends DCLogic {
             dir: "auto",
             placeholder: "שם המסמך (ברירת מחדל: הכותרת הראשונה)",
             value: s.draftTitle,
-            onChange: (e) => this.setState({ draftTitle: e.target.value }),
+            onChange: (e) => {
+              this.setState({ draftTitle: e.target.value });
+              /* גם הכותרת היא חלק מהטיוטה. בלי זה, שם שהוקלד ואז
+                 רענון מחזיר את התוכן בלי השם. */
+              clearTimeout(this.draftTimer);
+              this.draftTimer = setTimeout(() => { this.saveDraftNow(); }, DRAFT_MS);
+            },
             style: { flex: "1 1 260px", minWidth: 0, boxSizing: "border-box", padding: "8px 12px",
               background: "var(--tint)", border: "1px solid var(--line)", borderRadius: "var(--r-sm)",
               color: "var(--head)", fontFamily: "inherit", fontSize: 14, outline: "none" }
@@ -2896,6 +3191,9 @@ class Component extends DCLogic {
     /* התוכן נכנס ל-doc בזיכרון גם אם השרת דחה את הבקשה כמאוחרת: זו
        אותה מחרוזת שהמשתמש רואה מולו, והדחייה אומרת "כבר לא רלוונטי"
        ולא "נכשל". */
+    /* התוכן בשרת — הגיבוי המקומי סיים את תפקידו. המחיקה כאן ולא
+       במקום נפרד: זו הפונקציה שיודעת שההצלחה קרתה. */
+    this.dropDraftNow();
     this.setState({
       doc: Object.assign({}, doc, { content: content }),
       saveState: "saved"
@@ -3219,6 +3517,24 @@ class Component extends DCLogic {
       body: this.render_blocks(parsed, { numbered: numbered, skipIdx: leadIdx }),
 
       /* --- הגירה וגיבוי --- */
+      /* --- גיבוי מקומי --- */
+      /* canEdit ולא רק "יש הצעה": אורח אינו יכול לשמור, ולכן הצעה
+         לשחזר אצלו היא מבוי סתום. */
+      /* לא מעל מסך היצירה. שני המסכים חולקים את editBuf, ולכן שחזור
+         משם היה דורס את מה שהוקלד בטיוטה הפתוחה בלי לשאול — וגם משאיר
+         את שני המסכים דלוקים על אותו buffer. מי שרוצה לשחזר יוצא
+         ממסך היצירה, וההצעה חוזרת. */
+      draftVisible: onProject && canEdit && !s.creating && !!s.draftNotice,
+      draftLabel: s.draftNotice
+        ? (s.draftNotice.kind === "create"
+            ? "יש טיוטה שלא נשמרה, " + sinceLabel(s.draftNotice.at)
+            : "יש שינויים מקומיים שלא הגיעו לשרת, " + sinceLabel(s.draftNotice.at))
+        : "",
+      draftStale: !!(s.draftNotice && s.draftNotice.stale),
+      draftStaleNote: "שימו לב: המסמך בשרת השתנה מאז. שחזור ידרוס את השינוי הזה.",
+      restoreDraft: () => this.restoreDraft(),
+      discardDraft: () => this.discardDraft(),
+
       /* מוצג רק כשיש בפועל מה להעביר, ורק לבעלים בתוך פרויקט. */
       legacyCount: onProject && canEdit && !s.editing ? this.legacyDocs().length : 0,
       legacyVisible: onProject && canEdit && !s.editing && this.legacyDocs().length > 0,

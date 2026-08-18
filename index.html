@@ -2060,6 +2060,33 @@ class Component extends DCLogic {
   componentDidUpdate() {
     this.drawDiagrams();
     this.restoreCaret();
+    this.trackEditSession();
+  }
+
+  /* מפגש עריכה מתחיל ברגע שהעורך נפתח, ונגמר כשהוא נסגר.
+
+     זה מה שמשלים את historyKey: יציאה מהעורך וכניסה מחדש לאותו מסמך
+     משאירות גם את היעד וגם את התוכן זהים, ולכן שתי הבדיקות שב-
+     captureUndo לא רואות דבר — וההיסטוריה של המפגש הקודם שורדת. ביטול
+     אז מחזיר snapshot מלפני עריכות ששמורות כבר בשרת, והשמירה
+     האוטומטית כותבת אותו מעליהן.
+
+     כאן ולא ב-toggleEditing ובחבריו: componentDidUpdate רואה כל מעבר
+     מצב, כולל מסלולים שטרם נכתבו. */
+  trackEditSession() {
+    const open = !!(this.state.editing || this.state.creating);
+    if (open === this.editorWasOpen) return;
+    this.editorWasOpen = open;
+    if (!open) return;
+    /* המפגש מתחיל ריק. הרשומה הראשונה תיווצר בהקלדה הראשונה, ותכיל
+       את מצב הפתיחה — ולכן ביטול לעולם לא חוזר אל מעבר לו. */
+    this.lastEditBuf = this.state.editBuf;
+    this.lastUndoAt = 0;
+    if (this.state.undoStack.length || this.state.redoStack.length) {
+      this.setState({ undoStack: [], redoStack: [], historyOwner: this.historyKey() });
+    } else {
+      this.setState({ historyOwner: this.historyKey() });
+    }
   }
 
   /* החזרת הסמן אחרי כתיבה לתיבה.
@@ -2854,11 +2881,22 @@ class Component extends DCLogic {
      זו הנקודה שכל השלב עומד עליה: הרינדור מהיר כי הוא מקומי, והשמירה
      איטית כי היא רשת. טיימר אחד משותף היה מכריח לבחור — או פריוויו
      מקרטע, או שרת שמקבל בקשה בכל הקלדה. */
-  onEdit(value, skipHistory) {
+  onEdit(value) {
     /* ה-snapshot נדחף לפני העדכון ומכיל את המצב הישן — זה מה שביטול
-       אמור להחזיר. skipHistory הוא המסלול של הביטול והחזרה עצמם, שלא
-       רושמים את עצמם בהיסטוריה. */
-    if (!skipHistory) this.captureUndo();
+       אמור להחזיר. */
+    this.captureUndo();
+    this.applyEdit(value);
+  }
+
+  /* עריכה שאינה נרשמת בהיסטוריה — המסלול של הביטול והחזרה עצמם.
+
+     פונקציה נפרדת ולא דגל ל-onEdit: דגל בוליאני במיקום שני מחייב כל
+     קורא לדעת מה המשמעות של true, ומי שיוסיף פרמטר שלישי יצטרך לזכור
+     את הסדר. השם אומר מה קורה. */
+  applyEdit(value) {
+    /* מה שנרשם אחרון דרך המסלול הזה. captureUndo משווה אליו כדי לזהות
+       שמישהו החליף את התיבה מבחוץ — ראו שם. */
+    this.lastEditBuf = value;
     this.setState({ editBuf: value, saveState: "dirty" });
 
     clearTimeout(this.previewTimer);
@@ -2898,31 +2936,39 @@ class Component extends DCLogic {
       ? "var(--red)"
       : s.saveState === "saved" ? "var(--green)" : "var(--muted)";
 
-    /* פעולות על הטקסט, לפני התבניות. הן קודמות כי הן חלות על מה
-       שהתבניות עשו, ולא להיפך. */
-    const actionBtn = (key, glyph, title, on, enabled) => React.createElement("button", {
+    /* כפתור סרגל אחד לכל הסרגל — גם לפעולות וגם לתבניות. שני בונים
+       נפרדים באותה פונקציה, עם אותו סגנון משוכפל, מתפצלים בשקט ברגע
+       שמישהו משנה אחד מהם.
+
+       onMouseDown רק מונע את איבוד הפוקוס, והביצוע ב-onClick. הדפוס
+       ההפוך — ביצוע ב-onMouseDown — עבד רק בעכבר: כפתור שמקבל פוקוס
+       ב-Tab ומופעל ב-Enter או ברווח משגר click בלבד, ולכן ניווט
+       במקלדת לא הפעיל את הכפתורים האלה כלל. */
+    const barBtn = (key, glyph, title, on, enabled) => React.createElement("button", {
       key: key,
       type: "button",
       title: title,
       "aria-label": title,
-      disabled: !enabled,
-      /* onMouseDown כמו בתבניות: הלחיצה לא מוציאה את הפוקוס מהתיבה,
-         ולכן הסמן שהביטול מחזיר נשאר במקום שאליו הוחזר. */
-      onMouseDown: (e) => { e.preventDefault(); if (enabled) on(); },
+      disabled: enabled === false,
+      onMouseDown: (e) => { e.preventDefault(); },
+      onClick: () => { if (enabled !== false) on(); },
       style: {
         minWidth: 30, height: 28, padding: "0 7px",
         border: "1px solid var(--rule)", borderRadius: "var(--r-sm)",
-        background: "var(--card)", color: enabled ? "var(--text)" : "var(--faint)",
+        background: "var(--card)", color: enabled === false ? "var(--faint)" : "var(--text)",
         fontFamily: "inherit", fontSize: 12.5, lineHeight: 1,
-        cursor: enabled ? "pointer" : "default", opacity: enabled ? 1 : 0.55
+        cursor: enabled === false ? "default" : "pointer",
+        opacity: enabled === false ? 0.55 : 1
       },
       "style-hover": "border-color:var(--accent)"
     }, glyph);
 
+    /* פעולות על הטקסט, לפני התבניות. הן קודמות כי הן חלות על מה
+       שהתבניות עשו, ולא להיפך. */
     const buttons = [
-      actionBtn("undo", "↶", "ביטול הפעולה האחרונה", () => this.undo(), this.canUndo()),
-      actionBtn("redo", "↷", "ביצוע מחדש", () => this.redo(), this.canRedo()),
-      actionBtn("copy", s.copiedDoc ? "✓" : "⧉",
+      barBtn("undo", "↶", "ביטול הפעולה האחרונה", () => this.undo(), this.canUndo()),
+      barBtn("redo", "↷", "ביצוע מחדש", () => this.redo(), this.canRedo()),
+      barBtn("copy", s.copiedDoc ? "✓" : "⧉",
         s.copiedDoc ? "הועתק" : "העתקת המסמך", () => this.copyDocument(), true)
     ];
     SNIPPETS.forEach((group) => {
@@ -2954,21 +3000,9 @@ class Component extends DCLogic {
         style: { padding: "0 8px", fontSize: 11, letterSpacing: "0.06em", color: "var(--faint)", alignSelf: "center", whiteSpace: "nowrap" }
       }, group.group));
       group.items.forEach((snip) => {
-        buttons.push(React.createElement("button", {
-          key: "s-" + group.group + "-" + snip.label,
-          type: "button",
-          title: snip.label,
-          /* onMouseDown ולא onClick: הלחיצה לא מוציאה את הפוקוס מהתיבה,
-             ולכן הבחירה שהמשתמש סימן עדיין קיימת כשהתבנית נכנסת. */
-          onMouseDown: (e) => { e.preventDefault(); this.applySnippet(snip); },
-          style: {
-            minWidth: 30, height: 28, padding: "0 7px",
-            border: "1px solid var(--rule)", borderRadius: "var(--r-sm)",
-            background: "var(--card)", color: "var(--text)",
-            fontFamily: "inherit", fontSize: 12.5, lineHeight: 1, cursor: "pointer"
-          },
-          "style-hover": "border-color:var(--accent)"
-        }, snip.icon));
+        buttons.push(barBtn(
+          "s-" + group.group + "-" + snip.label,
+          snip.icon, snip.label, () => this.applySnippet(snip), true));
       });
     });
 
@@ -3281,8 +3315,13 @@ class Component extends DCLogic {
      נכתבו. */
   historyKey() {
     const s = this.state;
-    if (s.creating) return "create:" + (s.project ? s.project.slug : "");
-    return "doc:" + (s.docSlug || "");
+    const project = s.project ? s.project.slug : "";
+    /* ה-slug של המסמך אינו ייחודי לבדו: הוא נגזר מהכותרת, ושני
+       פרויקטים יכולים להחזיק "מדריך" בדיוק כמו שה-API מזהה מסמך לפי
+       שני החלקים יחד. בלי הפרויקט, מעבר בין שני מסמכים בעלי אותו שם
+       היה נראה למחסנית כמו הישארות באותו מקום. */
+    if (s.creating) return "create:" + project;
+    return "doc:" + project + "/" + (s.docSlug || "");
   }
 
   canUndo() {
@@ -3295,10 +3334,23 @@ class Component extends DCLogic {
 
   captureUndo(force) {
     const now = Date.now();
-    /* מה שנערך התחלף — ההיסטוריה הקודמת אינה שייכת לכאן. הרשומה
-       הראשונה היא מצב הפתיחה, כדי שביטול יחזיר אליו. */
     const owner = this.historyKey();
-    if (owner !== this.state.historyOwner) {
+
+    /* שני תנאים, ושניהם נחוצים.
+
+       הראשון — היעד התחלף. הבעלות בלבד אינה מספיקה, כי אותו יעד יכול
+       להיפתח שוב: יציאה מהעורך וכניסה מחדש לאותו מסמך, או "מסמך חדש"
+       פעם שנייה באותו פרויקט. בשני המקרים ההיסטוריה הישנה שרדה, וביטול
+       היה מחזיר snapshot ממפגש קודם — שהשמירה האוטומטית הייתה שולחת
+       לשרת מיד אחר כך, מעל התוכן שנפתח.
+
+       השני תופס בדיוק את זה: אם התיבה אינה מה שנרשם אחרון דרך
+       applyEdit, מישהו החליף אותה מבחוץ — openDoc, toggleEditing,
+       resetEditor, restoreDraft, או כל מסלול שטרם נכתב. זה מפגש
+       עריכה חדש, ולכן היסטוריה חדשה. הבדיקה כאן ולא בכל אחד מהם
+       בנפרד, מאותה סיבה שהבעלות נבדקת ולא מאופסת ידנית. */
+    const external = this.state.editBuf !== this.lastEditBuf;
+    if (owner !== this.state.historyOwner || external) {
       this.lastUndoAt = now;
       this.setState({ historyOwner: owner, undoStack: [this.snapshotNow()], redoStack: [] });
       return;
@@ -3328,7 +3380,7 @@ class Component extends DCLogic {
        המקומי תלויים כולם בטיימרים שהיא מפעילה. ביטול שעוקף אותה היה
        משאיר את הפריוויו על טקסט שכבר אינו קיים, ואת השרת על גרסה
        שהמשתמש ביטל. */
-    this.onEdit(prev.text, true);
+    this.applyEdit(prev.text);
     this.pendingCaret = { from: prev.from, to: prev.to };
     /* הרצף הבא ייחשב רצף חדש: בלי זה, הקלדה מיד אחרי ביטול הייתה
        נבלעת בחלון הזמן של הביטול ולא מקבלת נקודת חזרה משלה. */
@@ -3344,7 +3396,7 @@ class Component extends DCLogic {
       redoStack: stack.slice(0, -1),
       undoStack: this.state.undoStack.concat([current]).slice(-UNDO_MAX)
     });
-    this.onEdit(next.text, true);
+    this.applyEdit(next.text);
     this.pendingCaret = { from: next.from, to: next.to };
     this.lastUndoAt = 0;
   }
@@ -3375,7 +3427,7 @@ class Component extends DCLogic {
        ולכן היא צריכה להתבטל בלחיצה אחת — גם אם היא נלחצה באמצע רצף
        הקלדה, בתוך חלון הזמן. */
     this.captureUndo(true);
-    this.onEdit(next, true);
+    this.applyEdit(next);
     this.pendingCaret = { from: from, to: from + inner.length };
   }
 
@@ -4128,8 +4180,12 @@ class Component extends DCLogic {
        השמירה האחרונה — ובמסך היצירה, שבו אין doc כלל, היא לא עשתה
        דבר. */
     const s = this.state;
-    const text = (s.creating || s.editing) ? s.editBuf : (s.doc ? s.doc.content : "");
-    if (!text) return;
+    const editorOpen = s.creating || s.editing;
+    /* היציאה המוקדמת היא על היעדר מקור, לא על תוכן ריק. מסמך שרוקן
+       בעורך הוא תוכן לגיטימי, וכפתור שלא עושה דבר במקרה הזה נראה
+       שבור — במיוחד כשהסימן ✓ ממילא לא מופיע. */
+    if (!editorOpen && !s.doc) return;
+    const text = editorOpen ? s.editBuf : (s.doc.content || "");
     await this.copyText(text, "doc")();
     this.setState({ copiedDoc: true });
     clearTimeout(this.docCopyTimer);

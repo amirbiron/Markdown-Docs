@@ -62,24 +62,29 @@ const ok = (l, v, x) => { R.push(v); console.log(`  ${v ? '✓' : '✗'}  ${l}${
     await p.getByRole('button', { name: 'כניסה', exact: true }).last().click();
     await p.waitForTimeout(2400);
 
+    /* השגיאה מוחזרת ולא נזרקת. throw אחרי שהפרויקט כבר נוצר היה
+       מדלג על created.push, וה-finally לא היה יודע מה למחוק — כלומר
+       הרצה שנכשלה בהכנה משאירה פרויקט במסד. */
     const setup = await p.evaluate(async ([stamp]) => {
-      const post = async (u, b) => {
-        const r = await fetch(u, {
-          method: 'POST', credentials: 'same-origin',
-          headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(b),
-        });
-        if (!r.ok) throw new Error('POST ' + u + ' החזיר ' + r.status);
-        return r;
-      };
-      const slug = (await (await post('/api/projects', { name: 'פעולות ' + stamp })).json()).slug;
-      if (!slug) throw new Error('יצירת הפרויקט לא החזירה slug');
-      await post(`/api/projects/${encodeURIComponent(slug)}/docs`,
-        { title: 'ראשון', content: '# ראשון\n\nתוכן של הראשון.\n' });
-      await post(`/api/projects/${encodeURIComponent(slug)}/docs`,
-        { title: 'שני', content: '# שני\n\nתוכן של השני.\n' });
+      const post = (u, b) => fetch(u, {
+        method: 'POST', credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(b),
+      });
+      const created = await post('/api/projects', { name: 'פעולות ' + stamp });
+      if (!created.ok) return { error: 'יצירת הפרויקט החזירה ' + created.status };
+      const slug = (await created.json()).slug;
+      if (!slug) return { error: 'יצירת הפרויקט לא החזירה slug' };
+      for (const doc of [
+        { title: 'ראשון', content: '# ראשון\n\nתוכן של הראשון.\n' },
+        { title: 'שני', content: '# שני\n\nתוכן של השני.\n' },
+      ]) {
+        const r = await post(`/api/projects/${encodeURIComponent(slug)}/docs`, doc);
+        if (!r.ok) return { slug, error: 'יצירת ' + doc.title + ' החזירה ' + r.status };
+      }
       return { slug };
     }, [process.pid]);
-    created.push(setup.slug);
+    if (setup.slug) created.push(setup.slug);
+    if (setup.error) throw new Error('ההכנה נכשלה: ' + setup.error);
 
     await p.goto(BASE + '/#/' + encodeURIComponent(setup.slug), { waitUntil: 'load' });
     await p.waitForSelector('#dc-root');
@@ -98,6 +103,13 @@ const ok = (l, v, x) => { R.push(v); console.log(`  ${v ? '✓' : '✗'}  ${l}${
       draftCopy.indexOf('תוכן שלא נשמר בשום מקום') >= 0, JSON.stringify(draftCopy.slice(0, 30)));
 
     // ── ביטול על הקלדה ───────────────────────────────────────────────
+    const redoAtStart = await p.evaluate(() => {
+      const b = [...document.querySelectorAll('button')]
+        .find((x) => x.getAttribute('aria-label') === 'ביצוע מחדש');
+      return b ? b.disabled : null;
+    });
+    ok('כפתור החזרה מושבת כשלא בוטל דבר', redoAtStart === true);
+
     await p.fill('textarea', '# טיוטה\n\nתוכן שלא נשמר בשום מקום.\nשורה שנוספה בטעות.\n');
     await p.waitForTimeout(1200);
     await p.getByRole('button', { name: 'ביטול הפעולה האחרונה' }).click();
@@ -107,10 +119,24 @@ const ok = (l, v, x) => { R.push(v); console.log(`  ${v ? '✓' : '✗'}  ${l}${
       undone.indexOf('שורה שנוספה בטעות') < 0 && undone.indexOf('תוכן שלא נשמר') >= 0,
       JSON.stringify(undone.slice(-30)));
 
+    /* מצבי הכפתורים הם חוזה בפני עצמו: כפתור חזרה שפעיל לפני שבוטל
+       משהו, או שנשאר פעיל אחרי שנוצל, נראה תקין בבדיקה שמסתכלת רק על
+       הטקסט שהתקבל. */
+    const btnState = () => p.evaluate(() => {
+      const at = (label) => [...document.querySelectorAll('button')]
+        .find((b) => b.getAttribute('aria-label') === label);
+      const u = at('ביטול הפעולה האחרונה'), r = at('ביצוע מחדש');
+      return { undo: u ? u.disabled : null, redo: r ? r.disabled : null };
+    });
+    const afterUndoState = await btnState();
+    ok('אחרי ביטול, החזרה נפתחת', afterUndoState.redo === false, JSON.stringify(afterUndoState));
+
     await p.getByRole('button', { name: 'ביצוע מחדש' }).click();
     await p.waitForTimeout(900);
     const redone = await p.evaluate(() => document.querySelector('textarea').value);
     ok('חזרה מחזירה את מה שבוטל', redone.indexOf('שורה שנוספה בטעות') >= 0);
+    const afterRedoState = await btnState();
+    ok('ואחרי שנוצלה היא נסגרת', afterRedoState.redo === true, JSON.stringify(afterRedoState));
 
     // ── ביטול על תבנית מהסרגל ────────────────────────────────────────
     // זה המסלול שבגללו המחסנית קיימת: applySnippet כותב value חדש,
@@ -150,24 +176,40 @@ const ok = (l, v, x) => { R.push(v); console.log(`  ${v ? '✓' : '✗'}  ${l}${
     ok('כפתור השמירה מושבת כשאין מה לשמור', idle === true);
 
     await p.fill('textarea', '# ראשון\n\nנכתב ונשמר בכפתור.\n');
-    await p.waitForTimeout(800);
+    await p.waitForTimeout(300);
     const armed = await p.evaluate(() => {
       const b = [...document.querySelectorAll('button')].find((x) => x.textContent.trim() === 'שמירה');
       return b ? b.disabled : null;
     });
     ok('ומשתחרר ברגע שיש', armed === false);
 
-    // לחיצה לפני שה-debounce של 2.5 שניות הספיק — כך מוכח שהכפתור
-    // הוא ששמר ולא הטיימר.
+    /* ההוכחה שהכפתור שמר ולא ה-debounce נמדדת בזמן ולא בהמתנה: הבקשה
+       חייבת לצאת הרבה לפני SAVE_MS=2500 שמתחיל מרגע ההקלדה. גרסה
+       קודמת המתינה 800+1500 מילישניות לפני הלחיצה, כלומר השאירה
+       למרווח הזה כ-200 מילישניות — ריצה איטית אחת והטיימר היה מקדים
+       את הכפתור, והמדד היה מאשר את הדבר הלא נכון. */
+    const typedAt = Date.now();
+    const savePut = p.waitForRequest(
+      (r) => r.method() === 'PUT' && r.url().indexOf('/docs/') >= 0, { timeout: 4000 });
     await p.locator('button[title="שמירת המסמך"]').click();
-    await p.waitForTimeout(1500);
-    const stored = await p.evaluate(async (s) => {
-      const r = await fetch('/api/projects/' + encodeURIComponent(s) + '/docs/ראשון',
-        { credentials: 'same-origin' });
-      return r.ok ? (await r.json()).content : 'status ' + r.status;
-    }, setup.slug);
+    const req = await savePut;
+    const elapsed = Date.now() - typedAt;
+    ok('הבקשה יוצאת מהכפתור ולא מהטיימר', elapsed < 1800, elapsed + 'ms מאז ההקלדה');
+
+    /* מדידה חוזרת עד שהתוכן בשרת, ולא קריאה בודדת אחרי המתנה קבועה:
+       ריצה איטית הייתה מדווחת כישלון על שמירה שרק אחרה. */
+    let stored = '';
+    for (let i = 0; i < 20; i++) {
+      stored = await p.evaluate(async (s) => {
+        const r = await fetch('/api/projects/' + encodeURIComponent(s) + '/docs/ראשון',
+          { credentials: 'same-origin' });
+        return r.ok ? (await r.json()).content : 'status ' + r.status;
+      }, setup.slug);
+      if (stored.indexOf('נכתב ונשמר בכפתור') >= 0) break;
+      await p.waitForTimeout(300);
+    }
     ok('הכפתור שומר לשרת', stored.indexOf('נכתב ונשמר בכפתור') >= 0,
-      JSON.stringify(stored.slice(0, 34)));
+      JSON.stringify(stored.slice(0, 34)) + ' · ' + req.method());
 
     // ── ההעתקה בעריכה לוקחת את מה שעל המסך ───────────────────────────
     await p.fill('textarea', '# ראשון\n\nשינוי שטרם נשמר.\n');
@@ -206,6 +248,90 @@ const ok = (l, v, x) => { R.push(v); console.log(`  ${v ? '✓' : '✗'}  ${l}${
     ok('לחיצה כפויה על ביטול אינה מזריקה תוכן ממסמך אחר',
       stillSecond.indexOf('תוכן של השני') >= 0 && stillSecond.indexOf('נשמר בכפתור') < 0,
       JSON.stringify(stillSecond.slice(0, 24)));
+
+    // ── בידוד: אותו מסמך, מפגש עריכה חדש ─────────────────────────────
+    // יציאה מהעורך וכניסה מחדש משאירות גם את היעד וגם את התוכן זהים,
+    // ולכן שתי הבדיקות שב-captureUndo לא רואות דבר. בלי זיהוי המפגש,
+    // ביטול כאן היה מחזיר snapshot מלפני עריכות ששמורות כבר בשרת.
+    await p.fill('textarea', '# שני\n\nעריכה במפגש הראשון.\n');
+    await p.waitForTimeout(1200);
+    await p.locator('button[title="שמירת המסמך"]').click();
+    await p.waitForTimeout(1500);
+    await p.locator('button[title="שמירה"]').last().click();   // סגירת העורך
+    await p.waitForTimeout(1500);
+    await p.locator('button[title="עריכה"]').last().click();
+    await p.waitForTimeout(1500);
+    const reopened = await p.evaluate(() => {
+      const b = [...document.querySelectorAll('button')]
+        .find((x) => x.getAttribute('aria-label') === 'ביטול הפעולה האחרונה');
+      return b ? b.disabled : null;
+    });
+    ok('פתיחה מחדש של אותו מסמך מתחילה היסטוריה נקייה', reopened === true);
+
+    // ── בידוד: שתי יצירות רצופות באותו פרויקט ────────────────────────
+    await p.getByRole('button', { name: NEW_DOC }).first().click();
+    await p.waitForTimeout(1200);
+    await p.fill('textarea', '# ראשונה\n\nטיוטה ראשונה.\n');
+    await p.waitForTimeout(1200);
+    await p.getByRole('button', { name: 'ביטול', exact: true }).click();
+    await p.waitForTimeout(1500);
+    await p.getByRole('button', { name: NEW_DOC }).first().click();
+    await p.waitForTimeout(1400);
+    const secondCreate = await p.evaluate(() => {
+      const b = [...document.querySelectorAll('button')]
+        .find((x) => x.getAttribute('aria-label') === 'ביטול הפעולה האחרונה');
+      return { disabled: b ? b.disabled : null, text: document.querySelector('textarea').value };
+    });
+    ok('יצירה שנייה אינה יורשת את היסטוריית הראשונה',
+      secondCreate.disabled === true && secondCreate.text === '',
+      JSON.stringify(secondCreate));
+
+    // ── בידוד: אותו שם מסמך בשני פרויקטים ────────────────────────────
+    // ה-slug נגזר מהכותרת, ולכן "ראשון" קיים בשני הפרויקטים. בלי
+    // ה-slug של הפרויקט במפתח, המעבר ביניהם נראה למחסנית כמו הישארות.
+    const other = await p.evaluate(async ([stamp]) => {
+      const post = (u, b) => fetch(u, {
+        method: 'POST', credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(b),
+      });
+      const r = await post('/api/projects', { name: 'פעולות ב ' + stamp });
+      if (!r.ok) return { error: r.status };
+      const slug = (await r.json()).slug;
+      await post(`/api/projects/${encodeURIComponent(slug)}/docs`,
+        { title: 'ראשון', content: '# ראשון\n\nתוכן אחר לגמרי.\n' });
+      return { slug };
+    }, [process.pid]);
+    if (other.slug) created.push(other.slug);
+    ok('נוצר פרויקט שני עם מסמך באותו שם', !other.error, JSON.stringify(other));
+
+    /* reload ולא goto בלבד: שינוי hash אינו טעינה מחדש, ורשימת
+       הפרויקטים שבזיכרון נטענה לפני שהפרויקט השני נוצר. */
+    await p.goto(BASE + '/#/' + encodeURIComponent(other.slug) + '/ראשון', { waitUntil: 'load' });
+    await p.reload({ waitUntil: 'load' });
+    await p.waitForSelector('#dc-root');
+    await p.waitForTimeout(3400);
+    await p.locator('button[title="עריכה"]').last().click();
+    await p.waitForTimeout(1500);
+    const crossProject = await p.evaluate(() => {
+      const b = [...document.querySelectorAll('button')]
+        .find((x) => x.getAttribute('aria-label') === 'ביטול הפעולה האחרונה');
+      return { disabled: b ? b.disabled : null, text: document.querySelector('textarea').value };
+    });
+    ok('מסמך באותו שם בפרויקט אחר אינו יורש היסטוריה',
+      crossProject.disabled === true && crossProject.text.indexOf('תוכן אחר לגמרי') >= 0,
+      JSON.stringify(crossProject.text.slice(0, 26)));
+
+    // ── הפעלה במקלדת ─────────────────────────────────────────────────
+    // הכפתורים ביצעו ב-onMouseDown בלבד, ואז Tab+Enter לא עשה כלום:
+    // כפתור ממוקד משגר click, לא mousedown.
+    await p.fill('textarea', '# ראשון\n\nתוכן אחר לגמרי.\nשורה למחיקה במקלדת.\n');
+    await p.waitForTimeout(1200);
+    await p.locator('button[aria-label="ביטול הפעולה האחרונה"]').focus();
+    await p.keyboard.press('Enter');
+    await p.waitForTimeout(900);
+    const byKeyboard = await p.evaluate(() => document.querySelector('textarea').value);
+    ok('Enter על כפתור ממוקד מפעיל אותו',
+      byKeyboard.indexOf('שורה למחיקה במקלדת') < 0, JSON.stringify(byKeyboard.slice(-26)));
 
     ok('אין שגיאות קונסולה', errs.length === 0, errs.slice(0, 3).join(' | '));
   } finally {

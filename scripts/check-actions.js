@@ -289,20 +289,30 @@ const ok = (l, v, x) => { R.push(v); console.log(`  ${v ? '✓' : '✗'}  ${l}${
     // ── בידוד: אותו שם מסמך בשני פרויקטים ────────────────────────────
     // ה-slug נגזר מהכותרת, ולכן "ראשון" קיים בשני הפרויקטים. בלי
     // ה-slug של הפרויקט במפתח, המעבר ביניהם נראה למחסנית כמו הישארות.
+    /* אותו דפוס כמו בהכנה הראשית: כל תשובה נבדקת, וה-slug מוחזר גם
+       כשמשהו נכשל אחריו כדי שהניקוי ימצא מה למחוק.
+
+       בלי בדיקת המסמך, המדד שלמטה מצהיר "נוצר פרויקט שני עם מסמך"
+       ומאמת רק שהפרויקט נוצר — כלומר הוא ירוק גם כשאין מסמך, והכשל
+       מתגלה שלושה שלבים אחר כך כ-timeout על כפתור העריכה, שאינו רומז
+       על ההכנה. */
     const other = await p.evaluate(async ([stamp]) => {
       const post = (u, b) => fetch(u, {
         method: 'POST', credentials: 'same-origin',
         headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(b),
       });
       const r = await post('/api/projects', { name: 'פעולות ב ' + stamp });
-      if (!r.ok) return { error: r.status };
+      if (!r.ok) return { error: 'יצירת הפרויקט השני החזירה ' + r.status };
       const slug = (await r.json()).slug;
-      await post(`/api/projects/${encodeURIComponent(slug)}/docs`,
+      if (!slug) return { error: 'יצירת הפרויקט השני לא החזירה slug' };
+      const doc = await post(`/api/projects/${encodeURIComponent(slug)}/docs`,
         { title: 'ראשון', content: '# ראשון\n\nתוכן אחר לגמרי.\n' });
+      if (!doc.ok) return { slug, error: 'יצירת המסמך החזירה ' + doc.status };
       return { slug };
     }, [process.pid]);
     if (other.slug) created.push(other.slug);
-    ok('נוצר פרויקט שני עם מסמך באותו שם', !other.error, JSON.stringify(other));
+    ok('נוצר פרויקט שני עם מסמך באותו שם', !other.error, other.error || other.slug);
+    if (other.error) throw new Error('ההכנה לבדיקת הבידוד נכשלה: ' + other.error);
 
     /* reload ולא goto בלבד: שינוי hash אינו טעינה מחדש, ורשימת
        הפרויקטים שבזיכרון נטענה לפני שהפרויקט השני נוצר. */

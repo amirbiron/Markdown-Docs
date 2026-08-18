@@ -489,9 +489,29 @@ function bigDocument(lines) {
   // ── כפתור ההעתקה ──────────────────────────────────────────────────
   // מה שנבדק הוא תוכן הלוח ולא הסימן שהתחלף: כפתור שמצייר ✓ בלי
   // להעתיק דבר עובר כל בדיקה שמסתכלת רק על הסימן.
-  await p.locator('button[title="העתקת המסמך"]').click();
-  await p.waitForTimeout(500);
-  const clip = await p.evaluate(() => navigator.clipboard.readText());
+  /* שלושה כפתורי העתקה: בכותרת המסמך, בסרגל התבניות, ובשורה
+     שמתחת לעורך. כולם נבדקים, כי שלושה כפתורים שמתיימרים לעשות אותו
+     דבר הם בדיוק המקום שבו אחד מהם מתפצל בשקט.
+
+     הלוח מנוקה לפני כל לחיצה — אחרת כפתור שלא עשה דבר "עובר" על
+     התוכן שהקודם השאיר. */
+  const copyButtons = p.locator('button[title="העתקת המסמך"]');
+  const copyCount = await copyButtons.count();
+  check('כפתור העתקה קיים בכל מקום שהוגדר', copyCount === 3, copyCount + ' כפתורים');
+  const copies = [];
+  for (let i = 0; i < copyCount; i++) {
+    await p.evaluate(() => navigator.clipboard.writeText(''));
+    await p.locator('button[title="העתקת המסמך"]').nth(i).click();
+    await p.waitForTimeout(600);
+    copies.push(await p.evaluate(() => navigator.clipboard.readText()));
+    /* ה-title חוזר ל"העתקת המסמך" רק אחרי שהסימן ✓ מתפוגג, ובלי
+       ההמתנה הסלקטור של הסיבוב הבא לא ימצא את הכפתור הזה. */
+    await p.waitForTimeout(1700);
+  }
+  check('כל כפתורי ההעתקה מחזירים אותו תוכן',
+    copies.length > 0 && copies.every((c) => c === copies[0]),
+    copies.map((c) => c.length).join(' / '));
+  const clip = copies[0] || '';
   /* נמדד מול מה שבתיבה ברגע הזה ולא מול מחרוזת קבועה. בדיקות שקדמו
      כאן משנות את התוכן, וציפייה קשיחה הייתה נשברת בכל פעם שמישהו
      מוסיף שלב לפניה — כישלון שנראה כמו באג בהעתקה ואינו. */
@@ -499,6 +519,10 @@ function bigDocument(lines) {
   check('כפתור ההעתקה מעתיק את מקור המסמך',
     clip === inBox && clip.length > 0,
     JSON.stringify(clip.slice(0, 30)));
+  /* לחיצה טרייה: הסימן מתפוגג אחרי 1600ms, והלולאה שמעל ממתינה יותר
+     מזה בין הלחיצות כדי שה-title יחזור למצבו. */
+  await p.locator('button[title="העתקת המסמך"]').first().click();
+  await p.waitForTimeout(400);
   const copiedGlyph = await p.evaluate(
     () => (document.querySelector('button[title="הועתק"]') || {}).textContent
   );

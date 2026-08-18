@@ -1358,6 +1358,22 @@ const DRAFT_TTL_MS = 7 * 24 * 60 * 60 * 1000;
    כמו לבקשת רשת. */
 const DRAFT_MS = 1000;
 
+/* ═══════════════════════════════════════════════════════════════════
+   היסטוריית עריכה
+
+   ה-undo של הדפדפן אינו זמין כאן, ולא בגלל העדפה: applySnippet בונה
+   מחרוזת חדשה וכותב אותה דרך onEdit, ושינוי תוכנתי של value ב-textarea
+   מרוקן את מחסנית ה-undo של הדפדפן. כלומר אחרי כל לחיצה על כפתור
+   בסרגל, Ctrl+Z כבר לא מחזיר את מה שהיה. בטאבלט — שהוא הסביבה
+   העיקרית כאן — ממילא אין Ctrl+Z.
+
+   השמירה אינה של כל תו אלא של רצפים: snapshot נדחף כשהתחיל רצף
+   הקלדה חדש אחרי שקט, וגם לפני כל תבנית מהסרגל, כי זו קפיצה גדולה
+   שהמשתמש ירצה לבטל כיחידה אחת ולא תו־תו.
+   ═══════════════════════════════════════════════════════════════════ */
+const UNDO_MAX = 60;
+const UNDO_GAP_MS = 700;
+
 /* מסמך פתוח → גיבוי עריכה. בלעדיו → טיוטת היצירה של הפרויקט. */
 function draftKey(projectSlug, docSlug) {
   return DRAFT_PREFIX + projectSlug + (docSlug ? "/" + docSlug : "");
@@ -1906,6 +1922,19 @@ class Component extends DCLogic {
        שדות הטופס משותפים לשני המצבים, וזה מה שמבדיל ביניהם. */
     editLinkId: null,
     migrating: false, migrateNote: "", copiedDoc: false,
+
+    /* מחסניות ההיסטוריה, כל רשומה { text, from, to } — התוכן ומיקום
+       הסמן שהיה בו. ב-state ולא בשדה מופע, כי מצב הכפתורים נגזר
+       מהאורך שלהן. */
+    undoStack: [], redoStack: [],
+    /* historyOwner — למה ההיסטוריה שייכת. בלעדיו, ביטול אחרי מעבר
+       מסמך היה מזריק את התוכן של המסמך הקודם לתוך הנוכחי, והשמירה
+       האוטומטית הייתה שולחת אותו לשרת.
+
+       הבעלות נבדקת ולא מאופסת ידנית: איפוס היה צריך לשבת בכל מקום
+       שמחליף את editBuf — openDoc, resetEditor, toggleEditing,
+       restoreDraft — וכל מסלול חדש היה צריך לזכור אותו. */
+    historyOwner: "",
     creating: false, draftTitle: "",
 
     /* draftNotice — ההצעה לשחזר גיבוי מקומי: { key, kind, at, stale }.
@@ -2825,7 +2854,11 @@ class Component extends DCLogic {
      זו הנקודה שכל השלב עומד עליה: הרינדור מהיר כי הוא מקומי, והשמירה
      איטית כי היא רשת. טיימר אחד משותף היה מכריח לבחור — או פריוויו
      מקרטע, או שרת שמקבל בקשה בכל הקלדה. */
-  onEdit(value) {
+  onEdit(value, skipHistory) {
+    /* ה-snapshot נדחף לפני העדכון ומכיל את המצב הישן — זה מה שביטול
+       אמור להחזיר. skipHistory הוא המסלול של הביטול והחזרה עצמם, שלא
+       רושמים את עצמם בהיסטוריה. */
+    if (!skipHistory) this.captureUndo();
     this.setState({ editBuf: value, saveState: "dirty" });
 
     clearTimeout(this.previewTimer);
@@ -2865,7 +2898,33 @@ class Component extends DCLogic {
       ? "var(--red)"
       : s.saveState === "saved" ? "var(--green)" : "var(--muted)";
 
-    const buttons = [];
+    /* פעולות על הטקסט, לפני התבניות. הן קודמות כי הן חלות על מה
+       שהתבניות עשו, ולא להיפך. */
+    const actionBtn = (key, glyph, title, on, enabled) => React.createElement("button", {
+      key: key,
+      type: "button",
+      title: title,
+      "aria-label": title,
+      disabled: !enabled,
+      /* onMouseDown כמו בתבניות: הלחיצה לא מוציאה את הפוקוס מהתיבה,
+         ולכן הסמן שהביטול מחזיר נשאר במקום שאליו הוחזר. */
+      onMouseDown: (e) => { e.preventDefault(); if (enabled) on(); },
+      style: {
+        minWidth: 30, height: 28, padding: "0 7px",
+        border: "1px solid var(--rule)", borderRadius: "var(--r-sm)",
+        background: "var(--card)", color: enabled ? "var(--text)" : "var(--faint)",
+        fontFamily: "inherit", fontSize: 12.5, lineHeight: 1,
+        cursor: enabled ? "pointer" : "default", opacity: enabled ? 1 : 0.55
+      },
+      "style-hover": "border-color:var(--accent)"
+    }, glyph);
+
+    const buttons = [
+      actionBtn("undo", "↶", "ביטול הפעולה האחרונה", () => this.undo(), this.canUndo()),
+      actionBtn("redo", "↷", "ביצוע מחדש", () => this.redo(), this.canRedo()),
+      actionBtn("copy", s.copiedDoc ? "✓" : "⧉",
+        s.copiedDoc ? "הועתק" : "העתקת המסמך", () => this.copyDocument(), true)
+    ];
     SNIPPETS.forEach((group) => {
       /* ההתראות הן 19 סוגים. כשורת כפתורים הן ממלאות את הסרגל בגליפים
          בני תו אחד שאי אפשר לזהות; כרשימה נפתחת הן שורה אחת עם השמות
@@ -3047,12 +3106,54 @@ class Component extends DCLogic {
           React.createElement("span", { key: "st", style: { flex: "none", fontSize: 12.5, color: labelColor } }, label)
         ]);
 
+    /* שורה תחתונה. הסרגל העליון רחוק אחרי מסמך ארוך, ובטאבלט היד
+       נמצאת למטה אחרי שכתבו — ולכן השמירה חוזרת גם כאן, ליד החיווי
+       שאומר אם יש בכלל מה לשמור.
+
+       ההעתקה מופיעה בשני המקומות בכוונה: בסרגל היא פעולה על הטקסט
+       לצד הביטול, וכאן היא ליד השמירה, כשגומרים. */
+    const pending = s.saveState === "dirty" || s.saveState === "failed";
+    const bottomRow = React.createElement("div", {
+      key: "bottom",
+      style: { display: "flex", flexWrap: "wrap", alignItems: "center", gap: 10 }
+    }, [
+      creating ? null : React.createElement("button", {
+        key: "save", type: "button",
+        /* אותו flushSave שהטיימר מפעיל, ולא מסלול שני. שני מסלולי
+           שמירה נפרדים מתפצלים בשקט ברגע שמישהו משנה אחד מהם. */
+        onClick: () => this.flushSave(),
+        disabled: !pending,
+        title: pending ? "שמירת המסמך" : "אין שינויים לשמירה",
+        style: { padding: "8px 18px", borderRadius: "var(--r-sm)", fontFamily: "inherit",
+          fontSize: 13.5, fontWeight: 600,
+          border: "1px solid " + (pending ? "var(--accent)" : "var(--rule)"),
+          background: pending ? "var(--accent)" : "none",
+          color: pending ? "var(--accent-on)" : "var(--faint)",
+          cursor: pending ? "pointer" : "default" }
+      }, s.saveState === "saving" ? "שומר…" : "שמירה"),
+      React.createElement("button", {
+        key: "copy2", type: "button",
+        onClick: () => this.copyDocument(),
+        title: s.copiedDoc ? "הועתק" : "העתקת המסמך",
+        style: { padding: "8px 14px", border: "1px solid var(--rule)", borderRadius: "var(--r-sm)",
+          background: "none", color: "var(--muted)", fontFamily: "inherit", fontSize: 13.5,
+          cursor: "pointer" }
+      }, s.copiedDoc ? "הועתק ✓" : "העתקה"),
+      React.createElement("span", { key: "sp", style: { flex: 1 } }),
+      React.createElement("span", {
+        key: "st", style: { flex: "none", fontSize: 12.5, color: labelColor }
+      }, label)
+    ].filter(Boolean));
+
     return React.createElement("div", { style: { display: "flex", flexDirection: "column", gap: 12 } }, [
       topRow,
       React.createElement("div", {
         key: "split",
         style: {
-          display: "flex", gap: 12, height: "calc(100vh - 230px)", minHeight: 380,
+          /* 282 ולא 230: השורה התחתונה נוספה מתחת למסך המפוצל, ובלי
+             ההפרש היא הייתה נדחפת מתחת לקפל בדיוק במסכים הנמוכים
+             שבהם היא הכי נחוצה. */
+          display: "flex", gap: 12, height: "calc(100vh - 282px)", minHeight: 340,
           flexDirection: s.narrow ? "column" : "row"
         }
       }, [
@@ -3066,7 +3167,8 @@ class Component extends DCLogic {
             style: { display: "flex", flexDirection: "column", flex: 1, minWidth: 0, border: "1px solid var(--line)", borderRadius: "var(--r-md)", overflow: "hidden" }
           }, [toolbar, editor])),
         React.createElement("div", { key: "l", style: { display: "flex", flex: "1 1 0", minWidth: 0 } }, pane(preview, "תצוגה"))
-      ])
+      ]),
+      bottomRow
     ]);
   }
 
@@ -3101,6 +3203,20 @@ class Component extends DCLogic {
      לצאת ממנה בלי למחוק ידנית. ו-Enter באמצע שורה מפצל אותה, ולכן
      הסימון נכנס לפני מה שנשאר ולא בסוף השורה כולה. */
   onEditorKey(e) {
+    /* preventDefault הוא העיקר כאן ולא נוחות: בלעדיו הדפדפן מריץ גם
+       את ה-undo שלו על אותה תיבה, ושני מנגנונים שמושכים את אותו value
+       נותנים תוצאה שתלויה בסדר — כלומר אקראית מבחינת המשתמש. */
+    if ((e.ctrlKey || e.metaKey) && !e.altKey && (e.key === "z" || e.key === "Z")) {
+      e.preventDefault();
+      if (e.shiftKey) this.redo(); else this.undo();
+      return;
+    }
+    /* Ctrl+Y הוא ה-redo המקובל בחלונות, לצד Ctrl+Shift+Z. */
+    if ((e.ctrlKey || e.metaKey) && !e.altKey && (e.key === "y" || e.key === "Y")) {
+      e.preventDefault();
+      this.redo();
+      return;
+    }
     if (e.key !== "Enter" || e.shiftKey || e.ctrlKey || e.metaKey || e.altKey) return;
     const el = this.editRef;
     if (!el || el.selectionStart !== el.selectionEnd) return;
@@ -3142,6 +3258,97 @@ class Component extends DCLogic {
      ולחץ על הדגשה מצפה ל-==טקסט חשוב==, לא ל-==== שמחק לו את הבחירה.
      כשאין בחירה נכנס ה-placeholder והוא נשאר מסומן, כדי שאפשר יהיה
      להקליד עליו מיד. */
+  /* ---------- היסטוריית עריכה ---------- */
+
+  /* המצב הנוכחי כרשומת היסטוריה. מיקום הסמן נלקח מה-DOM ולא מה-state:
+     הוא לא נשמר ב-state כלל, והוא מה שהופך ביטול לחזרה למקום שבו
+     המשתמש עמד ולא לתחילת המסמך. */
+  snapshotNow() {
+    const el = this.editRef;
+    return {
+      text: this.state.editBuf,
+      from: el ? el.selectionStart : 0,
+      to: el ? el.selectionEnd : 0
+    };
+  }
+
+  /* דחיפת המצב הנוכחי, אם הגיע הזמן.
+
+     בלי חלון הזמן כל תו היה רשומה, וביטול היה מוחק אות אחת — התנהגות
+     שאיש אינו מצפה לה. עם החלון, רצף הקלדה רציף הוא יחידת ביטול אחת.
+     force מגיע מהתבניות, שהן קפיצה גדולה ולכן תמיד גבול. */
+  /* מזהה מה שנערך כרגע. נגזר מהמצב, ולכן נכון גם במסלולים שטרם
+     נכתבו. */
+  historyKey() {
+    const s = this.state;
+    if (s.creating) return "create:" + (s.project ? s.project.slug : "");
+    return "doc:" + (s.docSlug || "");
+  }
+
+  canUndo() {
+    return this.state.historyOwner === this.historyKey() && this.state.undoStack.length > 0;
+  }
+
+  canRedo() {
+    return this.state.historyOwner === this.historyKey() && this.state.redoStack.length > 0;
+  }
+
+  captureUndo(force) {
+    const now = Date.now();
+    /* מה שנערך התחלף — ההיסטוריה הקודמת אינה שייכת לכאן. הרשומה
+       הראשונה היא מצב הפתיחה, כדי שביטול יחזיר אליו. */
+    const owner = this.historyKey();
+    if (owner !== this.state.historyOwner) {
+      this.lastUndoAt = now;
+      this.setState({ historyOwner: owner, undoStack: [this.snapshotNow()], redoStack: [] });
+      return;
+    }
+    if (!force && this.lastUndoAt && now - this.lastUndoAt < UNDO_GAP_MS) return;
+    this.lastUndoAt = now;
+    this.setState({
+      /* slice(-UNDO_MAX) ולא גדילה חופשית: מסמך ארוך כפול אלף רשומות
+         הוא מגה־בייטים בזיכרון על מכשיר שאין לו אותם. */
+      undoStack: this.state.undoStack.concat([this.snapshotNow()]).slice(-UNDO_MAX),
+      /* עריכה חדשה מנתקת את ענף החזרה. redo ששרד עריכה היה מחזיר
+         טקסט שאינו המשך של שום דבר שעל המסך. */
+      redoStack: []
+    });
+  }
+
+  undo() {
+    if (!this.canUndo()) return;
+    const stack = this.state.undoStack;
+    const prev = stack[stack.length - 1];
+    const current = this.snapshotNow();
+    this.setState({
+      undoStack: stack.slice(0, -1),
+      redoStack: this.state.redoStack.concat([current]).slice(-UNDO_MAX)
+    });
+    /* דרך onEdit ולא setState ישיר: הפריוויו, השמירה לשרת והגיבוי
+       המקומי תלויים כולם בטיימרים שהיא מפעילה. ביטול שעוקף אותה היה
+       משאיר את הפריוויו על טקסט שכבר אינו קיים, ואת השרת על גרסה
+       שהמשתמש ביטל. */
+    this.onEdit(prev.text, true);
+    this.pendingCaret = { from: prev.from, to: prev.to };
+    /* הרצף הבא ייחשב רצף חדש: בלי זה, הקלדה מיד אחרי ביטול הייתה
+       נבלעת בחלון הזמן של הביטול ולא מקבלת נקודת חזרה משלה. */
+    this.lastUndoAt = 0;
+  }
+
+  redo() {
+    if (!this.canRedo()) return;
+    const stack = this.state.redoStack;
+    const next = stack[stack.length - 1];
+    const current = this.snapshotNow();
+    this.setState({
+      redoStack: stack.slice(0, -1),
+      undoStack: this.state.undoStack.concat([current]).slice(-UNDO_MAX)
+    });
+    this.onEdit(next.text, true);
+    this.pendingCaret = { from: next.from, to: next.to };
+    this.lastUndoAt = 0;
+  }
+
   applySnippet(snip) {
     const el = this.editRef;
     if (!el) return;
@@ -3164,7 +3371,11 @@ class Component extends DCLogic {
     const next = head + before + inner + after + tail;
     /* הסמן נכנס לתוך התבנית ולא אחריה, ומסמן את מה שבפנים. */
     const from = head.length + before.length;
-    this.onEdit(next);
+    /* גבול היסטוריה מוחלט. תבנית היא קפיצה שהמשתמש עשה בלחיצה אחת,
+       ולכן היא צריכה להתבטל בלחיצה אחת — גם אם היא נלחצה באמצע רצף
+       הקלדה, בתוך חלון הזמן. */
+    this.captureUndo(true);
+    this.onEdit(next, true);
     this.pendingCaret = { from: from, to: from + inner.length };
   }
 
@@ -3912,9 +4123,14 @@ class Component extends DCLogic {
   /* העתקת המסמך כולו. משתמשת באותו מסלול של העתקת בלוק קוד, כולל
      הנפילה ל-textarea זמני כשה-clipboard API חסום. */
   async copyDocument() {
-    const doc = this.state.doc;
-    if (!doc) return;
-    await this.copyText(doc.content || "", "doc")();
+    /* מה שעל המסך גובר על מה שבשרת. עד כה הפונקציה קראה תמיד את
+       doc.content, ולכן העתקה תוך כדי עריכה החזירה את הגרסה שלפני
+       השמירה האחרונה — ובמסך היצירה, שבו אין doc כלל, היא לא עשתה
+       דבר. */
+    const s = this.state;
+    const text = (s.creating || s.editing) ? s.editBuf : (s.doc ? s.doc.content : "");
+    if (!text) return;
+    await this.copyText(text, "doc")();
     this.setState({ copiedDoc: true });
     clearTimeout(this.docCopyTimer);
     this.docCopyTimer = setTimeout(() => this.setState({ copiedDoc: false }), 1600);

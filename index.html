@@ -2102,6 +2102,38 @@ class Component extends DCLogic {
     this.drawDiagrams();
     this.restoreCaret();
     this.trackEditSession();
+    this.lockScrollForDrawer();
+  }
+
+  /* נעילת גלילת הרקע כשמגירת הניווט פתוחה.
+
+     כאן ולא בכל handler שפותח או סוגר: componentDidUpdate רואה כל מעבר
+     מצב — כולל יציאה ממצב נייד וניווט אחורה בדפדפן — ולכן אין מסלול
+     שמשאיר את הדף נעול. בלי זה המסמך מתחתן ממשיך להיגלל מתחת למגירה
+     ולרקע המעומעם, והמשתמש מאבד את מקומו בקריאה.
+
+     הערך הקודם נשמר ומוחזר, ולא מוחלף ב-"" קבוע: גיליון סגנונות או
+     קוד אחר עשויים להחזיק כאן ערך משלהם, ודריסתו הייתה תופעת לוואי
+     שקטה של פתיחת תפריט.
+
+     שני האלמנטים ננעלים ולא רק <html>. הדפדפן מפיץ את ה-overflow של
+     <html> ל-viewport, ולכן נעילה שלו לבדו נמדדה כ-hidden ובכל זאת
+     הדף המשיך להיגלל — הגלילה נופלת חזרה ל-<body> שנשאר visible.
+     נמדד בדפדפן: 133px של תזוזה עם <html> נעול בלבד. */
+  lockScrollForDrawer() {
+    const lock = !!(this.state.drawerOpen && this.state.mobile);
+    if (lock === this.scrollLocked) return;
+    this.scrollLocked = lock;
+    const root = document.documentElement, body = document.body;
+    if (lock) {
+      this.prevRootOverflow = root.style.overflow;
+      this.prevBodyOverflow = body.style.overflow;
+      root.style.overflow = "hidden";
+      body.style.overflow = "hidden";
+    } else {
+      root.style.overflow = this.prevRootOverflow || "";
+      body.style.overflow = this.prevBodyOverflow || "";
+    }
   }
 
   /* מפגש עריכה מתחיל ברגע שהעורך נפתח, ונגמר כשהוא נסגר.
@@ -2174,6 +2206,13 @@ class Component extends DCLogic {
     if (this.mqNarrow) this.mqNarrow.removeEventListener("change", this.onMq);
     if (this.mqMobile) this.mqMobile.removeEventListener("change", this.onMq);
     if (this.mqDark) this.mqDark.removeEventListener("change", this.onScheme);
+    /* נעילת הגלילה יושבת על <html> ו-<body>, מחוץ לעץ של הרכיב, ולכן
+       פירוק הרכיב עם מגירה פתוחה היה משאיר את הדף נעול לצמיתות. */
+    if (this.scrollLocked) {
+      document.documentElement.style.overflow = this.prevRootOverflow || "";
+      document.body.style.overflow = this.prevBodyOverflow || "";
+      this.scrollLocked = false;
+    }
   }
 
   /* ---------- שכבת ה-API ---------- */
@@ -2337,18 +2376,18 @@ class Component extends DCLogic {
     this.applyingRoute = true;
     try {
       if (route.screen === "reference") {
-        if (s.screen !== "reference") this.setState({ screen: "reference", active: 0 });
+        if (s.screen !== "reference") this.setState({ screen: "reference", active: 0, drawerOpen: false });
         return;
       }
       if (route.screen === "projects") {
         if (s.screen !== "projects") {
-          this.setState({ screen: "projects", project: null, doc: null, docSlug: null, active: 0 });
+          this.setState({ screen: "projects", project: null, doc: null, docSlug: null, active: 0, drawerOpen: false });
         }
         return;
       }
       const here = s.project && s.project.slug === route.project;
       if (here && (!route.doc || s.docSlug === route.doc)) {
-        if (s.screen !== "project") this.setState({ screen: "project", active: 0 });
+        if (s.screen !== "project") this.setState({ screen: "project", active: 0, drawerOpen: false });
         return;
       }
       if (here && route.doc) { await this.openDoc(route.doc); return; }
@@ -3926,7 +3965,7 @@ class Component extends DCLogic {
       menuTitle: s.drawerOpen ? "סגירת התפריט" : "פתיחת תפריט הניווט",
       drawerBackdropVisible: s.mobile && s.drawerOpen && !onProjects,
       /* תוכן העניינים בתוך המגירה — נייד, במסך פרויקט שיש בו כותרות. */
-      tocInDrawer: s.mobile && onProject && toc.length > 0,
+      tocInDrawer: s.mobile && onProject && (this.props.showToc ?? true) && toc.length > 0,
       toggleDrawer: () => this.setState({ drawerOpen: !s.drawerOpen }),
       closeDrawer: () => this.setState({ drawerOpen: false }),
 

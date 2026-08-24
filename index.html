@@ -67,7 +67,13 @@ input, textarea { font-family: inherit; }
 
 /* מעבר רך בין המצבים. רק על צבעים — לא על פריסה, כדי שלא תהיה קפיצה. */
 body, aside, header, section, main { transition: background-color 0.2s ease, border-color 0.2s ease, color 0.2s ease; }
-@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+@media (prefers-reduced-motion: reduce) { *, *::before, *::after { transition: none !important; animation-duration: 0.001ms !important; animation-iteration-count: 1 !important; } }
+
+/* מגירת הניווט בנייד: נכנסת בהחלקה מצד ההתחלה (מימין ב-RTL). ה-aside
+   מרונדר רק כשהמגירה פתוחה, ולכן די באנימציית כניסה — אין מצב סגור
+   שנשאר תלוי מחוץ למסך ויגרום לגלילה אופקית. */
+@keyframes drawerIn { from { transform: translateX(100%); } to { transform: translateX(0); } }
+@keyframes drawerFade { from { opacity: 0; } to { opacity: 1; } }
 
 .token.comment, .token.prolog, .token.doctype, .token.cdata { color: var(--tok-comment, #6a9955); font-style: italic; }
 .token.punctuation, .token.operator { color: var(--tok-punct, #a8b4d2); }
@@ -91,6 +97,11 @@ body, aside, header, section, main { transition: background-color 0.2s ease, bor
 <div style="position:sticky;top:0;z-index:30;display:flex;align-items:center;justify-content:space-between;gap:20px;height:var(--bar-h);padding:0 var(--bar-pad);background:var(--bar);backdrop-filter:blur(12px);border-bottom:1px solid var(--hair)">
 
   <div style="display:flex;align-items:center;gap:12px;min-width:0">
+    <!-- כפתור פתיחת מגירת הניווט. מוצג רק בנייד וכשיש מה לפתוח (בתוך
+         פרויקט או ברפרנס) — במסך הפרויקטים אין סיידבר, ולכן אין כפתור. -->
+    <sc-if value="{{ menuButtonVisible }}" hint-placeholder-val="{{ false }}">
+    <button onClick="{{ toggleDrawer }}" title="{{ menuTitle }}" aria-label="{{ menuTitle }}" style="flex:none;display:grid;place-items:center;width:32px;height:32px;border:1px solid var(--rule);border-radius:var(--r-sm);background:none;color:var(--muted);font-size:16px;line-height:1;cursor:pointer" style-hover="color:var(--head);border-color:var(--accent)">{{ menuGlyph }}</button>
+    </sc-if>
     <sc-if value="{{ chrome.mark }}" hint-placeholder-val="{{ true }}">
     <a href="#top" onClick="{{ goProjects }}" style="flex:none;display:grid;place-items:center;width:26px;height:26px;border-radius:var(--r-sm);background:var(--accent);color:var(--accent-on);font-family:var(--mono);font-weight:700;font-size:14px">M</a>
     </sc-if>
@@ -216,10 +227,15 @@ body, aside, header, section, main { transition: background-color 0.2s ease, bor
 </sc-if>
 
 <sc-if value="{{ shellVisible }}" hint-placeholder-val="{{ true }}">
+<!-- רקע מעומעם מאחורי מגירת הניווט בנייד. לחיצה עליו סוגרת אותה. יושב
+     מתחת לסרגל העליון (top:bar-h) כדי שכפתור הסגירה יישאר נגיש. -->
+<sc-if value="{{ drawerBackdropVisible }}" hint-placeholder-val="{{ false }}">
+<div onClick="{{ closeDrawer }}" style="position:fixed;top:var(--bar-h);inset-inline:0;bottom:0;z-index:39;background:rgba(0,0,0,0.42);animation:drawerFade 0.2s ease"></div>
+</sc-if>
 <div style="display:grid;grid-template-columns:auto minmax(0,1fr) auto;align-items:start;max-width:var(--shell-w);margin:0 auto">
 
   <sc-if value="{{ sidebarVisible }}" hint-placeholder-val="{{ true }}">
-  <aside style="position:sticky;top:var(--bar-h);width:var(--rail-w);box-sizing:border-box;height:calc(100vh - var(--bar-h));overflow-y:auto;padding:var(--rail-pad);border-inline-end:1px solid var(--hair);background:var(--rail)">
+  <aside style="{{ railStyle }}">
 
     <sc-if value="{{ onProject }}" hint-placeholder-val="{{ true }}">
     <div>
@@ -349,6 +365,20 @@ body, aside, header, section, main { transition: background-color 0.2s ease, bor
       <div style="padding-top:18px;border-top:1px solid var(--hair);font-size:12.5px;color:var(--faint);line-height:1.7">
         3 מתוך 24 עמודים נכתבו.<br />
         התחלה של ספריית תיעוד.
+      </div>
+    </div>
+    </sc-if>
+
+    <!-- תוכן העניינים בתוך מגירת הניווט — נייד בלבד. במסך רחב הוא יושב
+         בסיידבר הנפרד (aside data-toc). מקור הנתונים אחד: אותה רשימת
+         toc משרתת את שני המקומות. -->
+    <sc-if value="{{ tocInDrawer }}" hint-placeholder-val="{{ false }}">
+    <div style="margin-top:26px;padding-top:20px;border-top:1px solid var(--hair)">
+      <div style="{{ chrome.railLabel }}">בעמוד הזה</div>
+      <div style="display:flex;flex-direction:column">
+        <sc-for list="{{ toc }}" as="item" hint-placeholder-count="4">
+          <a href="{{ item.href }}" onClick="{{ item.go }}" style="display:block;padding:6px 8px;font-size:13.5px;color:{{ item.fg }};white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:pointer" style-hover="color:var(--accent-text)">{{ item.label }}</a>
+        </sc-for>
       </div>
     </div>
     </sc-if>
@@ -1461,7 +1491,7 @@ const CALLOUT = {
   question: { hue: "sky", g: "?", label: "שאלה" },
   help: { hue: "sky", g: "?", label: "עזרה" },
   example: { hue: "teal", g: "·", label: "דוגמה" },
-  quote: { hue: "gray", g: "”", label: "ציטוט" },
+  quote: { hue: "gray", g: "”", label: "ציטוט", ph: '> "הדמיון חשוב מהידע."\n> - איינשטיין' },
   experimental: { hue: "purple", g: "◇", label: "ניסיוני" },
   deprecated: { hue: "brown", g: "–", label: "הוצא משימוש" },
   todo: { hue: "steel", g: "□", label: "לביצוע" },
@@ -1521,7 +1551,10 @@ SNIPPETS.push({
     kind: kind,
     before: "::: " + kind + "\n",
     after: "\n:::",
-    ph: "תוכן ההתראה",
+    /* placeholder ברירת־מחדל אחיד לכל ההתראות, אך כל סוג יכול להגדיר
+       דוגמה משלו דרך CALLOUT — למשל ציטוט מקבל ציטוט אמיתי לדוגמה
+       במקום "תוכן ההתראה" הגנרי. */
+    ph: CALLOUT[kind].ph || "תוכן ההתראה",
     block: true
   }))
 });
@@ -1965,6 +1998,9 @@ class Component extends DCLogic {
 
     showSource: null, copied: false, codeCopied: "", openMap: {},
     active: 0, narrow: false, mobile: false,
+    /* drawerOpen — האם מגירת הניווט בנייד פתוחה. רלוונטי רק כש-mobile,
+       ונסגר אוטומטית ביציאה ממצב נייד (ראו onMq) ובכל ניווט. */
+    drawerOpen: false,
     tab: null, raw: null, tasks: { t0: true, t1: true, t2: false },
     groups: { start: true, guides: true, api: false }, voted: false
   };
@@ -2033,7 +2069,12 @@ class Component extends DCLogic {
 
     this.mqNarrow = window.matchMedia("(max-width: 900px)");
     this.mqMobile = window.matchMedia("(max-width: 880px)");
-    this.onMq = () => this.setState({ narrow: this.mqNarrow.matches, mobile: this.mqMobile.matches });
+    this.onMq = () => {
+      const mobile = this.mqMobile.matches;
+      /* יציאה ממצב נייד סוגרת מגירה שנשארה פתוחה, כדי שלא תישאר תלויה
+         כ-position:fixed מעל התצוגה הרחבה. */
+      this.setState({ narrow: this.mqNarrow.matches, mobile: mobile, drawerOpen: mobile && this.state.drawerOpen });
+    };
     this.mqNarrow.addEventListener("change", this.onMq);
     this.mqMobile.addEventListener("change", this.onMq);
     this.onMq();
@@ -2345,7 +2386,10 @@ class Component extends DCLogic {
        activeEditLinkId, אבל טקסט שנשאר בשדות מפרויקט אחר הוא רעש. */
     this.setState({
       screen: "project", project: project, active: 0, doc: null, docSlug: null, q: "",
-      editLinkId: null, newLinkTitle: "", newLinkUrl: ""
+      editLinkId: null, newLinkTitle: "", newLinkUrl: "",
+      /* המגירה מתחילה סגורה בכל כניסה לפרויקט — אחרת דגל שנשאר פתוח
+         מניווט קודם היה פותח אותה מעצמה. */
+      drawerOpen: false
     });
     window.scrollTo({ top: 0 });
 
@@ -2380,6 +2424,9 @@ class Component extends DCLogic {
     const content = doc.content || "";
     this.setState({
       doc: doc, docSlug: docSlug, active: 0, showSource: null,
+      /* בחירת מסמך סוגרת את מגירת הניווט בנייד (וגם הפתיחה האוטומטית
+         של המסמך הראשון בכניסה לפרויקט). */
+      drawerOpen: false,
       /* העורך נשאר פתוח במעבר בין מסמכים, אבל התוכן שלו מוחלף. */
       editBuf: content, editView: content, saveState: ""
     });
@@ -3528,6 +3575,8 @@ class Component extends DCLogic {
             if (!el) return;
             if (e) e.preventDefault();
             window.scrollTo({ top: el.getBoundingClientRect().top + window.scrollY - 90, behavior: "smooth" });
+            /* קפיצה מתוך מגירת הניווט בנייד סוגרת אותה (no-op במסך רחב). */
+            if (this.state.drawerOpen) this.setState({ drawerOpen: false });
           }
         });
       });
@@ -3607,7 +3656,7 @@ class Component extends DCLogic {
       goProjects: (e) => {
         if (e) e.preventDefault();
         if (!this.confirmLeaveCreating()) return;
-        this.setState({ screen: "projects", project: null, doc: null, docSlug: null, active: 0 });
+        this.setState({ screen: "projects", project: null, doc: null, docSlug: null, active: 0, drawerOpen: false });
         this.pushHash("#/");
         window.scrollTo({ top: 0 });
       },
@@ -3615,7 +3664,7 @@ class Component extends DCLogic {
         if (!this.confirmLeaveCreating()) return;
         /* הפרויקט והמסמך נשארים ב-state ורק המסך מתחלף, ולכן החזרה
            היא החלפת מסך בלבד ולא טעינה מחדש. */
-        this.setState({ screen: "reference", active: 0 });
+        this.setState({ screen: "reference", active: 0, drawerOpen: false });
         this.pushHash("#/reference");
         window.scrollTo({ top: 0 });
       },
@@ -3629,7 +3678,7 @@ class Component extends DCLogic {
         if (e) e.preventDefault();
         const project = s.project;
         if (!project) return;
-        this.setState({ screen: "project", active: 0 });
+        this.setState({ screen: "project", active: 0, drawerOpen: false });
         this.pushHash(this.docHash(project.slug, s.docSlug));
         window.scrollTo({ top: 0 });
       },
@@ -3862,7 +3911,24 @@ class Component extends DCLogic {
       tocEmpty: !toc.length,
       tocY: s.active * 32 + 6,
       tocVisible: (this.props.showToc ?? true) && !s.narrow && (onReference || !!doc),
-      sidebarVisible: !s.mobile && !onProjects,
+      /* הסיידבר מרונדר במסך רחב כרגיל, ובנייד רק כשמגירת הניווט פתוחה —
+         כך אין אלמנט position:fixed שנשאר תלוי מחוץ למסך וגורם לגלילה
+         אופקית. במסך הפרויקטים אין סיידבר בשני המצבים. */
+      sidebarVisible: !onProjects && (!s.mobile || s.drawerOpen),
+      /* אותו aside משמש בשני המצבים: במסך רחב הוא רכיב sticky בעמודת
+         הרשת, ובנייד הוא מגירה נשלפת מצד ההתחלה (מימין ב-RTL). */
+      railStyle: s.mobile
+        ? "position:fixed;top:var(--bar-h);inset-inline-start:0;width:min(86vw,320px);box-sizing:border-box;height:calc(100vh - var(--bar-h));overflow-y:auto;padding:var(--rail-pad);border-inline-end:1px solid var(--hair);background:var(--rail);z-index:40;box-shadow:0 8px 40px rgba(0,0,0,0.32);animation:drawerIn 0.28s cubic-bezier(0.4,0,0.2,1)"
+        : "position:sticky;top:var(--bar-h);width:var(--rail-w);box-sizing:border-box;height:calc(100vh - var(--bar-h));overflow-y:auto;padding:var(--rail-pad);border-inline-end:1px solid var(--hair);background:var(--rail)",
+      /* כפתור התפריט והרקע קיימים רק בנייד וכשיש סיידבר לפתוח. */
+      menuButtonVisible: s.mobile && !onProjects,
+      menuGlyph: s.drawerOpen ? "✕" : "☰",
+      menuTitle: s.drawerOpen ? "סגירת התפריט" : "פתיחת תפריט הניווט",
+      drawerBackdropVisible: s.mobile && s.drawerOpen && !onProjects,
+      /* תוכן העניינים בתוך המגירה — נייד, במסך פרויקט שיש בו כותרות. */
+      tocInDrawer: s.mobile && onProject && toc.length > 0,
+      toggleDrawer: () => this.setState({ drawerOpen: !s.drawerOpen }),
+      closeDrawer: () => this.setState({ drawerOpen: false }),
 
       showSource: s.showSource === null ? (this.props.showSourceByDefault ?? false) : s.showSource,
       toggleSource: () => this.setState({ showSource: !(s.showSource === null ? (this.props.showSourceByDefault ?? false) : s.showSource) }),
@@ -3881,7 +3947,7 @@ class Component extends DCLogic {
         setTimeout(() => URL.revokeObjectURL(url), 2000);
       },
 
-      openCreate: () => { this.startCreating(); },
+      openCreate: () => { this.setState({ drawerOpen: false }); this.startCreating(); },
       /* Array.from ולא הפניה ל-e.target.files: איפוס value מרוקן את אותו
          FileList עצמו, ומי שמחזיק אותו נשאר עם רשימה ריקה. העותק חייב
          להילקח לפני האיפוס. */
@@ -4840,6 +4906,9 @@ class Component extends DCLogic {
       const el = document.getElementById(id);
       if (!el) return;
       window.scrollTo({ top: el.getBoundingClientRect().top + window.scrollY - 90, behavior: "smooth" });
+      /* קפיצה לעוגן מתוך מגירת הניווט בנייד סוגרת אותה. במסך רחב
+         drawerOpen ממילא false, ולכן זה no-op. */
+      if (this.state.drawerOpen) this.setState({ drawerOpen: false });
     };
   }
 

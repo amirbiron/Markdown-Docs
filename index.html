@@ -117,6 +117,12 @@ body, aside, header, section, main { transition: background-color 0.2s ease, bor
       <button onClick="{{ goReference }}" style="{{ screenTab.reference }}">רפרנס</button>
     </div>
 
+    <!-- קיפול/פתיחה של תוכן העניינים. מוצג רק כשיש תוכן עניינים במסך
+         הזה, ותמיד כשיש — אחרת קיפול היה מצב חד-כיווני בלי דרך חזרה. -->
+    <sc-if value="{{ tocToggleVisible }}" hint-placeholder-val="{{ false }}">
+    <button onClick="{{ toggleToc }}" title="{{ tocToggleTitle }}" aria-label="{{ tocToggleTitle }}" style="display:grid;place-items:center;width:32px;height:32px;border:1px solid var(--rule);border-radius:var(--r-sm);background:none;color:var(--muted);font-size:14px;line-height:1;cursor:pointer" style-hover="color:var(--head);border-color:var(--accent)">{{ tocToggleGlyph }}</button>
+    </sc-if>
+
     <button onClick="{{ toggleTheme }}" title="{{ themeTitle }}" aria-label="{{ themeTitle }}" style="display:grid;place-items:center;width:32px;height:32px;border:1px solid var(--rule);border-radius:var(--r-sm);background:none;color:var(--muted);font-size:14px;line-height:1;cursor:pointer" style-hover="color:var(--head);border-color:var(--accent)">{{ themeGlyph }}</button>
 
     <sc-if value="{{ signedIn }}" hint-placeholder-val="{{ false }}">
@@ -1064,7 +1070,13 @@ console.<span style="color:var(--tok-fn)">log</span>(doc.<span style="color:var(
        href שמתחיל ב-"#h-", וזה נכון רק כל עוד אין במסמך קישור לעוגן של
        כותרת — קישור לגיטימי לגמרי שהיה מפיל בדיקה ירוקה. -->
   <aside data-toc="1" style="position:sticky;top:var(--bar-h);width:214px;box-sizing:border-box;height:calc(100vh - var(--bar-h));overflow-y:auto;padding:40px 16px 36px;border-inline-start:1px solid var(--hair)">
-    <div style="{{ chrome.railLabel }}">בעמוד הזה</div>
+    <!-- הכותרת והכפתור על שורה אחת. הכפתור כאן הוא הקיצור המיידי, ומי
+         שהשתמש בו פותח בחזרה מהכפתור שבסרגל העליון — שמוצג כל עוד יש
+         תוכן עניינים, גם כשהוא מקופל. -->
+    <div style="display:flex;align-items:baseline;gap:8px">
+      <div style="{{ chrome.railLabel }};flex:1;min-width:0">בעמוד הזה</div>
+      <button onClick="{{ toggleToc }}" title="קיפול תוכן העניינים" aria-label="קיפול תוכן העניינים" style="flex:none;padding:2px 6px;border:none;border-radius:var(--r-sm);background:none;color:var(--faint);font-size:13px;line-height:1;cursor:pointer" style-hover="color:var(--accent-text)">✕</button>
+    </div>
     <div style="position:relative;padding-inline-start:12px">
       <span style="position:absolute;inset-inline-start:0;top:0;bottom:0;width:1px;background:var(--hair)"></span>
       <span style="position:absolute;inset-inline-start:0;top:0;width:2px;height:20px;border-radius:2px;background:var(--accent);transition:transform 0.25s cubic-bezier(0.4,0,0.2,1);transform:translateY({{ tocY }}px)"></span>
@@ -1090,6 +1102,7 @@ console.<span style="color:var(--tok-fn)">log</span>(doc.<span style="color:var(
 <script type="text/x-dc" data-dc-script data-props="{&quot;showToc&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:true,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;פריסה&quot;},&quot;numberedHeadings&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:true,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;תוכן&quot;},&quot;showSourceByDefault&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:false,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;תוכן&quot;},&quot;defaultTheme&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;auto&quot;,&quot;dark&quot;,&quot;dim&quot;,&quot;light&quot;,&quot;coast&quot;,&quot;coast-dark&quot;],&quot;default&quot;:&quot;auto&quot;,&quot;tsType&quot;:&quot;'auto' | 'dark' | 'dim' | 'light' | 'coast' | 'coast-dark'&quot;,&quot;section&quot;:&quot;עיצוב&quot;},&quot;defaultCodeTab&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;javascript&quot;,&quot;python&quot;,&quot;curl&quot;],&quot;default&quot;:&quot;javascript&quot;,&quot;tsType&quot;:&quot;'javascript' | 'python' | 'curl'&quot;,&quot;section&quot;:&quot;תוכן&quot;}}">
 const KEY = "md-docs-site-v1";
 const THEME_KEY = "md-docs-theme";
+const TOC_KEY = "md-docs-toc-collapsed";
 
 /* מסמך ההדגמה ומפתח ה-localStorage הישן הוסרו מכאן. המפתח עצמו לא
    נמחק מהדפדפן — שלב 7 עוד צריך למצוא אותו כדי להעלות את המסמכים. */
@@ -1423,6 +1436,27 @@ function writeDraft(key, payload) {
   } catch (e) {
     return false;
   }
+}
+
+/* העדפת קיפול תוכן העניינים, נשמרת בין ביקורים.
+
+   נשמרת כ-"1"/"0" ולא כ-JSON: הערך הוא ביט יחיד, ו-JSON.parse היה
+   מוסיף מסלול כשל שלם על משהו שאין בו מבנה.
+
+   הערך נבדק מול שתי המחרוזות החוקיות ולא מומר ב-Boolean(): כל מחרוזת
+   שאינה ריקה היא truthy, ולכן ערך זר שנכתב למפתח הזה בטעות — או שריד
+   מגרסה עתידית — היה מקפל את תוכן העניינים בלי שהמשתמש ביקש. מה שאינו
+   מוכר חוזר לברירת המחדל: פתוח. */
+function readTocCollapsed() {
+  let raw = null;
+  try { raw = localStorage.getItem(TOC_KEY); } catch (e) { return false; }
+  return raw === "1";
+}
+
+/* אותה עטיפה כמו בטיוטות: אחסון חסום או מכסה מלאה לא יפילו לחיצה על
+   כפתור. ההעדפה פשוט לא תישמר להפעלה הבאה. */
+function writeTocCollapsed(collapsed) {
+  try { localStorage.setItem(TOC_KEY, collapsed ? "1" : "0"); } catch (e) { /* אחסון חסום */ }
 }
 
 /* קריאה שמוחקת מה שאינו תקף — פג תוקף, פגום, או בגרסה אחרת.
@@ -2001,6 +2035,11 @@ class Component extends DCLogic {
     /* drawerOpen — האם מגירת הניווט בנייד פתוחה. רלוונטי רק כש-mobile,
        ונסגר אוטומטית ביציאה ממצב נייד (ראו onMq) ובכל ניווט. */
     drawerOpen: false,
+    /* tocCollapsed — העדפת המשתמש לקיפול תוכן העניינים, נשמרת בין
+       ביקורים. נקראת כאן ולא ב-componentDidMount: תיקון מאוחר היה
+       מרנדר את תוכן העניינים ואז מסתיר אותו, כלומר הבהוב בכל טעינה
+       אצל מי שבחר לקפל. */
+    tocCollapsed: readTocCollapsed(),
     tab: null, raw: null, tasks: { t0: true, t1: true, t2: false },
     groups: { start: true, guides: true, api: false }, voted: false
   };
@@ -3621,6 +3660,10 @@ class Component extends DCLogic {
       });
     }
 
+    /* נגזר פעם אחת ומשמש גם את התצוגה וגם את הכפתור. ראו ההערה
+       ליד tocVisible. */
+    const tocAvailable = (this.props.showToc ?? true) && !s.narrow && (onReference || !!doc);
+
     const tabOn = "padding:5px 13px;border:none;border-radius:var(--r-sm);background:var(--accent);color:var(--accent-on);font-family:inherit;font-size:12.5px;font-weight:600;cursor:pointer";
     const tabOff = "padding:5px 13px;border:none;border-radius:var(--r-sm);background:none;color:var(--muted);font-family:inherit;font-size:12.5px;font-weight:500;cursor:pointer";
 
@@ -3949,7 +3992,28 @@ class Component extends DCLogic {
       toc: toc,
       tocEmpty: !toc.length,
       tocY: s.active * 32 + 6,
-      tocVisible: (this.props.showToc ?? true) && !s.narrow && (onReference || !!doc),
+      /* tocAvailable הוא מקור האמת היחיד: "יש בכלל תוכן עניינים במסך
+         הזה". ממנו נגזרים גם התצוגה וגם הכפתור, ולכן אי אפשר להגיע
+         למצב שבו מופיע כפתור קיפול למשהו שאינו קיים — או, הפוך, שתוכן
+         העניינים מקופל בלי שום כפתור להחזיר אותו. שני ביטויים נפרדים
+         היו מתפצלים בשקט ברגע שהתנאי משתנה בצד אחד בלבד. */
+      tocVisible: tocAvailable && !s.tocCollapsed,
+      /* הכפתור בסרגל הוא הדרך היחידה לפתוח בחזרה אחרי קיפול, ולכן הוא
+         מוצג בכל פעם שתוכן העניינים רלוונטי — גם כשהוא פתוח. */
+      tocToggleVisible: tocAvailable,
+      tocToggleTitle: s.tocCollapsed ? "הצגת תוכן העניינים" : "קיפול תוכן העניינים",
+      /* מלא כשהפאנל מוצג, ריק כשהוא מקופל — משוב מיידי על המצב, בלי
+         להסתמך על הכותרת בלבד. שניהם Geometric Shapes מונוכרומיים
+         ויורשים את הצבע, כמו שאר הסמלים בסרגל. */
+      tocToggleGlyph: s.tocCollapsed ? "◻" : "◧",
+      toggleToc: () => {
+        /* נקרא מ-this.state ולא מ-s: האחרון הוא צילום מרגע הרינדור,
+           ושתי לחיצות מהירות היו קוראות פעמיים את אותו ערך ומבטלות
+           זו את זו. */
+        const next = !this.state.tocCollapsed;
+        writeTocCollapsed(next);
+        this.setState({ tocCollapsed: next });
+      },
       /* הסיידבר מרונדר במסך רחב כרגיל, ובנייד רק כשמגירת הניווט פתוחה —
          כך אין אלמנט position:fixed שנשאר תלוי מחוץ למסך וגורם לגלילה
          אופקית. במסך הפרויקטים אין סיידבר בשני המצבים. */

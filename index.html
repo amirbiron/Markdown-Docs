@@ -3168,16 +3168,15 @@ class Component extends DCLogic {
       key: "pv",
       ref: (el) => { this.previewRef = el; },
       style: { flex: 1, minHeight: 0, overflowY: "auto", padding: "18px 22px", background: "var(--panel)" }
-       /* skipIdx = -1 ולא leadIdx: בתצוגה הפסקה הראשונה עולה לכותרת
-          העמוד ולכן מדולגת בגוף, אבל בעורך זה נראה כאילו השורה שהרגע
-          הוקלדה נעלמה מהפריוויו וקפצה למקום אחר. כאן מציגים את המסמך
-          כפי שהוא.
+       /* הפתיח אינו ב-skip: בתצוגה הפסקה הראשונה עולה לכותרת העמוד
+          ולכן מדולגת בגוף, אבל בעורך זה נראה כאילו השורה שהרגע הוקלדה
+          נעלמה מהפריוויו וקפצה למקום אחר. כאן מציגים את המסמך כפי שהוא.
 
-          keepH1 רק במצב יצירה: בעריכה כותרת רמה 1 מוצגת בכותרת העמוד
-          שמעל המסך המפוצל, ובמסך היצירה אין כותרת כזאת. */
+          הכותרת (titleBlockIdx) מדולגת רק בעריכה: שם היא מוצגת בכותרת
+          העמוד שמעל המסך המפוצל, ובמסך היצירה אין כותרת כזאת. */
     }, this.render_blocks(parsed, {
          numbered: this.props.numberedHeadings ?? true,
-         keepH1: s.creating
+         skip: s.creating ? [] : [this.titleBlockIdx(parsed)]
        }));
 
     const pane = (children, title) => React.createElement("div", {
@@ -3613,7 +3612,8 @@ class Component extends DCLogic {
     const parsed = editingDoc ? this.parse(s.editView) : (doc ? this.parse(doc.content) : { front: {}, blocks: [] });
     const numbered = this.props.numberedHeadings ?? true;
 
-    const h1 = parsed.blocks.filter((b) => b.t === "h" && b.level === 1)[0];
+    const titleIdx = this.titleBlockIdx(parsed);
+    const h1 = titleIdx > -1 ? parsed.blocks[titleIdx] : null;
     const title = parsed.front.title || (h1 ? h1.text : (doc ? doc.title : ""));
     let leadIdx = -1;
     for (let bi = 0; bi < parsed.blocks.length; bi++) {
@@ -3908,7 +3908,7 @@ class Component extends DCLogic {
       fileName: doc ? doc.slug + ".md" : "",
       meta: words + " מילים · " + Math.max(1, Math.round(words / 200)) + " דקות קריאה",
       source: doc ? doc.content : "",
-      body: this.render_blocks(parsed, { numbered: numbered, skipIdx: leadIdx }),
+      body: this.render_blocks(parsed, { numbered: numbered, skip: [titleIdx, leadIdx] }),
 
       /* --- הגירה וגיבוי --- */
       /* --- גיבוי מקומי --- */
@@ -4739,21 +4739,36 @@ class Component extends DCLogic {
     });
   }
 
-  /* אובייקט אפשרויות ולא ארבעה פרמטרים במקום: שלושה מהם בוליאניים
-     ודומים, וסדר מוחלף ביניהם עובר בשקט בכל בדיקה.
+  /* הבלוק שעולה לכותרת העמוד: כותרת ה-H1 הראשונה במסמך. title מה-front
+     matter גובר על הטקסט שלה, אבל גם אז היא זו שלא חוזרת בגוף.
+
+     שאלה אחת ותשובה אחת, לשלושה שצריכים אותה: הכותרת עצמה ב-renderVals,
+     הגוף שמדלג עליה, והפריוויו בעריכה. קודם render_blocks החליטה לבד,
+     לפי הרמה — "כל H1 היא הכותרת" — ומסמך עם כמה כותרות H1 איבד את
+     כולן מלבד הראשונה, בתצוגה ובפריוויו. עכשיו מדולג בלוק אחד, לפי
+     האינדקס שלו, וכל H1 אחרת מוצגת במקומה. */
+  titleBlockIdx(parsed) {
+    for (let i = 0; i < parsed.blocks.length; i++) {
+      const b = parsed.blocks[i];
+      if (b.t === "h" && b.level === 1) return i;
+    }
+    return -1;
+  }
+
+  /* אובייקט אפשרויות ולא פרמטרים במקום: שניים מהם בוליאניים ודומים,
+     וסדר מוחלף ביניהם עובר בשקט בכל בדיקה.
 
        numbered — מספור אוטומטי לכותרות רמה 2
-       skipIdx  — אינדקס בלוק שמדולג (הפתיח שעלה לכותרת העמוד)
-       nested   — רינדור בתוך בלוק אחר, בטיפוגרפיה מוקטנת
-       keepH1   — לרנדר גם כותרת רמה 1. בתצוגת המסמך היא מוצגת בכותרת
-                  העמוד ולכן מושמטת מהגוף, אבל במסך היצירה אין כותרת
-                  עמוד: בלי הדגל הזה השורה הראשונה של הטיוטה נעלמת. */
+       skip     — אינדקסים של בלוקים שמושמטים מהגוף כי הם כבר מוצגים
+                  בראש העמוד: הכותרת (titleBlockIdx), ובתצוגת המסמך גם
+                  הפתיח. רשימה מפורשת ולא כלל לפי סוג הבלוק — ראו
+                  titleBlockIdx.
+       nested   — רינדור בתוך בלוק אחר, בטיפוגרפיה מוקטנת */
   render_blocks(parsed, opts) {
     const o = opts || {};
     const numbered = o.numbered !== false;
-    const skipIdx = typeof o.skipIdx === "number" ? o.skipIdx : -1;
+    const skip = o.skip || [];
     const nested = !!o.nested;
-    const keepH1 = !!o.keepH1;
 
     /* התמה מצהירה על צורת הבלוקים שלה במקום שנשווה שמות. עם השוואה
        ל-"light", כל תמה חדשה נכנסת אוטומטית למשפחת הכהים — וזה נכון
@@ -4763,7 +4778,7 @@ class Component extends DCLogic {
     let h2 = 0, hi = 0;
     parsed.blocks.forEach((b, idx) => {
       const key = "b" + idx;
-      if (idx === skipIdx) return;
+      if (skip.indexOf(idx) >= 0) return;
 
       if (b.t === "h" && nested) {
         out.push(React.createElement("div", { key: key, style: { margin: "6px 0 8px", fontFamily: ed ? "var(--display)" : "inherit", fontSize: ed ? 17 : 15.5, fontWeight: 700, color: ed ? "var(--ink)" : "var(--head)" } }, this.inline(b.text)));
@@ -4771,12 +4786,14 @@ class Component extends DCLogic {
       }
 
       if (b.t === "h") {
-        if (b.level === 1 && !keepH1) return;
-        hi++;
+        /* H1 אינה מקבלת עוגן ואינה נספרת. תוכן העניינים (toc ב-renderVals)
+           מדלג על H1 ומונה עוגנים מ-H2 והלאה, והמונה כאן חייב לספור בדיוק
+           כמוהו — אחרת כל קישור שאחרי H1 בגוף מוביל לכותרת הלא נכונה. */
+        if (b.level > 1) hi++;
         if (b.level === 1) {
           /* אותו משקל של כותרת העמוד, כדי שהפריוויו של מסך היצירה
              ייראה כמו המסמך שייווצר ממנו. */
-          out.push(React.createElement("h1", { key: key, id: "h-" + hi, style: {
+          out.push(React.createElement("h1", { key: key, style: {
             margin: out.length ? "36px 0 16px" : "0 0 16px",
             fontFamily: "var(--display)", fontSize: 30, fontWeight: 800, lineHeight: 1.2,
             color: "var(--ink)", scrollMarginTop: 90

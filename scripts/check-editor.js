@@ -35,6 +35,54 @@ const check = (label, ok, extra) => {
   console.log(`  ${ok ? '✓' : '✗'}  ${label}${extra ? '  — ' + extra : ''}`);
 };
 
+/* גיאומטריה של שורות בתוך בלוק קוד, כפי שהדפדפן צייר אותן. רצה בדף.
+
+   שורה היא שורה חזותית: התווים שחולקים את אותו top. הקיבוץ הוא לפי
+   המסך ולא לפי מבנה ה-DOM, כי בלוק שנצבע ב-Prism ובלוק שנצבע ב-highlight
+   בונים את השורות שלהם אחרת, והמדידה חייבת להיות זהה לשניהם.
+
+   לכל needle: gapL/gapR — המרחק בין קצות השורה לקצות תיבת התוכן של ה-pre;
+   startX — היכן מצויר התו הלא-ריק הראשון בסדר הלוגי; firstOnLeft — האם
+   הוא בחצי השמאלי של השורה, כלומר האם השורה מוצגת משמאל לימין. */
+function measureLines({ match, needles }) {
+  const pre = [...document.querySelectorAll('pre')].filter((el) => (el.textContent || '').indexOf(match) >= 0)[0];
+  if (!pre) return needles.map(() => ({ found: false }));
+  const cs = getComputedStyle(pre);
+  const box = pre.getBoundingClientRect();
+  const left = box.left + parseFloat(cs.paddingLeft), right = box.right - parseFloat(cs.paddingRight);
+  const rows = new Map();
+  const walker = document.createTreeWalker(pre, NodeFilter.SHOW_TEXT);
+  let node;
+  while ((node = walker.nextNode())) {
+    for (let i = 0; i < node.data.length; i++) {
+      if (node.data[i] === '\n') continue;
+      const r = document.createRange();
+      r.setStart(node, i); r.setEnd(node, i + 1);
+      const rc = r.getBoundingClientRect();
+      if (!rc.width) continue;
+      const top = Math.round(rc.top);
+      if (!rows.has(top)) rows.set(top, []);
+      rows.get(top).push({ c: node.data[i], rc });
+    }
+  }
+  const lines = [...rows.entries()]
+    .filter(([, chars]) => chars.some((x) => x.c.trim()))
+    .map(([top, chars]) => ({ top, chars, text: chars.map((x) => x.c).join('') }));
+  return needles.map((needle) => {
+    const line = lines.filter((l) => l.text.indexOf(needle) >= 0)[0];
+    if (!line) return { found: false, needle };
+    const minL = Math.min(...line.chars.map((x) => x.rc.left));
+    const maxR = Math.max(...line.chars.map((x) => x.rc.right));
+    const first = line.chars.filter((x) => x.c.trim())[0];
+    return {
+      found: true, needle, top: line.top,
+      gapL: Math.round(minL - left), gapR: Math.round(right - maxR),
+      startX: Math.round(first.rc.left - left),
+      firstOnLeft: first.rc.left < (minL + maxR) / 2,
+    };
+  });
+}
+
 /* מסמך ארוך אמיתי, לא אלף שורות ריקות: פרסור של שורות ריקות זול,
    ומדידה עליו הייתה מראה ביצועים שלא קיימים במסמך אמיתי. */
 function bigDocument(lines) {
@@ -174,7 +222,7 @@ function bigDocument(lines) {
   // קינון, שורה עם שם שפה בתוך בלוק, ושורה שנראית כמו גדר ואינה.
   const fenceDoc = [
     '# בדיקת גדרות', '',
-    '````markdown', '## כותרת בתוך הדוגמה', '', '```python', 'print("שלום")', '```', '', 'סוף הדוגמה', '````', '',
+    '````markdown', '## כותרת בתוך הדוגמה', '', '```python', 'def greet():', '    print("שלום")', '```', '', 'סוף הדוגמה', '````', '',
     '## כותרת אחרי הדוגמה', '',
     '```', 'שורה ראשונה', '```js', 'עדיין בתוך אותו בלוק', '```', '',
     '## כותרת אחרי הבלוק השני', '',
@@ -226,7 +274,131 @@ function bigDocument(lines) {
     JSON.stringify(fences.heads));
   check('מספר בלוקי הקוד הוא בדיוק שלושה', fences.pres.length === 3, fences.pres.length + ' בלוקים');
 
+  // ── קטע קוד פנימי בבלוק עברי: שמאל-לימין, וכל השאר בלי שינוי ──
+  // שני מסלולי הצביעה, כי הם בונים שורות אחרת: בלוק ה-markdown נצבע
+  // ב-Prism, והבלוק בלי שפה ב-highlight. הקטע הוא אלמנט אחד עם
+  // dir="ltr", מהגדר הפותחת ועד הסוגרת, כולל שתיהן.
+  /* innerText ולא textContent: ב-highlight כל שורה היא אלמנט בלוק בלי
+     ירידת שורה ביניהן, ו-textContent היה מדביק את השורות לאחת. */
+  const ltrParts = (match) => p.evaluate((m) => {
+    const pre = [...document.querySelectorAll('pre')].filter((el) => (el.textContent || '').indexOf(m) >= 0)[0];
+    return pre ? [...pre.querySelectorAll('span[dir="ltr"]')].map((el) => el.innerText.replace(/\n+$/, '')) : null;
+  }, match);
+
+  const mdParts = await ltrParts('print(');
+  check('בבלוק Prism הקטע הפנימי הוא אלמנט LTR אחד, מגדר לגדר',
+    JSON.stringify(mdParts) === JSON.stringify(['```python\ndef greet():\n    print("שלום")\n```']), JSON.stringify(mdParts));
+  const [fenceLine, defLine, printLine, mdHead, mdEnd] = await p.evaluate(measureLines,
+    { match: 'print(', needles: ['```python', 'def greet', 'print(', 'כותרת בתוך הדוגמה', 'סוף הדוגמה'] });
+  check('```python מוצגת בסדר הנכון ומיושרת לשמאל',
+    fenceLine.found && fenceLine.firstOnLeft && fenceLine.gapL <= 1, JSON.stringify(fenceLine));
+  check('שורת קוד מוזחת נשארת מוזחת ימינה מהשורה שמעליה',
+    defLine.found && printLine.found && defLine.gapL <= 1 && printLine.startX > defLine.startX + 10,
+    `def ב-${defLine.startX}px · print ב-${printLine.startX}px`);
+  check('השורות העבריות של אותו בלוק נשארות מימין',
+    [mdHead, mdEnd].every((l) => l.found && !l.firstOnLeft && l.gapR <= 1), JSON.stringify([mdHead, mdEnd]));
+  const mdPitch = printLine.top - defLine.top;
+  check('השורות הריקות סביב הקטע נשמרות, ולא נוספת אחת',
+    mdPitch > 0 && Math.abs((fenceLine.top - mdHead.top) - 2 * mdPitch) <= 2 && Math.abs((mdEnd.top - printLine.top) - 3 * mdPitch) <= 2,
+    `כותרת→גדר ${fenceLine.top - mdHead.top}px · print→סוף ${mdEnd.top - printLine.top}px · שורה ${mdPitch}px`);
+
+  const plainParts = await ltrParts('שורה ראשונה');
+  check('בבלוק highlight גדר שלא נסגרה נמשכת עד סוף הבלוק, כאלמנט LTR אחד',
+    JSON.stringify(plainParts) === JSON.stringify(['```js\nעדיין בתוך אותו בלוק']), JSON.stringify(plainParts));
+  const [jsFence, jsRest, plainHead] = await p.evaluate(measureLines,
+    { match: 'שורה ראשונה', needles: ['```js', 'עדיין בתוך אותו בלוק', 'שורה ראשונה'] });
+  check('```js מוצגת בסדר הנכון, והקטע כולו מיושר לשמאל',
+    jsFence.found && jsFence.firstOnLeft && jsFence.gapL <= 1 && jsRest.found && jsRest.gapL <= 1,
+    JSON.stringify([jsFence, jsRest]));
+  check('השורה שלפני הגדר נשארת מימין',
+    plainHead.found && !plainHead.firstOnLeft && plainHead.gapR <= 1, JSON.stringify(plainHead));
+
   await p.screenshot({ path: SHOTS + '/editor-fences.png' });
+
+  // ── מדד: הכיוון לפי סוג התוכן, לא לפי האותיות ────────────────────
+  // הרשימה מ-"המיפוי השלם בייבוא ערכת VS Code": שורה שמתחילה במזהה
+  // לועזי, ופריט שכולו באנגלית. כלל לפי האות הראשונה (plaintext) הקפיץ
+  // אותן שמאלה; הן חייבות להישאר מימין כמו שאר הרשימה.
+  const longLine = 'const a_very_long_identifier_for_overflow = someFunctionCall(argumentNumberOne, argumentNumberTwo, END_OF_LINE);';
+  const contentDoc = [
+    '# כיוון לפי סוג התוכן', '',
+    '```',
+    '**מה המייבא לוקח:** ב-`theme_parser_service.py` רק שלושה צבעים מגיעים:',
+    '- `editor.background` → רקע המסמך (`--md-surface`)',
+    '- `editor.foreground`',
+    '```', '',
+    '````markdown', 'שורה עברית ראשונה בדוגמה', 'שורה עברית שנייה בדוגמה', 'שורה עברית שלישית בדוגמה',
+    '```js', longLine, '```', 'שורה עברית אחרונה בדוגמה', '````', '',
+    '`````', 'טקסט עברי לפני הדוגמה', '````md', '```', 'בתוך', '```', '````', 'טקסט עברי אחרי הדוגמה', '`````', ''
+  ].join('\n');
+  await ta.fill(contentDoc);
+  await p.waitForTimeout(1200);
+
+  const listLines = await p.evaluate(measureLines,
+    { match: 'theme_parser_service', needles: ['מה המייבא לוקח', 'editor.background', 'editor.foreground'] });
+  check('רשימה שפריטיה מתחילים במזהה לועזי נשארת כולה מימין',
+    listLines.every((l) => l.found && !l.firstOnLeft && l.gapR <= 1), JSON.stringify(listLines));
+  check('ובלוק בלי גדר פנימית נבנה בלי אלמנט LTR, כמו קודם',
+    JSON.stringify(await ltrParts('theme_parser_service')) === '[]', JSON.stringify(await ltrParts('theme_parser_service')));
+
+  /* שורת קוד ארוכה בקטע LTR בתוך pre RTL. בלוק רגיל נחתך — הסוף שלה
+     גולש לצד שה-pre אינו גולל אליו. ובקטע שגולל דרך ה-pre, שמתחיל מימין,
+     בהתחלה נראה רק סוף השורה. נדרשים שניהם: ההתחלה גלויה מיד, כמו בכל
+     בלוק קוד, והסוף נגיש בגלילה — של ה-pre או של הקטע, מה שגולל. */
+  const reach = await p.evaluate(() => {
+    const pre = [...document.querySelectorAll('pre')].filter((el) => (el.textContent || '').indexOf('END_OF_LINE') >= 0)[0];
+    if (!pre) return { found: false };
+    const find = (needle) => {
+      const w = document.createTreeWalker(pre, NodeFilter.SHOW_TEXT);
+      let n;
+      while ((n = w.nextNode())) {
+        const i = n.data.indexOf(needle);
+        if (i >= 0) return () => { const r = document.createRange(); r.setStart(n, i); r.setEnd(n, i + needle.length); return r.getBoundingClientRect(); };
+      }
+      return null;
+    };
+    /* ``` ולא ```js: Prism מפצל את הגדר לשני צמתי טקסט — ``` ו-js —
+       והראשון בבלוק הזה הוא הגדר הפותחת. */
+    const fence = find('```'), head = find('a_very_long_identifier'), tail = find('END_OF_LINE');
+    if (!fence || !head || !tail) return { found: false };
+    const box = pre.getBoundingClientRect();
+    const visible = (rc) => rc.left >= box.left - 1 && rc.right <= box.right + 1;
+    const initial = { fence: visible(fence()), head: visible(head()) };
+    const seg = pre.querySelector('span[dir="ltr"]');
+    const seen = { head: false, tail: false };
+    for (const el of [pre, seg].filter(Boolean)) {
+      for (const left of [0, -1e6, 1e6]) {
+        el.scrollLeft = left;
+        if (visible(head())) seen.head = true;
+        if (visible(tail())) seen.tail = true;
+      }
+      el.scrollLeft = 0;
+    }
+    return { found: true, initial, seen };
+  });
+  check('שורת קוד ארוכה בקטע LTR: ההתחלה גלויה מיד, והסוף נגיש בגלילה',
+    reach.found && reach.initial.fence && reach.initial.head && reach.seen.tail, JSON.stringify(reach));
+
+  const nestedParts = await ltrParts('טקסט עברי לפני הדוגמה');
+  check('קטע פנימי נסגר לפי אורך הגדר: ```` לא נסגרת ב-``` שבתוכה',
+    JSON.stringify(nestedParts) === JSON.stringify(['````md\n```\nבתוך\n```\n````']), JSON.stringify(nestedParts));
+  const [nestedAfter] = await p.evaluate(measureLines, { match: 'טקסט עברי לפני הדוגמה', needles: ['טקסט עברי אחרי הדוגמה'] });
+  check('והשורה שאחרי הקטע חוזרת לימין',
+    nestedAfter.found && !nestedAfter.firstOnLeft && nestedAfter.gapR <= 1, JSON.stringify(nestedAfter));
+
+  await p.screenshot({ path: SHOTS + '/editor-content-direction.png' });
+
+  // ── מדד: שורת גדר עם רצף רווחים ארוך אינה תוקעת את הפריוויו ─────
+  // הצורה הקודמת של FENCE_OPEN חילקה את אותם רווחים בין שלושה חלקים,
+  // ועל שורה שנכשלת בגרש בסופה ניסתה כל חלוקה: 1,600 רווחים — יותר
+  // משנייה וחצי לשורה, בכל parse. הפריוויו מפרסר בכל עדכון.
+  const slowMarker = 'פסקה אחרי השורה הארוכה';
+  const slowStart = Date.now();
+  await ta.fill(['# שורת גדר ארוכה', '', '```' + ' '.repeat(1600) + '`', '', slowMarker, ''].join('\n'));
+  await p.waitForFunction((m) => [...document.querySelectorAll('p')].some((el) => (el.textContent || '').indexOf(m) >= 0),
+    slowMarker, { timeout: 60000 });
+  const slowTook = Date.now() - slowStart;
+  check('שורת גדר עם 1,600 רווחים אינה תוקעת את הפריוויו', slowTook < 1500, slowTook + 'ms');
 
   // ── מדד: מסמך של אלף שורות לא מקרטע ───────────────────────────────
   const big = bigDocument(1000);

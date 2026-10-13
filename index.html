@@ -833,6 +833,11 @@ console.<span style="color:var(--tok-fn)">log</span>(doc.<span style="color:var(
               <td style="padding:13px 16px"><code dir="ltr" style="font-family:var(--mono);font-size:12.5px;color:var(--code-inline)">```js title=…</code></td>
               <td style="padding:13px 16px;color:var(--muted)">דוגמה שאפשר להריץ</td>
             </tr>
+            <tr style="border-bottom:1px solid var(--hair)" style-hover="background:var(--accent-soft-2)">
+              <td style="padding:13px 16px;color:var(--head)">בלוק מקונן</td>
+              <td style="padding:13px 16px"><code dir="ltr" style="font-family:var(--mono);font-size:12.5px;color:var(--code-inline)">````markdown</code></td>
+              <td style="padding:13px 16px;color:var(--muted)">דוגמה שמכילה בלוק קוד משלה</td>
+            </tr>
             <tr style-hover="background:var(--accent-soft-2)">
               <td style="padding:13px 16px;color:var(--head)">תג</td>
               <td style="padding:13px 16px"><code dir="ltr" style="font-family:var(--mono);font-size:12.5px;color:var(--code-inline)">{badge:new}</code></td>
@@ -1509,8 +1514,14 @@ function sinceLabel(at) {
 }
 
 /* שמות שמשמעותם "זה לא קוד". המחרוזת הריקה היא גדר בלי שפה כלל.
-   כל שם אחר — javascript, python, sql — חוסם RTL בלי לבדוק תוכן. */
-const PLAIN_LANGS = new Set(["", "plaintext", "text", "nohighlight", "none", "txt"]);
+   כל שם אחר — javascript, python, sql — חוסם RTL בלי לבדוק תוכן.
+
+   markdown ו-md כאן כי Markdown הוא טקסט עם סימון, לא קוד. החסימה
+   קיימת כדי שפונקציה עם הערות עבריות לא תתהפך, וזה לא המקרה: דוגמת
+   Markdown בעברית — בדרך כלל בגדר ```` שמכילה בלוקי קוד משלה — היא
+   מסמך עברי, ובכיוון LTR הכותרות והפיסוק שלה מתהפכים. היחס של
+   HEBREW_RATIO עדיין מכריע, ולכן דוגמה באנגלית נשארת משמאל. */
+const PLAIN_LANGS = new Set(["", "plaintext", "text", "nohighlight", "none", "txt", "markdown", "md"]);
 
 const CALLOUT = {
   info: { hue: "accent", g: "i", label: "מידע" },
@@ -1686,9 +1697,91 @@ const REFERENCE_DEFS = [
   ": אוסף בלוקים תחת כותרת H2 אחת, עם עוגן משלו."
 ].join("\n");
 
+/* פתיחה של גדר קוד: שלושה גרשיים אחוריים או יותר, ואחריהם שם שפה
+   וכותרת. נבדקת על שורה שכבר עברה trim.
+
+   האורך נלכד כי הוא מה שמאפשר קינון. ```` נסגרת רק בשורה של ארבעה
+   גרשיים לפחות, ולכן ```python שבתוכה נשאר טקסט של הדוגמה ולא סוגר
+   אותה. הכלל לקוח מ-CommonMark 0.31.2, סעיף 4.5 (דוגמה 124).
+
+   שם השפה והכותרת אינם יכולים להכיל גרש אחורי (אותו סעיף, דוגמה
+   145). בלי זה שורה כמו ```x``` נפתחה כגדר, ובלעה לתוך בלוק קוד את כל
+   מה שבא אחריה עד הגדר הבאה — ואם אין כזו, עד סוף המסמך.
+
+   מה שאחרי הגרשיים נלכד כיחידה אחת, ומפוצל לשפה ולכותרת ב-fenceInfo.
+   הצורה הקודמת פיצלה בתוך הביטוי — \s*([^`\s]*)\s*([^`]*) — ושלושת
+   החלקים חלקו את אותם רווחים: על שורה שנכשלת בגרש בסופה, המנוע ניסה כל
+   חלוקה שלהם. נמדד ב-Node באוקטובר 2026: 400 רווחים — 43ms, 1,600
+   רווחים — 1.6 שניות לשורה, וה-parse רץ על כל שורה בכל עדכון של
+   הפריוויו. כאן אין שני חלקים שיכולים לתפוס אותו תו, והבדיקה לינארית.
+   scripts/check-editor.js מקליד שורה כזו ומודד את הפריוויו. */
+const FENCE_OPEN = /^(`{3,})([^`]*)$/;
+
+/* השפה והכותרת של גדר, מתוך מה ש-FENCE_OPEN לכד אחרי הגרשיים: המילה
+   הראשונה היא השפה, וכל השאר — אחרי הרווחים — הכותרת. ```js title=api
+   נותן js ו-title=api, ו-``` לבדו נותן שתי מחרוזות ריקות. */
+function fenceInfo(rest) {
+  const info = rest.trim();
+  const gap = info.search(/\s/);
+  return gap < 0 ? { lang: info, title: "" } : { lang: info.slice(0, gap), title: info.slice(gap).trim() };
+}
+
+/* השורה שסוגרת גדר שנפתחה ב-lines[start], או lines.length כשאינה
+   נסגרת — ואז הבלוק נמשך עד הסוף. סוגרת רק שורה שכולה גרשיים, ולפחות
+   כמו בגדר הפותחת. שורה עם שם שפה אינה סוגרת: ```js בתוך בלוק ``` היא
+   תוכן שלו (CommonMark 0.31.2, דוגמה 147). הכלל הקודם — "כל שורה
+   שמתחילה ב-```" — סגר שם, והגדר הסוגרת האמיתית פתחה בלוק חדש שבלע את
+   מה שאחריו.
+
+   מקום אחד לשני צרכנים: parse, שמחליט איפה בלוק קוד נגמר במסמך, ו-
+   innerFences, שמחליט איפה קטע קוד נגמר בתוך בלוק עברי. כלל שכתוב
+   פעמיים היה מתפצל בשקט, ושורה שהפרסר רואה בתוך בלוק הייתה מוצגת
+   כאילו היא כבר מחוצה לו. */
+function fenceEnd(lines, start, fence) {
+  for (let i = start + 1; i < lines.length; i++) {
+    const t = lines[i].trim();
+    if (t.length >= fence.length && /^`+$/.test(t)) return i;
+  }
+  return lines.length;
+}
+
+/* בלוק עברי מחולק לקטעים רציפים: קטעי קוד פנימיים, וכל השאר.
+
+   קטע קוד פנימי מתחיל בגדר פותחת (```python) ונגמר בגדר הסוגרת שלה,
+   כולל שתי שורות הגדר, לפי אותו fenceEnd של הפרסר. גדר שלא נסגרה
+   נמשכת עד סוף הבלוק. רק הקטעים האלה עוברים לשמאל-לימין.
+
+   הכיוון נקבע לפי סוג התוכן ולא לפי האותיות של כל שורה. כלל לפי
+   אותיות — unicode-bidi: plaintext, שמחליט לפי האות החזקה הראשונה,
+   או "יש בשורה עברית" — שובר רשימות: ב-"- `editor.background` → רקע
+   המסמך" האות הראשונה לועזית, והשורה קפצה שמאלה; ופריט שכולו באנגלית
+   קופץ שמאלה בזמן ששאר הרשימה מימין. טקסט ורשימות הולכים עם כיוון
+   הבלוק, וקוד הוא שמאל-לימין. */
+function innerFences(code) {
+  const lines = code.split("\n");
+  const parts = [];
+  const take = (ltr, from, to) => { if (to > from) parts.push({ ltr: ltr, lines: lines.slice(from, to) }); };
+  let from = 0, i = 0;
+  while (i < lines.length) {
+    const m = lines[i].trim().match(FENCE_OPEN);
+    if (!m) { i++; continue; }
+    const last = Math.min(fenceEnd(lines, i, m[1]), lines.length - 1);
+    take(false, from, i);
+    take(true, i, last + 1);
+    i = from = last + 1;
+  }
+  take(false, from, lines.length);
+  return parts;
+}
+
 /* פתיחה של בלוק אחר. הייתה כתובה פעמיים — בלולאת הפסקה ובבדיקת המונח —
-   ושתי עותקות של אותה תבנית נפרדות זו מזו בשקט ברגע שמוסיפים תחביר. */
-const BLOCK_START = /^(#{1,6}\s|```|:::|>|\||!\[|[-*+]\s|\d+[.)]\s|-{3,}$)/;
+   ושתי עותקות של אותה תבנית נפרדות זו מזו בשקט ברגע שמוסיפים תחביר.
+
+   הגדר נגזרת מ-FENCE_OPEN ולא כתובה כאן שוב. אילו כאן היה נשאר ```
+   כקידומת, שורה כמו ```x``` — שאינה גדר — הייתה עוצרת את הפסקה כבר
+   בשורה הראשונה שלה, ואף ענף לא היה לוקח אותה: היא הייתה נעלמת. */
+const BLOCK_START = new RegExp("(?:" + FENCE_OPEN.source + ")|(?:" +
+  /^(#{1,6}\s|:::|>|\||!\[|[-*+]\s|\d+[.)]\s|-{3,}$)/.source + ")");
 
 const FALLBACK_HUE = "gray";
 
@@ -4454,12 +4547,11 @@ class Component extends DCLogic {
       if (!line) { i++; continue; }
 
       let m;
-      if ((m = line.match(/^```\s*(\S+)?\s*(.*)$/))) {
-        const body = [];
-        i++;
-        while (i < lines.length && lines[i].trim().indexOf("```") !== 0) { body.push(lines[i]); i++; }
-        i++;
-        blocks.push({ t: "code", lang: m[1] || "", title: m[2] || "", code: body.join("\n") });
+      if ((m = line.match(FENCE_OPEN))) {
+        const end = fenceEnd(lines, i, m[1]);
+        const info = fenceInfo(m[2]);
+        blocks.push({ t: "code", lang: info.lang, title: info.title, code: lines.slice(i + 1, end).join("\n") });
+        i = end + 1;
         continue;
       }
       if ((m = line.match(/^:::\s*([\w-]+)?\s*(.*)$/))) {
@@ -4705,6 +4797,59 @@ class Component extends DCLogic {
     return out;
   }
 
+  /* תוכן ה-<code> של בלוק קוד, בשני מסלולי הצביעה.
+
+     בלוק בלי קטע קוד פנימי — וכל בלוק שאינו עברי — נבנה בדיוק כמו
+     קודם: הפלט של Prism באלמנט אחד, או השורות של highlight.
+
+     בבלוק עברי עם קטע קוד פנימי (ראו innerFences), כל קטע כזה הוא
+     אלמנט אחד עם dir="ltr", מיושר לשמאל עם ההזחה שלו. כל השאר בכיוון
+     הבלוק ומיושר לימין, כמו קודם.
+
+     ב-Prism כל קטע נצבע לחוד, והקטעים מחוברים באותן ירידות שורה שהיו
+     ביניהם. ירידת שורה שצמודה לגבול של אלמנט בלוק אינה יוצרת שורה
+     משלה, ולכן שורה ריקה לפני הקטע או אחריו נשמרת ושום שורה לא מתווספת
+     (נמדד בכרום). ב-highlight אין ירידות שורה בכלל: כל שורה היא אלמנט
+     בלוק משלה, והקטע רק עוטף אותן — בלי לשנות את מבנה השורות.
+
+     overflow-x: auto על הקטע אינו קוסמטי. בלוק LTR רגיל בתוך pre RTL
+     חותך: שורת קוד ארוכה מהרוחב גולשת ימינה, לצד שה-pre אינו גולל אליו,
+     וסוף השורה אינו נגיש בשום גלילה (נמדד). קטע ברוחב התוכן שלו
+     (width: max-content) כן גולל — אבל דרך ה-pre, שמתחיל מימין, ולכן
+     בהתחלה נראה רק סוף השורה הארוכה, ושורת הגדר ותחילת הקוד מחוץ למסך.
+     כשהקטע גולל בעצמו הוא מתחיל משמאל כמו כל בלוק קוד, וסוף השורה נגיש
+     בגלילה שלו (נמדד בכרום, בשתי הצורות).
+
+     הצביעה ב-Prism קורית כאן ולא אצל הקורא: בבלוק שמתפצל כל קטע נצבע
+     לחוד, וצביעה של הבלוק כולו מראש הייתה נזרקת. המסלול נקבע לפי
+     התוצאה — האם Prism צבע — ולא לפי תנאי משוכפל מ-codeHtml. */
+  codeElement(b, rtl, style) {
+    const cls = "language-" + this.langOf(b.lang);
+    const parts = rtl ? innerFences(b.code) : null;
+    if (!parts || !parts.some((x) => x.ltr)) {
+      const html = this.codeHtml(b.code, b.lang);
+      return html
+        ? React.createElement("code", { className: cls, style: style, dangerouslySetInnerHTML: { __html: html } })
+        : React.createElement("code", { style: style }, this.highlight(b.code, b.lang));
+    }
+    const ltr = { display: "block", textAlign: "left", overflowX: "auto" };
+    const texts = parts.map((part, k) => part.lines.join("\n") + (k < parts.length - 1 ? "\n" : ""));
+    const htmls = texts.map((text) => this.codeHtml(text, b.lang));
+    if (htmls.some((h) => h != null)) {
+      return React.createElement("code", { className: cls, style: style },
+        parts.map((part, k) => {
+          const props = { key: k, dir: part.ltr ? "ltr" : undefined, style: part.ltr ? ltr : undefined };
+          return htmls[k] == null
+            ? React.createElement("span", props, texts[k])
+            : React.createElement("span", Object.assign(props, { dangerouslySetInnerHTML: { __html: htmls[k] } }));
+        }));
+    }
+    return React.createElement("code", { style: style },
+      parts.map((part, k) => part.ltr
+        ? React.createElement("span", { key: k, dir: "ltr", style: ltr }, this.highlight(part.lines.join("\n"), b.lang))
+        : React.createElement(React.Fragment, { key: k }, this.highlight(part.lines.join("\n"), b.lang))));
+  }
+
   highlight(code, lang) {
     const l = (lang || "").toLowerCase();
     const commentRe = l === "py" || l === "python" || l === "bash" || l === "sh" || l === "yaml" ? /^(\s*)(#.*)$/ : /^(\s*)(\/\/.*)$/;
@@ -4904,7 +5049,6 @@ class Component extends DCLogic {
         }
         const ck = "c" + idx;
         const done = this.state.codeCopied === ck;
-        const html = this.codeHtml(b.code, b.lang);
         /* נבדק כאן, על אובייקט הבלוק, ולא על ה-DOM אחרי הרינדור. b.lang
            מגיע מהגדר עצמו, ולכן אין תלות בסדר מול מנוע הצביעה — שמוסיף
            language-* משלו ומבלבל בדיקה שרצה מאוחר מדי. */
@@ -4916,9 +5060,7 @@ class Component extends DCLogic {
               done ? React.createElement("span", { key: "v", style: { fontSize: 13, lineHeight: 1 } }, "✓") : this.copyIcon("var(--tint)")),
             React.createElement("span", { key: "n", dir: "ltr", style: { fontFamily: "var(--mono)", fontSize: ed ? 11.5 : 12, color: "var(--muted)" } }, b.title || b.lang || "code")),
           React.createElement("pre", { key: "p", dir: rtl ? "rtl" : "ltr", style: { margin: 0, padding: "18px 20px", fontFamily: "var(--mono)", fontSize: ed ? 13 : 13.5, lineHeight: 1.75, color: "var(--code-text)", textAlign: rtl ? "right" : "left", overflowX: "auto" } },
-            html
-              ? React.createElement("code", { className: "language-" + this.langOf(b.lang), style: codeStyle, dangerouslySetInnerHTML: { __html: html } })
-              : React.createElement("code", { style: codeStyle }, this.highlight(b.code, b.lang)))));
+            this.codeElement(b, rtl, codeStyle))));
 
       } else if (b.t === "list") {
         const tag = b.ordered ? "ol" : "ul";

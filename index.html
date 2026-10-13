@@ -833,6 +833,11 @@ console.<span style="color:var(--tok-fn)">log</span>(doc.<span style="color:var(
               <td style="padding:13px 16px"><code dir="ltr" style="font-family:var(--mono);font-size:12.5px;color:var(--code-inline)">```js title=…</code></td>
               <td style="padding:13px 16px;color:var(--muted)">דוגמה שאפשר להריץ</td>
             </tr>
+            <tr style="border-bottom:1px solid var(--hair)" style-hover="background:var(--accent-soft-2)">
+              <td style="padding:13px 16px;color:var(--head)">בלוק מקונן</td>
+              <td style="padding:13px 16px"><code dir="ltr" style="font-family:var(--mono);font-size:12.5px;color:var(--code-inline)">````markdown</code></td>
+              <td style="padding:13px 16px;color:var(--muted)">דוגמה שמכילה בלוק קוד משלה</td>
+            </tr>
             <tr style-hover="background:var(--accent-soft-2)">
               <td style="padding:13px 16px;color:var(--head)">תג</td>
               <td style="padding:13px 16px"><code dir="ltr" style="font-family:var(--mono);font-size:12.5px;color:var(--code-inline)">{badge:new}</code></td>
@@ -1509,8 +1514,14 @@ function sinceLabel(at) {
 }
 
 /* שמות שמשמעותם "זה לא קוד". המחרוזת הריקה היא גדר בלי שפה כלל.
-   כל שם אחר — javascript, python, sql — חוסם RTL בלי לבדוק תוכן. */
-const PLAIN_LANGS = new Set(["", "plaintext", "text", "nohighlight", "none", "txt"]);
+   כל שם אחר — javascript, python, sql — חוסם RTL בלי לבדוק תוכן.
+
+   markdown ו-md כאן כי Markdown הוא טקסט עם סימון, לא קוד. החסימה
+   קיימת כדי שפונקציה עם הערות עבריות לא תתהפך, וזה לא המקרה: דוגמת
+   Markdown בעברית — בדרך כלל בגדר ```` שמכילה בלוקי קוד משלה — היא
+   מסמך עברי, ובכיוון LTR הכותרות והפיסוק שלה מתהפכים. היחס של
+   HEBREW_RATIO עדיין מכריע, ולכן דוגמה באנגלית נשארת משמאל. */
+const PLAIN_LANGS = new Set(["", "plaintext", "text", "nohighlight", "none", "txt", "markdown", "md"]);
 
 const CALLOUT = {
   info: { hue: "accent", g: "i", label: "מידע" },
@@ -1686,9 +1697,26 @@ const REFERENCE_DEFS = [
   ": אוסף בלוקים תחת כותרת H2 אחת, עם עוגן משלו."
 ].join("\n");
 
+/* פתיחה של גדר קוד: שלושה גרשיים אחוריים או יותר, ואחריהם שם שפה
+   וכותרת. נבדקת על שורה שכבר עברה trim.
+
+   האורך נלכד כי הוא מה שמאפשר קינון. ```` נסגרת רק בשורה של ארבעה
+   גרשיים לפחות, ולכן ```python שבתוכה נשאר טקסט של הדוגמה ולא סוגר
+   אותה. הכלל לקוח מ-CommonMark 0.31.2, סעיף 4.5 (דוגמה 124).
+
+   שם השפה והכותרת אינם יכולים להכיל גרש אחורי (אותו סעיף, דוגמה
+   145). בלי זה שורה כמו ```x``` נפתחה כגדר, ובלעה לתוך בלוק קוד את כל
+   מה שבא אחריה עד הגדר הבאה — ואם אין כזו, עד סוף המסמך. */
+const FENCE_OPEN = /^(`{3,})\s*([^`\s]*)\s*([^`]*)$/;
+
 /* פתיחה של בלוק אחר. הייתה כתובה פעמיים — בלולאת הפסקה ובבדיקת המונח —
-   ושתי עותקות של אותה תבנית נפרדות זו מזו בשקט ברגע שמוסיפים תחביר. */
-const BLOCK_START = /^(#{1,6}\s|```|:::|>|\||!\[|[-*+]\s|\d+[.)]\s|-{3,}$)/;
+   ושתי עותקות של אותה תבנית נפרדות זו מזו בשקט ברגע שמוסיפים תחביר.
+
+   הגדר נגזרת מ-FENCE_OPEN ולא כתובה כאן שוב. אילו כאן היה נשאר ```
+   כקידומת, שורה כמו ```x``` — שאינה גדר — הייתה עוצרת את הפסקה כבר
+   בשורה הראשונה שלה, ואף ענף לא היה לוקח אותה: היא הייתה נעלמת. */
+const BLOCK_START = new RegExp("(?:" + FENCE_OPEN.source + ")|(?:" +
+  /^(#{1,6}\s|:::|>|\||!\[|[-*+]\s|\d+[.)]\s|-{3,}$)/.source + ")");
 
 const FALLBACK_HUE = "gray";
 
@@ -4454,12 +4482,19 @@ class Component extends DCLogic {
       if (!line) { i++; continue; }
 
       let m;
-      if ((m = line.match(/^```\s*(\S+)?\s*(.*)$/))) {
+      if ((m = line.match(FENCE_OPEN))) {
+        /* סוגרת רק שורה שכולה גרשיים, ולפחות כמו בגדר הפותחת. שורה עם
+           שם שפה אינה סוגרת: ```js בתוך בלוק ``` היא תוכן שלו
+           (CommonMark 0.31.2, דוגמה 147). הכלל הקודם — "כל שורה שמתחילה
+           ב-```" — סגר שם, והגדר הסוגרת האמיתית פתחה בלוק חדש שבלע את
+           מה שאחריו. בלוק שלא נסגר נמשך עד סוף המסמך. */
+        const fence = m[1];
+        const closes = (l) => { const t = l.trim(); return t.length >= fence.length && /^`+$/.test(t); };
         const body = [];
         i++;
-        while (i < lines.length && lines[i].trim().indexOf("```") !== 0) { body.push(lines[i]); i++; }
+        while (i < lines.length && !closes(lines[i])) { body.push(lines[i]); i++; }
         i++;
-        blocks.push({ t: "code", lang: m[1] || "", title: m[2] || "", code: body.join("\n") });
+        blocks.push({ t: "code", lang: m[2], title: m[3], code: body.join("\n") });
         continue;
       }
       if ((m = line.match(/^:::\s*([\w-]+)?\s*(.*)$/))) {

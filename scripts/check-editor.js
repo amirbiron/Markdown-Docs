@@ -169,6 +169,65 @@ function bigDocument(lines) {
 
   await p.screenshot({ path: SHOTS + '/editor-rtl.png' });
 
+  // ── מדד: גדר של ארבעה גרשיים מכילה בלוק קוד ──────────────────────
+  // שלושה מקרים, כולם מאותו שורש — סגירה לפי "שורה שמתחילה ב-```":
+  // קינון, שורה עם שם שפה בתוך בלוק, ושורה שנראית כמו גדר ואינה.
+  const fenceDoc = [
+    '# בדיקת גדרות', '',
+    '````markdown', '## כותרת בתוך הדוגמה', '', '```python', 'print("שלום")', '```', '', 'סוף הדוגמה', '````', '',
+    '## כותרת אחרי הדוגמה', '',
+    '```', 'שורה ראשונה', '```js', 'עדיין בתוך אותו בלוק', '```', '',
+    '## כותרת אחרי הבלוק השני', '',
+    '```x``` שורה שאינה גדר', '',
+    '## כותרת אחרונה', '',
+    '```md', '# English title', 'Some plain English text in a markdown sample.', '```', ''
+  ].join('\n');
+  await ta.fill(fenceDoc);
+  await p.waitForTimeout(1200);
+
+  const fences = await p.evaluate(() => {
+    const pres = [...document.querySelectorAll('pre')].map((el) => {
+      const bar = el.previousElementSibling;
+      const label = bar && bar.querySelector('span[dir="ltr"]');
+      return { text: el.textContent || '', dir: el.getAttribute('dir'), label: label ? label.textContent : null };
+    });
+    const heads = [...document.querySelectorAll('h2')].map((h) => (h.textContent || '').trim());
+    const paras = [...document.querySelectorAll('p')].map((el) => el.textContent || '');
+    return { pres, heads, paras };
+  });
+  const outer = fences.pres.filter((x) => x.text.indexOf('print(') >= 0);
+  check('גדר ```` היא בלוק אחד עם התווית markdown',
+    outer.length === 1 && outer[0].label === 'markdown',
+    JSON.stringify(outer.map((x) => x.label)));
+  check('```python שבתוכה נשאר טקסט גולמי של הדוגמה',
+    outer.length === 1 && ['```python', 'סוף הדוגמה', '## כותרת בתוך הדוגמה'].every((s) => outer[0].text.indexOf(s) >= 0),
+    JSON.stringify(outer.map((x) => x.text.slice(0, 60))));
+  check('דוגמת Markdown בעברית מתיישרת לימין', outer.length === 1 && outer[0].dir === 'rtl',
+    JSON.stringify(outer.map((x) => x.dir)));
+
+  const inner = fences.pres.filter((x) => x.text.indexOf('שורה ראשונה') >= 0);
+  check('```js בתוך בלוק ``` אינה סוגרת אותו',
+    inner.length === 1 && inner[0].text.indexOf('עדיין בתוך אותו בלוק') >= 0,
+    JSON.stringify(inner.map((x) => x.text.slice(0, 60))));
+
+  const english = fences.pres.filter((x) => x.text.indexOf('English title') >= 0);
+  check('דוגמת Markdown באנגלית נשארת משמאל', english.length === 1 && english[0].dir === 'ltr',
+    JSON.stringify(english.map((x) => x.dir)));
+
+  const notFence = fences.paras.filter((t) => t.indexOf('שורה שאינה גדר') >= 0);
+  check('שורה כמו ```x``` מוצגת כפסקה ולא נעלמת או בולעת',
+    notFence.length === 1 && !fences.pres.some((x) => x.text.indexOf('שורה שאינה גדר') >= 0),
+    JSON.stringify(notFence));
+
+  const wantHeads = ['כותרת אחרי הדוגמה', 'כותרת אחרי הבלוק השני', 'כותרת אחרונה'];
+  check('הכותרות שאחרי הבלוקים נשארות כותרות, והפנימית לא',
+    wantHeads.every((h) => fences.heads.some((x) => x.endsWith(h))) &&
+      !fences.heads.some((x) => x.indexOf('כותרת בתוך הדוגמה') >= 0),
+    JSON.stringify(fences.heads));
+  check('מספר בלוקי הקוד הוא בדיוק שלושה', fences.pres.length === 3, fences.pres.length + ' בלוקים');
+
+  await p.screenshot({ path: SHOTS + '/editor-fences.png' });
+
   // ── מדד: מסמך של אלף שורות לא מקרטע ───────────────────────────────
   const big = bigDocument(1000);
   await p.evaluate((text) => {

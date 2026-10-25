@@ -391,7 +391,9 @@ body, aside, header, section, main { transition: background-color 0.2s ease, bor
   </aside>
   </sc-if>
 
-  <main id="top" onDragOver="{{ onDragOver }}" onDragLeave="{{ onDragLeave }}" onDrop="{{ onDrop }}" style="min-width:0;padding:var(--main-pad);max-width:var(--main-w)">
+  <!-- תקרת הרוחב היא רוחב הקריאה, ולכן היא חלה על מסמך ולא על העורך.
+       ראו mainMaxW. -->
+  <main id="top" onDragOver="{{ onDragOver }}" onDragLeave="{{ onDragLeave }}" onDrop="{{ onDrop }}" style="min-width:0;padding:var(--main-pad);max-width:{{ mainMaxW }}">
 
     <sc-if value="{{ onProjects }}" hint-placeholder-val="{{ false }}">
     <div>
@@ -1228,7 +1230,10 @@ const LIGHT = {
   "rail-w": "272px", "rail-pad": "34px 26px 40px", "rail-head-gap": "26px",
   "rail-title-size": "24px", "rail-sub-gap": "6px", "rail-sub-track": "0.08em", "rail-sub-case": "uppercase",
   "crumb-font": "'IBM Plex Mono','Consolas',monospace", "crumb-size": "11.5px", "crumb-track": "0.06em",
-  "shell-w": "1580px", "main-w": "940px", "main-pad": "52px 40px 100px",
+  /* main-w הוא רוחב הקריאה של המסמך, ו-900 בכל הערכות — הרוחב של dim,
+     שנבחר כנכון. הערכות ה-Editorial נשאו קודם 940, ועליו גבול נוסף בכל
+     פסקה ורשימה (68ch), שעצר את הטקסט באמצע. עכשיו זה המקור היחיד. */
+  "shell-w": "1580px", "main-w": "900px", "main-pad": "52px 40px 100px",
   "doc-gap": "0px", "doc-list-rule": "1px solid #e2ddd3", "doc-head-gap": "36px",
   "h1-size": "54px", "lead-size": "19.5px",
   "ref-h1": "50px", "ref-h2": "31px", "ref-h3": "23px"
@@ -1858,7 +1863,7 @@ const COAST = {
   "rail-w": "272px", "rail-pad": "32px 24px 40px", "rail-head-gap": "24px",
   "rail-title-size": "22px", "rail-sub-gap": "6px", "rail-sub-track": "0.06em", "rail-sub-case": "none",
   "crumb-font": "'Heebo','Assistant',sans-serif", "crumb-size": "13px", "crumb-track": "0",
-  "shell-w": "1580px", "main-w": "940px", "main-pad": "48px 38px 100px",
+  "shell-w": "1580px", "main-w": "900px", "main-pad": "48px 38px 100px",
   "doc-gap": "0px", "doc-list-rule": "1px solid #e3dcc9", "doc-head-gap": "34px",
   "h1-size": "50px", "lead-size": "19px",
   "ref-h1": "48px", "ref-h2": "29px", "ref-h3": "22px"
@@ -1913,7 +1918,7 @@ const COAST_DARK = {
   "rail-w": "272px", "rail-pad": "32px 24px 40px", "rail-head-gap": "24px",
   "rail-title-size": "22px", "rail-sub-gap": "6px", "rail-sub-track": "0.06em", "rail-sub-case": "none",
   "crumb-font": "'Heebo','Assistant',sans-serif", "crumb-size": "13px", "crumb-track": "0",
-  "shell-w": "1580px", "main-w": "940px", "main-pad": "48px 38px 100px",
+  "shell-w": "1580px", "main-w": "900px", "main-pad": "48px 38px 100px",
   "doc-gap": "0px", "doc-list-rule": "1px solid #1e3550", "doc-head-gap": "34px",
   "h1-size": "50px", "lead-size": "19px",
   "ref-h1": "48px", "ref-h2": "29px", "ref-h3": "22px"
@@ -3702,6 +3707,10 @@ class Component extends DCLogic {
        והפתיח בראש העמוד מתעדכנים בזמן אמת יחד עם הפריוויו, במקום
        להציג את הגרסה הקודמת עד לשמירה הבאה. */
     const editingDoc = onDocNow && s.editing;
+    /* מסך היצירה, באותו ניסוח שהתבנית מציגה אותו. editingDoc ו-
+       creatingNow הם יחד "העורך על המסך", ו-mainMaxW נגזר משניהם — שני
+       ביטויים נפרדים לאותה שאלה היו נסחפים ברגע שאחד מהם משתנה. */
+    const creatingNow = onProject && canEdit && s.creating;
     const parsed = editingDoc ? this.parse(s.editView) : (doc ? this.parse(doc.content) : { front: {}, blocks: [] });
     const numbered = this.props.numberedHeadings ?? true;
 
@@ -4046,7 +4055,7 @@ class Component extends DCLogic {
 
       /* --- העורך --- */
       canOpenEditor: onDocNow && canEdit,
-      editing: onDocNow && s.editing,
+      editing: editingDoc,
       viewingDoc: onDocNow && !s.editing,
       /* אייקונים בלי טקסט: עיפרון לעריכה, דיסקט לשמירה. הכותרת נושאת
          את המשמעות לקורא מסך ולריחוף. */
@@ -4079,8 +4088,23 @@ class Component extends DCLogic {
 
       /* מסך היצירה חי באזור התוכן הראשי ולא בסיידבר הצר, ולכן הוא
          מקבל את אותו רוחב ואת אותו גובה של מסך העריכה. */
-      creating: onProject && canEdit && s.creating,
-      createPane: onProject && canEdit && s.creating ? this.editorPane(this.parse(s.editView)) : null,
+      creating: creatingNow,
+      createPane: creatingNow ? this.editorPane(this.parse(s.editView)) : null,
+
+      /* רוחב אזור התוכן. var(--main-w) הוא רוחב הקריאה של המסמך, והוא
+         נשאר קבוע גם כשתוכן העניינים מקופל — שורות ארוכות יותר מזה
+         קשות לקריאה, ושטח פנוי משמאל עדיף עליהן.
+         העורך הוא כלי ולא טקסט לקריאה: שתי חלוניות זו לצד זו, וכל
+         פיקסל הולך אליהן. לכן הוא ממלא את כל העמודה — עד תוכן העניינים
+         כשהוא פתוח, ועד המקום שבו הוא היה כשהוא מקופל.
+         none ולא ערך גדול: העמודה עצמה (minmax(0,1fr)) והמסגרת
+         (--shell-w) הן הגבול, ומספר שני היה עוד מקור לאותו מימד.
+         בלי תקרה פריט ברשת נמתח עד סוף העמודה; עם תקרה הוא נעצר בה
+         ונצמד לתחילתה — מימין ב-RTL — וזה השטח הריק שהיה משמאל
+         (CSS Box Alignment 3, §6.1.5: justify-self: normal בפריט רשת).
+         המרווח מתוכן העניינים זהה למרווח מעמודת המסמכים, כי שניהם
+         הריפוד הסימטרי של main ולא ערך נפרד. */
+      mainMaxW: editingDoc || creatingNow ? "none" : "var(--main-w)",
 
       toc: toc,
       tocEmpty: !toc.length,
@@ -4919,6 +4943,12 @@ class Component extends DCLogic {
        ל-"light", כל תמה חדשה נכנסת אוטומטית למשפחת הכהים — וזה נכון
        ל-dim במקרה, לא בכוונה. */
     const ed = this.editorial();
+    /* אין כאן maxWidth על בלוקי טקסט, גם לא ב-Editorial. רוחב הקריאה
+       נקבע במקום אחד — main-w של הערכה — וגבול נוסף בכל פסקה (היה 68ch)
+       הוא מקור שני לאותו מימד: הוא עצר את הטקסט באמצע אזור רחב, ונסחף
+       מהערכות האחרות בלי שאיש החליט על כך.
+       זו סטייה מכוונת מ-docs/Fourth_design.md, שמגדיר measure: 68ch —
+       ההחלטה ונימוקה ב-ROADMAP, "רוחב הקריאה ורוחב העורך". */
     const out = [];
     let h2 = 0, hi = 0;
     parsed.blocks.forEach((b, idx) => {
@@ -4974,7 +5004,7 @@ class Component extends DCLogic {
         out.push(React.createElement("p", { key: key, style: nested
           ? { margin: "0 0 12px", fontSize: ed ? 16 : 15.5, lineHeight: ed ? 1.8 : 1.75, color: ed ? "var(--text)" : "var(--text-2)" }
           : ed
-            ? { margin: "0 0 20px", fontSize: 17.5, lineHeight: 1.9, color: "var(--text)", maxWidth: "68ch", textWrap: "pretty" }
+            ? { margin: "0 0 20px", fontSize: 17.5, lineHeight: 1.9, color: "var(--text)", textWrap: "pretty" }
             : { margin: "0 0 18px", fontSize: 16.5, lineHeight: 1.85, color: "var(--text)", textWrap: "pretty" } }, this.inline(b.text)));
 
       } else if (b.t === "dl") {
@@ -5005,7 +5035,7 @@ class Component extends DCLogic {
 
       } else if (b.t === "quote") {
         out.push(React.createElement("blockquote", { key: key, style: ed
-          ? { margin: "0 0 26px", padding: "4px 24px", borderInlineStart: "2px solid var(--accent)", fontFamily: "var(--display)", fontSize: 21, fontStyle: "italic", lineHeight: 1.7, color: "var(--ink)", maxWidth: "60ch" }
+          ? { margin: "0 0 26px", padding: "4px 24px", borderInlineStart: "2px solid var(--accent)", fontFamily: "var(--display)", fontSize: 21, fontStyle: "italic", lineHeight: 1.7, color: "var(--ink)" }
           : { margin: "0 0 22px", padding: "18px 22px", background: "var(--card)", borderInlineStart: "3px solid var(--rule-strong)", borderRadius: "0 var(--r-md) var(--r-md) 0", fontSize: 17, lineHeight: 1.8, color: "var(--text)" } }, this.inline(b.text)));
 
       } else if (b.t === "callout") {
@@ -5017,7 +5047,7 @@ class Component extends DCLogic {
         const open = !!this.state.openMap["o" + idx];
 
         if (ed) {
-          out.push(React.createElement("div", { key: key, style: { margin: "0 0 16px", padding: "14px 18px", background: c.bg, borderInlineStart: "2px solid " + c.c, maxWidth: "68ch" } },
+          out.push(React.createElement("div", { key: key, style: { margin: "0 0 16px", padding: "14px 18px", background: c.bg, borderInlineStart: "2px solid " + c.c } },
             collapsible
               ? React.createElement("div", null,
                   React.createElement("button", { key: "s", onClick: this.toggleOpen("o" + idx), style: { display: "flex", alignItems: "center", gap: 9, width: "100%", padding: 0, border: "none", background: "none", fontFamily: "var(--mono)", fontSize: 10.5, fontWeight: 600, letterSpacing: "0.14em", textTransform: "uppercase", color: c.c, textAlign: "start", cursor: "pointer" } },
@@ -5072,7 +5102,7 @@ class Component extends DCLogic {
         /* start עובר ל-<ol> כדי שהמספור יתחיל היכן שהכותב התחיל.
            React מתעלם מ-start על <ul>, ולכן אין צורך בתנאי. */
         out.push(React.createElement(tag, { key: key, start: b.ordered && b.start > 1 ? b.start : undefined, style: ed
-          ? { margin: "0 0 24px", paddingInlineStart: 24, fontSize: 17, lineHeight: 1.9, color: "var(--text)", maxWidth: "66ch" }
+          ? { margin: "0 0 24px", paddingInlineStart: 24, fontSize: 17, lineHeight: 1.9, color: "var(--text)" }
           : { margin: "0 0 20px", paddingInlineStart: 22, fontSize: 16.5, lineHeight: 1.9, color: "var(--text)" } },
           top.map((it, k) => React.createElement("li", { key: k, style: { margin: ed ? "7px 0" : "6px 0", paddingInlineStart: ed ? 4 : 0 } },
             this.inline(it.text),
@@ -5080,7 +5110,7 @@ class Component extends DCLogic {
 
       } else if (b.t === "tasks") {
         if (ed) {
-          out.push(React.createElement("div", { key: key, style: { display: "flex", flexDirection: "column", margin: "0 0 24px", borderTop: "1px solid var(--line-2)", maxWidth: "66ch" } },
+          out.push(React.createElement("div", { key: key, style: { display: "flex", flexDirection: "column", margin: "0 0 24px", borderTop: "1px solid var(--line-2)" } },
             b.items.map((it, k) => React.createElement("div", { key: k, onClick: nested ? null : this.toggleTaskLine(it.line), style: { display: "flex", alignItems: "center", gap: 12, padding: "10px 2px", borderBottom: "1px solid var(--line-2)", fontSize: 16.5, color: it.done ? "var(--soft)" : "var(--text)", cursor: nested ? "default" : "pointer", userSelect: "none" } },
               this.taskBox(it.done, it.text, nested ? null : this.toggleTaskLine(it.line), 17),
               React.createElement("span", { key: "t" }, this.inline(it.text))))));
